@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PointerContext } from "@mauzai/shared";
+
+const screenMock = vi.hoisted(() => ({
+  getCursorScreenPoint: vi.fn()
+}));
+
+vi.mock("electron", () => ({
+  screen: screenMock
+}));
+
+import { ContextCollector } from "../src/main/context/ContextCollector";
+import { ScreenshotCaptureError, type ScreenshotService } from "../src/main/context/ScreenshotService";
+
+const pointerContext: PointerContext = {
+  cursor: {
+    x: 320,
+    y: 240
+  },
+  display: {
+    id: "1",
+    bounds: {
+      x: 0,
+      y: 0,
+      width: 1440,
+      height: 900
+    },
+    scaleFactor: 2
+  },
+  cursorCrop: {
+    mimeType: "image/jpeg",
+    base64: "cursor-crop",
+    width: 768,
+    height: 576
+  },
+  screenshot: {
+    mimeType: "image/jpeg",
+    base64: "full-screenshot",
+    width: 1280,
+    height: 800
+  }
+};
+
+describe("ContextCollector", () => {
+  beforeEach(() => {
+    screenMock.getCursorScreenPoint.mockReturnValue({
+      x: 320,
+      y: 240
+    });
+  });
+
+  it("attaches pointer context and keeps screenshot compatibility for Ask", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    let hideDuringCaptureCalls = 0;
+    const captureHider = {
+      async hideDuringCapture<T>(operation: () => Promise<T>): Promise<T> {
+        hideDuringCaptureCalls += 1;
+        return operation();
+      }
+    };
+    const collector = new ContextCollector({
+      screenshotService,
+      captureHider
+    });
+
+    const context = await collector.collectForAsk();
+
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith({
+      x: 320,
+      y: 240
+    });
+    expect(hideDuringCaptureCalls).toBe(1);
+    expect(context.pointer).toEqual(pointerContext);
+    expect(context.screenshot).toEqual(pointerContext.screenshot);
+  });
+
+  it("returns basic context with screenshotError when pointer capture fails", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => {
+        throw new ScreenshotCaptureError(
+          "Mauz needs Screen Recording permission to capture screenshot context."
+        );
+      })
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService
+    });
+
+    const context = await collector.collectForAsk();
+
+    expect(context.pointer).toBeUndefined();
+    expect(context.screenshot).toBeUndefined();
+    expect(context.screenshotError).toEqual({
+      permission: "screen-recording",
+      message: "Mauz needs Screen Recording permission to capture screenshot context."
+    });
+  });
+});
