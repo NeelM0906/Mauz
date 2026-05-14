@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RealtimeConnectRequest } from "@mauzai/shared";
-import { buildRealtimeInstructions, createRealtimeAnswer } from "../src/openai/createRealtimeAnswer";
+import {
+  buildRealtimeInstructions,
+  buildRealtimeSessionConfig,
+  createRealtimeAnswer
+} from "../src/openai/createRealtimeAnswer";
 
 const validRealtimeRequest: RealtimeConnectRequest = {
   offerSdp: "v=0\r\nt=- 0 0\r\n",
@@ -15,8 +19,13 @@ const validRealtimeRequest: RealtimeConnectRequest = {
   }
 };
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("createRealtimeAnswer", () => {
-  it("includes non-null server VAD turn detection in the session form payload", async () => {
+  it("uses a Realtime voice-agent session with semantic turn detection", async () => {
+    vi.stubEnv("OPENAI_REALTIME_REASONING_EFFORT", "low");
     let sessionPayload: unknown;
 
     await createRealtimeAnswer(validRealtimeRequest, {
@@ -34,17 +43,44 @@ describe("createRealtimeAnswer", () => {
       }
     });
 
-    const turnDetection = (sessionPayload as { turn_detection?: unknown }).turn_detection;
+    const session = sessionPayload as {
+      type?: unknown;
+      model?: unknown;
+      output_modalities?: unknown;
+      reasoning?: { effort?: unknown };
+      audio?: { input?: { turn_detection?: unknown }; output?: { voice?: unknown } };
+      turn_detection?: unknown;
+    };
 
-    expect(turnDetection).not.toBeNull();
-    expect(turnDetection).toEqual({
-      type: "server_vad",
-      threshold: 0.5,
-      prefix_padding_ms: 300,
-      silence_duration_ms: 650,
+    expect(session.type).toBe("realtime");
+    expect(session.model).toBe("test-realtime-model");
+    expect(session.output_modalities).toEqual(["audio"]);
+    expect(session.reasoning).toEqual({ effort: "low" });
+    expect(session.turn_detection).toBeUndefined();
+    expect(session.audio?.input?.turn_detection).toEqual({
+      type: "semantic_vad",
+      eagerness: "auto",
       create_response: true,
       interrupt_response: true
     });
+    expect(session.audio?.output).toEqual({
+      voice: "marin"
+    });
+  });
+
+  it("builds the same semantic session config without server VAD", () => {
+    const session = buildRealtimeSessionConfig(validRealtimeRequest, {
+      model: "gpt-realtime-2",
+      voice: "cedar",
+      reasoningEffort: "low"
+    }) as {
+      audio?: { input?: { turn_detection?: { type?: string } }; output?: { voice?: string } };
+      turn_detection?: unknown;
+    };
+
+    expect(session.turn_detection).toBeUndefined();
+    expect(session.audio?.input?.turn_detection?.type).toBe("semantic_vad");
+    expect(session.audio?.output?.voice).toBe("cedar");
   });
 
   it("tells screen mode to wait for user speech instead of narrating frames", () => {

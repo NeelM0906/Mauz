@@ -254,8 +254,8 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
 
       <p className="realtime-note">
         {mode === "screen"
-          ? "Voice turns are automatic. Screen frames update context only."
-          : "Voice turns are automatic. Mute is only for privacy."}
+          ? "Semantic voice turns are automatic. Screen frames update context only."
+          : "Semantic voice turns are automatic. Mute is only for privacy."}
       </p>
     </section>
   );

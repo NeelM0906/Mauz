@@ -58,7 +58,7 @@ describe("Realtime voice event mapping", () => {
     ).toBe("listening");
   });
 
-  it("keeps muted state across VAD and response completion events", () => {
+  it("keeps muted state across turn and response completion events", () => {
     expect(
       getVoiceStateForRealtimeEvent(
         {

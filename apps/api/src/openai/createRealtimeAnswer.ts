@@ -8,6 +8,7 @@ import { MissingOpenAIKeyError } from "../errors";
 
 const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
+const DEFAULT_REALTIME_REASONING_EFFORT = "low";
 const REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
@@ -34,24 +35,13 @@ export async function createRealtimeAnswer(
   formData.set("sdp", request.offerSdp);
   formData.set(
     "session",
-    JSON.stringify({
-      type: "realtime",
-      model,
-      instructions: buildRealtimeInstructions(request),
-      turn_detection: {
-        type: "server_vad",
-        threshold: 0.5,
-        prefix_padding_ms: 300,
-        silence_duration_ms: 650,
-        create_response: true,
-        interrupt_response: true
-      },
-      audio: {
-        output: {
-          voice: options.voice ?? process.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE
-        }
-      }
-    })
+    JSON.stringify(
+      buildRealtimeSessionConfig(request, {
+        model,
+        voice: options.voice ?? process.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE,
+        reasoningEffort: process.env.OPENAI_REALTIME_REASONING_EFFORT ?? DEFAULT_REALTIME_REASONING_EFFORT
+      })
+    )
   );
 
   const response = await (options.fetchImpl ?? fetch)(REALTIME_CALLS_URL, {
@@ -70,6 +60,40 @@ export async function createRealtimeAnswer(
   return {
     answerSdp,
     model
+  };
+}
+
+export type RealtimeSessionConfigOptions = {
+  model: string;
+  voice: string;
+  reasoningEffort: string;
+};
+
+export function buildRealtimeSessionConfig(
+  request: RealtimeConnectRequest,
+  options: RealtimeSessionConfigOptions
+): Record<string, unknown> {
+  return {
+    type: "realtime",
+    model: options.model,
+    instructions: buildRealtimeInstructions(request),
+    output_modalities: ["audio"],
+    reasoning: {
+      effort: options.reasoningEffort
+    },
+    audio: {
+      input: {
+        turn_detection: {
+          type: "semantic_vad",
+          eagerness: "auto",
+          create_response: true,
+          interrupt_response: true
+        }
+      },
+      output: {
+        voice: options.voice
+      }
+    }
   };
 }
 
