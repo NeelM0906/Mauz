@@ -408,6 +408,139 @@ button {
     0 4px 12px rgb(18 24 29 / 10%);
 }
 
+.realtime-panel {
+  width: 380px;
+  height: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgb(23 23 23 / 12%);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 97%), rgb(248 250 249 / 96%)), #ffffff;
+  box-shadow:
+    0 18px 48px rgb(18 24 29 / 18%),
+    0 4px 12px rgb(18 24 29 / 10%);
+}
+
+.realtime-header {
+  display: grid;
+  grid-template-columns: 30px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.realtime-header h1 {
+  margin: 0;
+  color: #171717;
+  font-size: 14px;
+  font-weight: 720;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.realtime-header p {
+  margin: 3px 0 0;
+  color: #686f6b;
+  font-size: 10px;
+  font-weight: 520;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.realtime-status {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 82px;
+  padding: 12px;
+  border: 1px solid rgb(22 122 107 / 16%);
+  border-radius: 8px;
+  background: rgb(22 122 107 / 8%);
+  color: #174b43;
+}
+
+.realtime-status[data-state="error"] {
+  border-color: rgb(155 44 44 / 18%);
+  background: rgb(155 44 44 / 8%);
+  color: #8b2424;
+}
+
+.realtime-status[data-state="stopped"] {
+  border-color: rgb(23 23 23 / 12%);
+  background: rgb(23 23 23 / 6%);
+  color: #4b5350;
+}
+
+.realtime-status > svg {
+  justify-self: center;
+}
+
+.realtime-status strong {
+  display: block;
+  color: currentColor;
+  font-size: 13px;
+  font-weight: 740;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.realtime-status span {
+  display: block;
+  margin-top: 4px;
+  color: #53615d;
+  font-size: 11px;
+  font-weight: 520;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.realtime-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: auto;
+}
+
+.secondary-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  height: 34px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.secondary-button {
+  border: 1px solid rgb(22 122 107 / 20%);
+  background: rgb(22 122 107 / 9%);
+  color: #174b43;
+}
+
+.danger-button {
+  border: 1px solid rgb(155 44 44 / 16%);
+  background: rgb(155 44 44 / 9%);
+  color: #8b2424;
+}
+
+.realtime-note {
+  margin: 0;
+  color: #77736b;
+  font-size: 10px;
+  font-weight: 520;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
 .settings-header {
   display: grid;
   grid-template-columns: 30px 1fr;

@@ -37,11 +37,13 @@ export function MauzMenu(): React.JSX.Element {
         setCurrentContext(context);
         setMode("ask");
       } else if (action === "talk") {
-        await mauzClient.startTalk();
-        setStatus("Talk to Mauz lands in the Realtime milestone.");
+        const context = await mauzClient.startTalk();
+        setCurrentContext(context);
+        setMode("talk");
       } else {
-        await mauzClient.startScreenShare();
-        setStatus("Screen sharing lands after Ask Mauz.");
+        const context = await mauzClient.startScreenShare();
+        setCurrentContext(context);
+        setMode("screen");
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
