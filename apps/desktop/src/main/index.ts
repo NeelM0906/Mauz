@@ -19,6 +19,7 @@ let inputProviders: InputProvider[] = [];
 let bootstrapPromise: Promise<void> | null = null;
 let shutdownPromise: Promise<void> | null = null;
 let shutdownComplete = false;
+const shownPermissionMessages = new Set<string>();
 
 type QuitEvent = {
   preventDefault(): void;
@@ -63,8 +64,7 @@ async function bootstrap(): Promise<void> {
     });
     provider.onPermissionError((error) => {
       popover?.hide();
-      // Permission UI lands with the native helper. For now the event is surfaced through preload once the window is shown.
-      void error;
+      showPermissionError(error.message);
     });
     provider.start();
   }
@@ -175,6 +175,15 @@ function showBootstrapError(error: unknown): void {
     title,
     "Mauz couldn't start its desktop runtime. Restart the app. If this keeps happening, check the application logs for startup errors."
   );
+}
+
+function showPermissionError(message: string): void {
+  if (shownPermissionMessages.has(message)) {
+    return;
+  }
+
+  shownPermissionMessages.add(message);
+  dialog.showErrorBox("Mauz permission needed", message);
 }
 
 function getConfiguredLocalApiPort(): number {

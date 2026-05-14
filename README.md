@@ -1,6 +1,6 @@
 # MauzAI
 
-MauzAI is a macOS-first desktop assistant MVP. It opens a compact AI help popup from a dev hotkey today, captures screenshot context only after the user chooses Ask Mauz, and sends the question through a local Fastify API server to OpenAI.
+MauzAI is a macOS-first desktop assistant MVP. It opens a compact AI help popup from a dev hotkey or native mouse shake, captures screenshot context only after the user chooses Ask Mauz, and sends the question through a local Fastify API server to OpenAI.
 
 ## Current Milestone
 
@@ -10,6 +10,7 @@ Implemented:
 - `apps/api`: local Fastify API with `GET /healthz` and `POST /api/ask`.
 - `packages/shared`: shared TypeScript types, IPC constants, and Zod schemas.
 - `CommandOrControl+Shift+M`: opens the Mauz popup near the cursor.
+- Native macOS shake helper: optional Swift helper emits global mouse movement samples to the TypeScript `ShakeDetector`.
 - `Ask Mauz`: hides the popup, captures the current display screenshot, stores context in memory, accepts a question, and renders an OpenAI answer.
 - Local API auth: the Electron main process generates a process-lifetime token for `POST /api/ask`.
 - `ShakeDetector`: pure TypeScript vertical-shake detector with unit tests.
@@ -17,7 +18,6 @@ Implemented:
 
 Not implemented yet:
 
-- Native macOS mouse shake helper.
 - Selected text and active-window metadata.
 - Realtime voice.
 - Screen sharing mode.
@@ -67,9 +67,16 @@ Build all packages:
 pnpm build
 ```
 
+Build the native macOS input helper:
+
+```bash
+native/macos/MauzInputAgent/build.sh
+```
+
 ## Controls
 
 - Press `CommandOrControl+Shift+M` to open the Mauz popup near the current cursor position.
+- On macOS, set `MAUZ_ENABLE_NATIVE_INPUT=true`, build the helper, and rapidly shake the mouse vertically to open Mauz.
 - Click `Ask Mauz` to capture screenshot context.
 - Press `Esc` or click away to close the popup.
 
@@ -88,11 +95,18 @@ MAUZ_ENABLE_DEV_HOTKEY=true
 
 `OPENAI_API_KEY` is read only by the local API server in the Electron main process. It is never exposed to the renderer.
 
+`MAUZ_ENABLE_NATIVE_INPUT=true` enables the Swift mouse helper on macOS. macOS requires Accessibility permission for global mouse event monitoring. If permission is missing, Mauz shows:
+
+```text
+Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable Mauz.
+```
+
 If screenshot capture fails on macOS, grant Screen Recording permission in System Settings, then restart MauzAI. Ask Mauz still allows text-only questions when screenshot capture is unavailable.
 
 ## Privacy Posture
 
 - No screenshot is captured until the user clicks `Ask Mauz`.
+- Mouse shake activation only opens the Mauz menu; it does not capture screenshots.
 - Screenshot context is kept in memory for the current Ask flow.
 - Screenshots and selected text are not logged or persisted.
 - The local API requires a private `x-mauz-local-token` header generated inside the Electron main process.

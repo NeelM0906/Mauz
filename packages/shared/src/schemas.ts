@@ -19,6 +19,26 @@ export const PermissionErrorSchema = z.object({
   message: z.string()
 });
 
+export const MouseMoveSampleSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  ts: z.number().int().nonnegative(),
+  buttons: z.number().int().nonnegative().optional()
+});
+
+export const MacInputAgentMouseMoveEventSchema = MouseMoveSampleSchema.extend({
+  type: z.literal("mouse_move")
+});
+
+export const MacInputAgentPermissionErrorEventSchema = PermissionErrorSchema.extend({
+  type: z.literal("permission_error")
+});
+
+export const MacInputAgentEventSchema = z.discriminatedUnion("type", [
+  MacInputAgentMouseMoveEventSchema,
+  MacInputAgentPermissionErrorEventSchema
+]);
+
 export const MauzDesktopContextSchema = z.object({
   timestamp: z.string().datetime(),
   platform: PlatformSchema,
