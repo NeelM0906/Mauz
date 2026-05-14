@@ -79,8 +79,8 @@ native/macos/MauzInputAgent/build.sh
 - Press `CommandOrControl+Shift+M` to open the Mauz popup near the current cursor position.
 - On macOS, set `MAUZ_ENABLE_NATIVE_INPUT=true`, build the helper, and rapidly shake the mouse vertically to open Mauz.
 - Click `Ask Mauz` to capture pointer context. Mauz captures a crop around the cursor first, then a full screenshot for broader context.
-- Click `Talk to Mauz` to start a Realtime voice conversation with initial pointer/screenshot context.
-- Click `Show Mauz my screen` to start voice plus explicit screen sharing. Mauz sends fresh screenshot frames about every two seconds until you pause, stop, or close the panel.
+- Click `Talk to Mauz` to start a natural Realtime voice conversation with initial pointer/screenshot context. Realtime VAD detects when you start and stop speaking; mute is only a privacy control.
+- Click `Show Mauz my screen` to start voice plus explicit screen sharing. Mauz sends fresh screenshot frames about every two seconds until you pause, stop, or close the panel. Frames update visual context only; Mauz responds to your spoken turns.
 - Use the settings button in the Mauz menu to toggle native shake and adjust sensitivity. The dev hotkey fallback remains available unless disabled in local settings.
 - Press `Esc` or click away to close the popup.
 
@@ -119,6 +119,7 @@ If screenshot capture fails on macOS, grant Screen Recording permission in Syste
 - The local API requires a private `x-mauz-local-token` header generated inside the Electron main process.
 - The renderer only receives a small typed API via Electron `contextBridge`; raw `ipcRenderer`, filesystem access, OpenAI credentials, and privileged OS APIs are not exposed.
 - Microphone access is requested only after the user chooses `Talk to Mauz` or `Show Mauz my screen`.
+- Muting the mic disables local audio tracks without closing the Realtime session or muting Mauz's audio output.
 - Screen sharing uses explicit periodic screenshot frames, not hidden background capture.
 
 ## Local API
@@ -127,4 +128,4 @@ The desktop app launches a local Fastify server on `127.0.0.1:${MAUZ_API_PORT}`.
 
 - `GET /healthz` returns `{ "ok": true }`.
 - `POST /api/ask` requires `x-mauz-local-token`, validates `AskMauzRequestSchema`, sends text plus optional cursor-crop and screenshot image context to the OpenAI Responses API, and returns `AskMauzResponse`.
-- `POST /api/realtime/connect` requires `x-mauz-local-token`, validates `RealtimeConnectRequestSchema`, sends the renderer-created WebRTC SDP offer to OpenAI Realtime through the server-side unified interface, and returns a Realtime SDP answer.
+- `POST /api/realtime/connect` requires `x-mauz-local-token`, validates `RealtimeConnectRequestSchema`, sends the renderer-created WebRTC SDP offer to OpenAI Realtime through the server-side unified interface, configures server VAD turn detection, and returns a Realtime SDP answer.

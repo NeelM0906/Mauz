@@ -11,20 +11,32 @@ import {
   X
 } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import type { MauzDesktopContext, RealtimeMode, ScreenshotPayload } from "@mauzai/shared";
+import type { MauzDesktopContext, RealtimeMode } from "@mauzai/shared";
+import {
+  canSendScreenFrame,
+  getContextLabel,
+  getPrimaryImage,
+  getVoiceStateForRealtimeEvent,
+  hashImage,
+  parseRealtimeEvent,
+  sendInitialContext,
+  sendScreenFrame,
+  setMicrophoneMuted,
+  stopRealtimeMedia,
+  type VoiceState
+} from "@renderer/lib/realtimeConversation";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
-
-type RealtimeStatus = "idle" | "connecting" | "listening" | "speaking" | "sharing" | "stopped" | "error";
 
 const SCREEN_FRAME_INTERVAL_MS = 2_000;
 
 export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
   const currentContext = useMauzStore((state) => state.currentContext);
   const backToMenu = useMauzStore((state) => state.backToMenu);
-  const [status, setStatus] = useState<RealtimeStatus>("idle");
+  const [voiceState, setVoiceState] = useState<VoiceState>("connecting");
   const [error, setError] = useState<string | null>(null);
   const [screenPaused, setScreenPaused] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
   const [lastFrameAt, setLastFrameAt] = useState<string | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
@@ -33,6 +45,7 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
   const frameTimerRef = useRef<number | null>(null);
   const lastFrameHashRef = useRef<string | null>(null);
   const pausedRef = useRef(false);
+  const micMutedRef = useRef(false);
   const title = mode === "screen" ? "Share screen" : "Talk to Mauz";
   const hasScreenshot = getPrimaryImage(currentContext) !== undefined;
   const contextLabel = useMemo(() => getContextLabel(currentContext), [currentContext]);
@@ -42,23 +55,28 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
   }, [screenPaused]);
 
   useEffect(() => {
+    micMutedRef.current = micMuted;
+  }, [micMuted]);
+
+  useEffect(() => {
     let disposed = false;
 
     const start = async (): Promise<void> => {
       if (currentContext === null) {
-        setStatus("error");
+        setVoiceState("error");
         setError("Mauz does not have desktop context yet.");
         return;
       }
 
-      setStatus("connecting");
+      setVoiceState("connecting");
       setError(null);
 
       try {
         const { peer, dataChannel, mediaStream } = await startRealtimeConnection({
           mode,
           context: currentContext,
-          onStatus: setStatus,
+          onVoiceState: setVoiceState,
+          isMuted: () => micMutedRef.current,
           onError: setError
         });
 
@@ -70,7 +88,7 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
         peerRef.current = peer;
         dataChannelRef.current = dataChannel;
         mediaStreamRef.current = mediaStream;
-        setStatus(mode === "screen" ? "sharing" : "listening");
+        setVoiceState(micMutedRef.current ? "muted" : "listening");
 
         if (mode === "screen") {
           frameTimerRef.current = window.setInterval(() => {
@@ -78,7 +96,7 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
           }, SCREEN_FRAME_INTERVAL_MS);
         }
       } catch (caught) {
-        setStatus("error");
+        setVoiceState("error");
         setError(caught instanceof Error ? caught.message : "Realtime connection failed.");
       }
     };
@@ -104,7 +122,12 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
   };
 
   const captureAndSendScreenFrame = async (): Promise<void> => {
-    if (pausedRef.current || dataChannelRef.current?.readyState !== "open") {
+    if (
+      !canSendScreenFrame({
+        screenPaused: pausedRef.current,
+        dataChannelReady: dataChannelRef.current?.readyState === "open"
+      })
+    ) {
       return;
     }
 
@@ -123,29 +146,43 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
         return;
       }
 
+      const dataChannel = dataChannelRef.current;
+
+      if (dataChannel === null) {
+        return;
+      }
+
       lastFrameHashRef.current = nextHash;
-      sendScreenFrame(dataChannelRef.current, nextContext);
+      sendScreenFrame(dataChannel, nextContext);
       setLastFrameAt(
         new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })
       );
     } catch (caught) {
       setScreenPaused(true);
-      setStatus("error");
+      setVoiceState("error");
       setError(caught instanceof Error ? caught.message : "Screen sharing frame capture failed.");
     }
   };
 
   const handleBack = async (): Promise<void> => {
     stopCurrentSession();
-    setStatus("stopped");
+    setVoiceState("stopped");
     await mauzClient.showMenu();
     backToMenu();
   };
 
   const handleStop = async (): Promise<void> => {
     stopCurrentSession();
-    setStatus("stopped");
+    setVoiceState("stopped");
     await mauzClient.close();
+  };
+
+  const handleToggleMute = (): void => {
+    const nextMuted = !micMutedRef.current;
+    micMutedRef.current = nextMuted;
+    setMicMuted(nextMuted);
+    setMicrophoneMuted(mediaStreamRef.current, nextMuted);
+    setVoiceState(nextMuted ? "muted" : "listening");
   };
 
   return (
@@ -175,11 +212,11 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
 
       <audio ref={audioRef} autoPlay />
 
-      <div className="realtime-status" data-state={status}>
-        {getStatusIcon(mode, status)}
+      <div className="realtime-status" data-state={voiceState}>
+        {getStatusIcon(mode, voiceState)}
         <div>
-          <strong>{getStatusTitle(mode, status, screenPaused)}</strong>
-          <span>{error ?? getStatusDetail(mode, status, contextLabel, lastFrameAt)}</span>
+          <strong>{getStatusTitle(mode, voiceState, screenPaused)}</strong>
+          <span>{error ?? getStatusDetail(mode, voiceState, contextLabel, lastFrameAt)}</span>
         </div>
       </div>
 
@@ -190,11 +227,15 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
         </span>
         <span>
           <MonitorUp aria-hidden="true" size={14} />
-          {mode === "screen" ? "Screen sharing on" : "Initial view only"}
+          {mode === "screen" ? (screenPaused ? "Screen paused" : "Screen sharing on") : "Initial view only"}
         </span>
       </div>
 
       <div className="realtime-actions">
+        <button type="button" className="secondary-button" onClick={handleToggleMute}>
+          {micMuted ? <MicOff aria-hidden="true" size={15} /> : <Mic aria-hidden="true" size={15} />}
+          <span>{micMuted ? "Unmute mic" : "Mute mic"}</span>
+        </button>
         {mode === "screen" ? (
           <button
             type="button"
@@ -213,8 +254,8 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
 
       <p className="realtime-note">
         {mode === "screen"
-          ? "Mauz only receives frames while this panel is open and sharing is not paused."
-          : "Mauz uses your microphone after you choose Talk."}
+          ? "Voice turns are automatic. Screen frames update context only."
+          : "Voice turns are automatic. Mute is only for privacy."}
       </p>
     </section>
   );
@@ -222,12 +263,14 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
   function startRealtimeConnection({
     mode,
     context,
-    onStatus,
+    onVoiceState,
+    isMuted,
     onError
   }: {
     mode: RealtimeMode;
     context: MauzDesktopContext;
-    onStatus: (status: RealtimeStatus) => void;
+    onVoiceState: (status: VoiceState) => void;
+    isMuted: () => boolean;
     onError: (message: string | null) => void;
   }): Promise<{
     peer: RTCPeerConnection;
@@ -238,7 +281,8 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
       mode,
       context,
       audioElement: audioRef.current,
-      onStatus,
+      onVoiceState,
+      isMuted,
       onError
     });
   }
@@ -248,7 +292,8 @@ type ConnectRealtimeOptions = {
   mode: RealtimeMode;
   context: MauzDesktopContext;
   audioElement: HTMLAudioElement | null;
-  onStatus(status: RealtimeStatus): void;
+  onVoiceState(status: VoiceState): void;
+  isMuted(): boolean;
   onError(message: string | null): void;
 };
 
@@ -256,7 +301,8 @@ async function connectRealtime({
   mode,
   context,
   audioElement,
-  onStatus,
+  onVoiceState,
+  isMuted,
   onError
 }: ConnectRealtimeOptions): Promise<{
   peer: RTCPeerConnection;
@@ -278,23 +324,30 @@ async function connectRealtime({
   };
   peer.onconnectionstatechange = () => {
     if (peer.connectionState === "failed" || peer.connectionState === "disconnected") {
-      onStatus("error");
+      onVoiceState("error");
       onError("Realtime connection was interrupted.");
     }
   };
   dataChannel.onopen = () => {
     sendInitialContext(dataChannel, mode, context);
-    onStatus(mode === "screen" ? "sharing" : "listening");
+    onVoiceState(isMuted() ? "muted" : "listening");
   };
   dataChannel.onmessage = (event) => {
     const parsed = parseRealtimeEvent(event.data);
 
-    if (parsed?.type === "response.audio.delta") {
-      onStatus("speaking");
-    } else if (parsed?.type === "response.done" || parsed?.type === "input_audio_buffer.speech_started") {
-      onStatus(mode === "screen" ? "sharing" : "listening");
-    } else if (parsed?.type === "error") {
-      onStatus("error");
+    if (parsed === null) {
+      return;
+    }
+
+    const nextState = getVoiceStateForRealtimeEvent(parsed, {
+      muted: isMuted()
+    });
+
+    if (nextState !== null) {
+      onVoiceState(nextState);
+    }
+
+    if (parsed.type === "error") {
       onError("Realtime model returned an error.");
     }
   };
@@ -333,177 +386,58 @@ function stopRealtime(
     dataChannel.close();
   }
 
-  for (const track of mediaStream?.getTracks() ?? []) {
-    track.stop();
-  }
+  stopRealtimeMedia(mediaStream);
 
   peer?.close();
 }
 
-function sendInitialContext(
-  dataChannel: RTCDataChannel,
-  mode: RealtimeMode,
-  context: MauzDesktopContext
-): void {
-  sendConversationMessage(dataChannel, [
-    {
-      type: "input_text",
-      text: buildRealtimeContextText(mode, context)
-    },
-    ...getInitialImages(context)
-  ]);
-}
-
-function sendScreenFrame(dataChannel: RTCDataChannel, context: MauzDesktopContext): void {
-  const image = context.pointer?.screenshot ?? context.screenshot ?? context.pointer?.cursorCrop;
-
-  if (image === undefined) {
-    return;
-  }
-
-  sendConversationMessage(dataChannel, [
-    {
-      type: "input_text",
-      text: "Updated explicit screen-share frame. Use this as current visual context when the user asks about the screen."
-    },
-    toInputImage(image)
-  ]);
-}
-
-function sendConversationMessage(dataChannel: RTCDataChannel, content: unknown[]): void {
-  dataChannel.send(
-    JSON.stringify({
-      type: "conversation.item.create",
-      item: {
-        type: "message",
-        role: "user",
-        content
-      }
-    })
-  );
-}
-
-function buildRealtimeContextText(mode: RealtimeMode, context: MauzDesktopContext): string {
-  const selectedText = context.selectedText ?? context.pointer?.selectedText;
-
-  return [
-    mode === "screen"
-      ? "The user started explicit screen sharing with Mauz."
-      : "The user started a voice conversation with Mauz.",
-    "Use this desktop context to resolve this, that, and here.",
-    "Priority: selected text > cursor crop > active window metadata > full screenshot > cursor position.",
-    `Cursor: (${Math.round(context.cursor.x)}, ${Math.round(context.cursor.y)})`,
-    `Selected text: ${selectedText?.trim() ? selectedText : "none provided"}`,
-    `Active app: ${context.activeApp?.name ?? context.pointer?.activeApp?.name ?? "unknown"}`,
-    `Active window: ${context.activeWindow?.title ?? context.pointer?.activeWindow?.title ?? "unknown"}`
-  ].join("\n");
-}
-
-function getInitialImages(context: MauzDesktopContext): unknown[] {
-  const images: unknown[] = [];
-
-  if (context.pointer?.cursorCrop !== undefined) {
-    images.push(toInputImage(context.pointer.cursorCrop));
-  }
-
-  const screenshot = context.pointer?.screenshot ?? context.screenshot;
-
-  if (screenshot !== undefined) {
-    images.push(toInputImage(screenshot));
-  }
-
-  return images;
-}
-
-function toInputImage(image: ScreenshotPayload): { type: "input_image"; image_url: string; detail: "auto" } {
-  return {
-    type: "input_image",
-    image_url: `data:${image.mimeType};base64,${image.base64}`,
-    detail: "auto"
-  };
-}
-
-function getPrimaryImage(context: MauzDesktopContext | null): ScreenshotPayload | undefined {
-  return context?.pointer?.cursorCrop ?? context?.pointer?.screenshot ?? context?.screenshot;
-}
-
-function hashImage(image: ScreenshotPayload): string {
-  return `${image.mimeType}:${image.width}x${image.height}:${image.base64.length}:${image.base64.slice(0, 96)}:${image.base64.slice(-96)}`;
-}
-
-function parseRealtimeEvent(data: unknown): { type?: string } | null {
-  if (typeof data !== "string") {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(data) as unknown;
-
-    if (typeof parsed === "object" && parsed !== null && "type" in parsed) {
-      const event = parsed as { type?: unknown };
-
-      if (typeof event.type === "string") {
-        return { type: event.type };
-      }
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-function getContextLabel(context: MauzDesktopContext | null): string {
-  if (context?.selectedText?.trim()) {
-    return "selected text";
-  }
-
-  if (context?.pointer?.cursorCrop !== undefined) {
-    return "cursor area";
-  }
-
-  if (context?.screenshot !== undefined || context?.pointer?.screenshot !== undefined) {
-    return "screenshot";
-  }
-
-  return "cursor";
-}
-
-function getStatusIcon(mode: RealtimeMode, status: RealtimeStatus): React.JSX.Element {
-  if (status === "connecting") {
+function getStatusIcon(mode: RealtimeMode, state: VoiceState): React.JSX.Element {
+  if (state === "connecting") {
     return <LoaderCircle aria-hidden="true" className="spin" size={18} />;
   }
 
-  if (status === "error" || status === "stopped") {
+  if (state === "error" || state === "stopped" || state === "muted") {
     return <MicOff aria-hidden="true" size={18} />;
   }
 
-  if (mode === "screen") {
+  if (mode === "screen" && state === "listening") {
     return <MonitorUp aria-hidden="true" size={18} />;
   }
 
   return <Mic aria-hidden="true" size={18} />;
 }
 
-function getStatusTitle(mode: RealtimeMode, status: RealtimeStatus, paused: boolean): string {
-  if (status === "connecting") {
+function getStatusTitle(mode: RealtimeMode, state: VoiceState, paused: boolean): string {
+  if (state === "connecting") {
     return "Connecting";
   }
 
-  if (status === "speaking") {
+  if (state === "user_speaking") {
+    return "You're speaking";
+  }
+
+  if (state === "thinking") {
+    return "Mauz is thinking";
+  }
+
+  if (state === "mauz_speaking") {
     return "Mauz is speaking";
   }
 
-  if (status === "error") {
+  if (state === "muted") {
+    return "Mic muted";
+  }
+
+  if (state === "error") {
     return "Connection issue";
   }
 
-  if (status === "stopped") {
+  if (state === "stopped") {
     return "Stopped";
   }
 
   if (mode === "screen") {
-    return paused ? "Screen sharing paused" : "Mauz can see your screen";
+    return paused ? "Listening, screen paused" : "Listening, screen sharing";
   }
 
   return "Listening";
@@ -511,19 +445,33 @@ function getStatusTitle(mode: RealtimeMode, status: RealtimeStatus, paused: bool
 
 function getStatusDetail(
   mode: RealtimeMode,
-  status: RealtimeStatus,
+  state: VoiceState,
   contextLabel: string,
   lastFrameAt: string | null
 ): string {
-  if (status === "connecting") {
+  if (state === "connecting") {
     return "Preparing microphone and Realtime session.";
   }
 
-  if (status === "speaking") {
+  if (state === "user_speaking") {
+    return "Realtime VAD detected your voice.";
+  }
+
+  if (state === "thinking") {
+    return "Realtime VAD detected the end of your turn.";
+  }
+
+  if (state === "mauz_speaking") {
     return "Audio response is playing.";
   }
 
-  if (status === "stopped") {
+  if (state === "muted") {
+    return mode === "screen"
+      ? "Screen frames can continue while mic audio is muted."
+      : "Mauz stays connected.";
+  }
+
+  if (state === "stopped") {
     return "Microphone and screen sharing are off.";
   }
 

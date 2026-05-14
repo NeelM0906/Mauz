@@ -474,6 +474,25 @@ button {
   color: #4b5350;
 }
 
+.realtime-status[data-state="user_speaking"] {
+  border-color: rgb(46 98 176 / 18%);
+  background: rgb(46 98 176 / 8%);
+  color: #284d82;
+}
+
+.realtime-status[data-state="thinking"],
+.realtime-status[data-state="mauz_speaking"] {
+  border-color: rgb(103 76 172 / 18%);
+  background: rgb(103 76 172 / 8%);
+  color: #513c88;
+}
+
+.realtime-status[data-state="muted"] {
+  border-color: rgb(23 23 23 / 12%);
+  background: rgb(23 23 23 / 7%);
+  color: #4b5350;
+}
+
 .realtime-status > svg {
   justify-self: center;
 }
@@ -499,7 +518,7 @@ button {
 
 .realtime-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
   gap: 8px;
   margin-top: auto;
 }
