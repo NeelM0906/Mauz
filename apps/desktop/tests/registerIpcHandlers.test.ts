@@ -26,6 +26,7 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.chatHistoryList,
   IPC_CHANNELS.chatHistoryGet,
+  IPC_CHANNELS.chatHistoryContinue,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.realtimeCaptureFrame
@@ -166,6 +167,9 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       })),
       get: vi.fn(async () => {
         throw new Error("not found");
+      }),
+      appendAskTurn: vi.fn(async () => {
+        throw new Error("not found");
       })
     } as never,
     api,
@@ -173,12 +177,26 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     getSettings: vi.fn(async () => ({
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
-      shakeSensitivity: "normal" as const
+      shakeSensitivity: "normal" as const,
+      askModel: "gpt-5.4-mini",
+      chatTitleModel: "gpt-5.4-nano",
+      realtimeModel: "gpt-realtime-2",
+      realtimeVoice: "marin",
+      realtimeReasoningEffort: "low" as const,
+      includeFullScreenshot: false,
+      apiKeyConfigured: false
     })),
     updateSettings: vi.fn(async (update) => ({
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
       devHotkeyEnabled: update.devHotkeyEnabled ?? true,
-      shakeSensitivity: update.shakeSensitivity ?? ("normal" as const)
+      shakeSensitivity: update.shakeSensitivity ?? ("normal" as const),
+      askModel: update.askModel ?? "gpt-5.4-mini",
+      chatTitleModel: update.chatTitleModel ?? "gpt-5.4-nano",
+      realtimeModel: update.realtimeModel ?? "gpt-realtime-2",
+      realtimeVoice: update.realtimeVoice ?? "marin",
+      realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
+      includeFullScreenshot: update.includeFullScreenshot ?? false,
+      apiKeyConfigured: (update.openAiApiKey?.trim().length ?? 0) > 0
     }))
   };
 }

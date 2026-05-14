@@ -2,6 +2,8 @@ import type {
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
+  ChatHistoryContinueRequest,
+  ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
   MauzDesktopContext,
@@ -42,6 +44,9 @@ const browserPreviewBridge: MauzBridge = {
     }),
     get: async (_payload: ChatHistoryGetRequest) => {
       throw new Error("Run the Electron app to view Mauz chat history.");
+    },
+    continue: async (_payload: ChatHistoryContinueRequest) => {
+      throw new Error("Run the Electron app to continue Mauz chat history.");
     }
   },
   realtime: {
@@ -57,12 +62,26 @@ const browserPreviewBridge: MauzBridge = {
     open: async () => ({
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
-      shakeSensitivity: "normal"
+      shakeSensitivity: "normal",
+      askModel: "gpt-5.4-mini",
+      chatTitleModel: "gpt-5.4-nano",
+      realtimeModel: "gpt-realtime-2",
+      realtimeVoice: "marin",
+      realtimeReasoningEffort: "low",
+      includeFullScreenshot: false,
+      apiKeyConfigured: false
     }),
     update: async (payload: MauzSettingsUpdate) => ({
       nativeShakeEnabled: payload.nativeShakeEnabled ?? false,
       devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
-      shakeSensitivity: payload.shakeSensitivity ?? "normal"
+      shakeSensitivity: payload.shakeSensitivity ?? "normal",
+      askModel: payload.askModel ?? "gpt-5.4-mini",
+      chatTitleModel: payload.chatTitleModel ?? "gpt-5.4-nano",
+      realtimeModel: payload.realtimeModel ?? "gpt-realtime-2",
+      realtimeVoice: payload.realtimeVoice ?? "marin",
+      realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
+      includeFullScreenshot: payload.includeFullScreenshot ?? false,
+      apiKeyConfigured: (payload.openAiApiKey?.trim().length ?? 0) > 0
     })
   },
   events: {
@@ -124,6 +143,9 @@ export const mauzClient = {
   },
   getChatConversation(payload: ChatHistoryGetRequest): Promise<ChatConversation> {
     return getBridge().history.get(payload);
+  },
+  continueChat(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse> {
+    return getBridge().history.continue(payload);
   },
   createRealtimeSession(): Promise<RealtimeSessionResponse> {
     return getBridge().realtime.createSession();

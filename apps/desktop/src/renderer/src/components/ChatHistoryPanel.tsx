@@ -1,5 +1,5 @@
-import { ArrowLeft, History, LoaderCircle, MessageSquareText, X } from "lucide-react";
-import { useEffect } from "react";
+import { ArrowLeft, History, LoaderCircle, MessageSquareText, Send, X } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { ChatConversation, ChatHistoryGroup } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -18,6 +18,8 @@ export function ChatHistoryPanel(): React.JSX.Element {
     setHistoryLoading,
     setSelectedConversation
   } = useMauzStore();
+  const [followUpQuestion, setFollowUpQuestion] = useState("");
+  const [continuing, setContinuing] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -25,6 +27,7 @@ export function ChatHistoryPanel(): React.JSX.Element {
     const loadHistory = async (): Promise<void> => {
       setHistoryLoading(true);
       setHistoryError(null);
+      setFollowUpQuestion("");
 
       try {
         const history = await mauzClient.listChatHistory();
@@ -75,6 +78,39 @@ export function ChatHistoryPanel(): React.JSX.Element {
     }
   };
 
+  const handleContinueConversation = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+
+    if (selectedConversation === null) {
+      return;
+    }
+
+    const trimmedQuestion = followUpQuestion.trim();
+
+    if (trimmedQuestion.length === 0) {
+      setHistoryError("Ask a follow-up first.");
+      return;
+    }
+
+    setContinuing(true);
+    setHistoryError(null);
+
+    try {
+      const response = await mauzClient.continueChat({
+        id: selectedConversation.id,
+        question: trimmedQuestion
+      });
+
+      setSelectedConversation(response.conversation);
+      setChatHistory(null);
+      setFollowUpQuestion("");
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Could not continue that Mauz chat.");
+    } finally {
+      setContinuing(false);
+    }
+  };
+
   return (
     <section className="history-panel" aria-label="Previous Mauz chats">
       <header className="history-header">
@@ -115,7 +151,28 @@ export function ChatHistoryPanel(): React.JSX.Element {
           onSelectConversation={(id) => void handleSelectConversation(id)}
         />
       ) : null}
-      {selectedConversation !== null ? <ConversationView conversation={selectedConversation} /> : null}
+      {selectedConversation !== null ? (
+        <>
+          <ConversationView conversation={selectedConversation} />
+          <form className="history-follow-up" onSubmit={(event) => void handleContinueConversation(event)}>
+            <textarea
+              value={followUpQuestion}
+              onChange={(event) => setFollowUpQuestion(event.target.value)}
+              placeholder="Ask a follow-up"
+              aria-label="Continue this Mauz chat"
+              disabled={continuing}
+            />
+            <button type="submit" className="submit-button" disabled={continuing}>
+              {continuing ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={15} />
+              ) : (
+                <Send aria-hidden="true" size={15} />
+              )}
+              <span>{continuing ? "Asking" : "Continue"}</span>
+            </button>
+          </form>
+        </>
+      ) : null}
     </section>
   );
 }

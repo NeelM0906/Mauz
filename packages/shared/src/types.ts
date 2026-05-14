@@ -80,6 +80,7 @@ export type MauzDesktopContext = {
 export type AskMauzRequest = {
   question: string;
   context: MauzDesktopContext;
+  conversationMessages?: ChatMessage[] | undefined;
 };
 
 export type AskMauzResponse = {
@@ -128,6 +129,17 @@ export type ChatHistoryGetRequest = {
   id: string;
 };
 
+export type ChatHistoryContinueRequest = {
+  id: string;
+  question: string;
+};
+
+export type ChatHistoryContinueResponse = {
+  conversation: ChatConversation;
+  answer: string;
+  model: string;
+};
+
 export type ChatTitleRequest = {
   question: string;
   answer: string;
@@ -164,13 +176,24 @@ export type PermissionError = {
 
 export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
+export type RealtimeReasoningEffort = "low" | "medium" | "high";
+
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
   devHotkeyEnabled: boolean;
   shakeSensitivity: ShakeSensitivity;
+  askModel: string;
+  chatTitleModel: string;
+  realtimeModel: string;
+  realtimeVoice: string;
+  realtimeReasoningEffort: RealtimeReasoningEffort;
+  includeFullScreenshot: boolean;
+  apiKeyConfigured: boolean;
 };
 
-export type MauzSettingsUpdate = Partial<MauzSettings>;
+export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">> & {
+  openAiApiKey?: string | null | undefined;
+};
 
 export type MouseMoveSample = {
   x: number;
@@ -193,6 +216,7 @@ export type MauzBridge = {
   history: {
     list(): Promise<ChatHistoryListResponse>;
     get(payload: ChatHistoryGetRequest): Promise<ChatConversation>;
+    continue(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse>;
   };
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;

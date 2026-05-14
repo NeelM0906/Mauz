@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import {
   AskMauzRequestSchema,
+  ChatHistoryContinueRequestSchema,
   ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
   MauzSettingsUpdateSchema,
@@ -37,6 +38,7 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.chatHistoryList,
   IPC_CHANNELS.chatHistoryGet,
+  IPC_CHANNELS.chatHistoryContinue,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.realtimeCaptureFrame
@@ -132,6 +134,29 @@ export function registerIpcHandlers({
     return chatHistory.get(request.id);
   });
 
+  ipcMain.handle(IPC_CHANNELS.chatHistoryContinue, async (_event, payload: unknown) => {
+    const request = ChatHistoryContinueRequestSchema.parse(payload);
+    const conversation = await chatHistory.get(request.id);
+    const context = await contextCollector.collectForAsk();
+    const response = await submitAskToLocalApi(api, localApiToken, {
+      question: request.question,
+      context,
+      conversationMessages: conversation.messages
+    });
+    const updatedConversation = await chatHistory.appendAskTurn(request.id, {
+      question: request.question,
+      answer: response.answer
+    });
+
+    popover.resizeForHistory();
+
+    return {
+      conversation: updatedConversation,
+      answer: response.answer,
+      model: response.model
+    };
+  });
+
   ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, () => {
     const unavailable = RealtimeSessionResponseSchema.safeParse({ value: "" });
 
@@ -180,6 +205,13 @@ function toSettingsUpdate(parsedUpdate: {
   nativeShakeEnabled?: boolean | undefined;
   devHotkeyEnabled?: boolean | undefined;
   shakeSensitivity?: MauzSettings["shakeSensitivity"] | undefined;
+  askModel?: string | undefined;
+  chatTitleModel?: string | undefined;
+  realtimeModel?: string | undefined;
+  realtimeVoice?: string | undefined;
+  realtimeReasoningEffort?: MauzSettings["realtimeReasoningEffort"] | undefined;
+  includeFullScreenshot?: boolean | undefined;
+  openAiApiKey?: string | null | undefined;
 }): MauzSettingsUpdate {
   const update: MauzSettingsUpdate = {};
 
@@ -193,6 +225,34 @@ function toSettingsUpdate(parsedUpdate: {
 
   if (parsedUpdate.shakeSensitivity !== undefined) {
     update.shakeSensitivity = parsedUpdate.shakeSensitivity;
+  }
+
+  if (parsedUpdate.askModel !== undefined) {
+    update.askModel = parsedUpdate.askModel;
+  }
+
+  if (parsedUpdate.chatTitleModel !== undefined) {
+    update.chatTitleModel = parsedUpdate.chatTitleModel;
+  }
+
+  if (parsedUpdate.realtimeModel !== undefined) {
+    update.realtimeModel = parsedUpdate.realtimeModel;
+  }
+
+  if (parsedUpdate.realtimeVoice !== undefined) {
+    update.realtimeVoice = parsedUpdate.realtimeVoice;
+  }
+
+  if (parsedUpdate.realtimeReasoningEffort !== undefined) {
+    update.realtimeReasoningEffort = parsedUpdate.realtimeReasoningEffort;
+  }
+
+  if (parsedUpdate.includeFullScreenshot !== undefined) {
+    update.includeFullScreenshot = parsedUpdate.includeFullScreenshot;
+  }
+
+  if ("openAiApiKey" in parsedUpdate) {
+    update.openAiApiKey = parsedUpdate.openAiApiKey;
   }
 
   return update;

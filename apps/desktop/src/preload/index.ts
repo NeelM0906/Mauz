@@ -3,6 +3,8 @@ import type {
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
+  ChatHistoryContinueRequest,
+  ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
   MauzBridge,
@@ -32,7 +34,9 @@ const mauzApi: MauzBridge = {
   history: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryList) as Promise<ChatHistoryListResponse>,
     get: (payload: ChatHistoryGetRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryGet, payload) as Promise<ChatConversation>
+      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryGet, payload) as Promise<ChatConversation>,
+    continue: (payload: ChatHistoryContinueRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryContinue, payload) as Promise<ChatHistoryContinueResponse>
   },
   realtime: {
     createSession: () =>

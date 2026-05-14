@@ -57,4 +57,31 @@ describe("ChatHistoryService", () => {
       title: "Build Error Diagnosis"
     });
   });
+
+  it("continues an existing conversation in place", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mauz-history-"));
+    tempDirs.push(dir);
+    const service = new ChatHistoryService(join(dir, "history.json"));
+    const saved = await service.saveAskConversation({
+      title: "Explain Settings Panel",
+      question: "What is this?",
+      answer: "This is a settings panel."
+    });
+
+    const updated = await service.appendAskTurn(saved.id, {
+      question: "Can I change the model here?",
+      answer: "Yes. The Models section lets you choose the Ask model."
+    });
+
+    expect(updated.messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant"
+    ]);
+    await expect(service.get(saved.id)).resolves.toMatchObject({
+      id: saved.id,
+      messages: updated.messages
+    });
+  });
 });

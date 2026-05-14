@@ -692,12 +692,39 @@ button {
   white-space: pre-wrap;
 }
 
+.history-follow-up {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 8px;
+}
+
+.history-follow-up textarea {
+  min-width: 0;
+  height: 34px;
+  resize: none;
+  padding: 8px 9px;
+  border: 1px solid rgb(23 23 23 / 14%);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #171717;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 520;
+  line-height: 1.25;
+  outline: none;
+}
+
+.history-follow-up textarea:focus {
+  border-color: rgb(22 122 107 / 48%);
+  box-shadow: 0 0 0 3px rgb(22 122 107 / 12%);
+}
+
 .settings-panel {
-  width: 360px;
-  height: 330px;
+  width: 440px;
+  height: 620px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 12px;
   border: 1px solid rgb(23 23 23 / 12%);
   border-radius: 8px;
@@ -894,6 +921,16 @@ button {
   background: rgb(255 255 255 / 72%);
 }
 
+.settings-content {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
 .settings-row {
   display: grid;
   grid-template-columns: 22px 1fr 36px;
@@ -931,6 +968,80 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+
+.settings-field {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-field span,
+.settings-check span,
+.settings-message,
+.settings-footer span {
+  color: #686f6b;
+  font-size: 10px;
+  font-weight: 620;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.settings-field input,
+.settings-field select {
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgb(23 23 23 / 12%);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #171717;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 620;
+  outline: none;
+}
+
+.settings-field input:focus,
+.settings-field select:focus {
+  border-color: rgb(22 122 107 / 48%);
+  box-shadow: 0 0 0 3px rgb(22 122 107 / 12%);
+}
+
+.settings-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-inline-actions .secondary-button {
+  width: 96px;
+  height: 28px;
+  font-size: 10px;
+}
+
+.settings-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-check input {
+  accent-color: #167a6b;
+}
+
+.settings-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toggle-button {

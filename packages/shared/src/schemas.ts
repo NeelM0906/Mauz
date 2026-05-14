@@ -27,14 +27,28 @@ export const PermissionErrorSchema = z.object({
 });
 
 export const ShakeSensitivitySchema = z.enum(["relaxed", "normal", "strict"]);
+export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
 
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
-  shakeSensitivity: ShakeSensitivitySchema
+  shakeSensitivity: ShakeSensitivitySchema,
+  askModel: z.string().min(1),
+  chatTitleModel: z.string().min(1),
+  realtimeModel: z.string().min(1),
+  realtimeVoice: z.string().min(1),
+  realtimeReasoningEffort: RealtimeReasoningEffortSchema,
+  includeFullScreenshot: z.boolean(),
+  apiKeyConfigured: z.boolean()
 });
 
-export const MauzSettingsUpdateSchema = MauzSettingsSchema.partial();
+export const MauzSettingsUpdateSchema = MauzSettingsSchema.omit({
+  apiKeyConfigured: true
+})
+  .extend({
+    openAiApiKey: z.string().nullable().optional()
+  })
+  .partial();
 
 export const MouseMoveSampleSchema = z.object({
   x: z.number().finite(),
@@ -113,9 +127,19 @@ export const MauzDesktopContextSchema = z.object({
   screenshotError: PermissionErrorSchema.optional()
 });
 
+export const ChatRoleSchema = z.enum(["user", "assistant"]);
+
+export const ChatMessageSchema = z.object({
+  id: z.string().min(1),
+  role: ChatRoleSchema,
+  content: z.string(),
+  createdAt: z.string().datetime()
+});
+
 export const AskMauzRequestSchema = z.object({
   question: z.string().min(1),
-  context: MauzDesktopContextSchema
+  context: MauzDesktopContextSchema,
+  conversationMessages: z.array(ChatMessageSchema).optional()
 });
 
 export const AskMauzResponseSchema = z.object({
@@ -124,15 +148,6 @@ export const AskMauzResponseSchema = z.object({
   conversationId: z.string().optional(),
   conversationTitle: z.string().optional(),
   usage: z.unknown().optional()
-});
-
-export const ChatRoleSchema = z.enum(["user", "assistant"]);
-
-export const ChatMessageSchema = z.object({
-  id: z.string().min(1),
-  role: ChatRoleSchema,
-  content: z.string(),
-  createdAt: z.string().datetime()
 });
 
 export const ChatConversationSchema = z.object({
@@ -162,6 +177,17 @@ export const ChatHistoryListResponseSchema = z.object({
 
 export const ChatHistoryGetRequestSchema = z.object({
   id: z.string().min(1)
+});
+
+export const ChatHistoryContinueRequestSchema = z.object({
+  id: z.string().min(1),
+  question: z.string().min(1)
+});
+
+export const ChatHistoryContinueResponseSchema = z.object({
+  conversation: ChatConversationSchema,
+  answer: z.string(),
+  model: z.string()
 });
 
 export const ChatTitleRequestSchema = z.object({

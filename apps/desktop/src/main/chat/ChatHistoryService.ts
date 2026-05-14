@@ -63,6 +63,36 @@ export class ChatHistoryService {
     return conversation;
   }
 
+  async appendAskTurn(id: string, input: Omit<SaveAskConversationInput, "title">): Promise<ChatConversation> {
+    const history = await this.readHistory();
+    const conversation = history.conversations.find((candidate) => candidate.id === id);
+
+    if (conversation === undefined) {
+      throw new Error("Mauz could not find that chat.");
+    }
+
+    const now = new Date().toISOString();
+
+    conversation.messages.push(
+      {
+        id: randomUUID(),
+        role: "user",
+        content: input.question,
+        createdAt: now
+      },
+      {
+        id: randomUUID(),
+        role: "assistant",
+        content: input.answer,
+        createdAt: now
+      }
+    );
+    conversation.updatedAt = now;
+    await this.writeHistory(history);
+
+    return conversation;
+  }
+
   async list(): Promise<ChatHistoryListResponse> {
     const history = await this.readHistory();
     const groups = new Map<string, ChatHistoryGroup>();

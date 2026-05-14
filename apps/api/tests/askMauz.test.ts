@@ -97,4 +97,29 @@ describe("Ask Mauz prompt payload", () => {
     expect(contextText).toContain("Selected text: TypeError: Cannot read properties of undefined");
     expect(contextText.indexOf("Selected text:")).toBeLessThan(contextText.indexOf("Pointer context:"));
   });
+
+  it("includes previous messages when continuing a saved chat", () => {
+    const contextText = buildContextText({
+      ...requestWithPointerContext,
+      question: "What should I do next?",
+      conversationMessages: [
+        {
+          id: "message-1",
+          role: "user",
+          content: "What is this warning?",
+          createdAt: "2026-05-14T12:00:00.000Z"
+        },
+        {
+          id: "message-2",
+          role: "assistant",
+          content: "It is a permissions warning.",
+          createdAt: "2026-05-14T12:00:01.000Z"
+        }
+      ]
+    });
+
+    expect(contextText).toContain("Previous conversation:");
+    expect(contextText).toContain("User: What is this warning?");
+    expect(contextText).toContain("Mauz: It is a permissions warning.");
+  });
 });

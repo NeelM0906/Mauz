@@ -9,8 +9,8 @@ export const MAUZ_ASK_PANEL_SIZE = {
 } as const;
 
 export const MAUZ_SETTINGS_PANEL_SIZE = {
-  width: 360,
-  height: 330
+  width: 440,
+  height: 620
 } as const;
 
 export const MAUZ_HISTORY_PANEL_SIZE = {
@@ -36,6 +36,7 @@ export const IPC_CHANNELS = {
   askSubmit: "mauz:ask:submit",
   chatHistoryList: "mauz:chat-history:list",
   chatHistoryGet: "mauz:chat-history:get",
+  chatHistoryContinue: "mauz:chat-history:continue",
   realtimeCreateSession: "mauz:realtime:create-session",
   realtimeConnect: "mauz:realtime:connect",
   realtimeCaptureFrame: "mauz:realtime:capture-frame",

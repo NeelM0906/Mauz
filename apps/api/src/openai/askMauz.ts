@@ -109,7 +109,9 @@ export function shouldIncludeFullScreenshot(): boolean {
   return process.env.OPENAI_INCLUDE_FULL_SCREENSHOT === "true";
 }
 
-export function buildContextText({ question, context }: AskMauzRequest): string {
+export function buildContextText(request: AskMauzRequest): string {
+  const { question, context } = request;
+
   return [
     `User question: ${question}`,
     "",
@@ -124,8 +126,22 @@ export function buildContextText({ question, context }: AskMauzRequest): string 
     `- Pointer context: ${formatPointerContext(context)}`,
     `- Active app: ${formatActiveApp(context)}`,
     `- Active window: ${formatActiveWindow(context)}`,
-    `- Screenshot: ${formatScreenshot(context)}`
+    `- Screenshot: ${formatScreenshot(context)}`,
+    "",
+    "Previous conversation:",
+    formatConversationMessages(request.conversationMessages)
   ].join("\n");
+}
+
+function formatConversationMessages(messages: AskMauzRequest["conversationMessages"]): string {
+  if (messages === undefined || messages.length === 0) {
+    return "none";
+  }
+
+  return messages
+    .slice(-12)
+    .map((message) => `${message.role === "user" ? "User" : "Mauz"}: ${message.content}`)
+    .join("\n\n");
 }
 
 function toDataUrl(image: ScreenshotPayload): string {
