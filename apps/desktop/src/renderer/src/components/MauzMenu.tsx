@@ -1,4 +1,4 @@
-import { MessageCircleQuestion, Mic, MonitorUp, X } from "lucide-react";
+import { MessageCircleQuestion, Mic, MonitorUp, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -12,8 +12,20 @@ const actionCopy: Record<MenuAction, string> = {
 };
 
 export function MauzMenu(): React.JSX.Element {
-  const { status, setCurrentContext, setMode, setStatus } = useMauzStore();
+  const { status, setCurrentContext, setMode, setSettings, setStatus } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<MenuAction | null>(null);
+
+  const handleSettings = async (): Promise<void> => {
+    setStatus(null);
+
+    try {
+      const settings = await mauzClient.openSettings();
+      setSettings(settings);
+      setMode("settings");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Mauz settings failed.");
+    }
+  };
 
   const handleAction = async (action: MenuAction): Promise<void> => {
     setPendingAction(action);
@@ -48,14 +60,24 @@ export function MauzMenu(): React.JSX.Element {
           <h1>MauzAI</h1>
           <p>Desktop help, on demand.</p>
         </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauzClient.close()}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
+        <div className="mauz-header-actions">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Open Mauz settings"
+            onClick={() => void handleSettings()}
+          >
+            <Settings aria-hidden="true" size={15} />
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close Mauz"
+            onClick={() => void mauzClient.close()}
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
       </header>
 
       <div className="mauz-actions">

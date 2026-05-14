@@ -4,10 +4,12 @@ import type {
   AskMauzResponse,
   MauzBridge,
   MauzDesktopContext,
+  MauzSettings,
+  MauzSettingsUpdate,
   PermissionError,
   RealtimeSessionResponse
 } from "@mauzai/shared";
-import { IPC_CHANNELS, PermissionErrorSchema } from "@mauzai/shared";
+import { IPC_CHANNELS, MauzSettingsSchema, PermissionErrorSchema } from "@mauzai/shared";
 
 const mauzApi: MauzBridge = {
   menu: {
@@ -25,6 +27,14 @@ const mauzApi: MauzBridge = {
   realtime: {
     createSession: () =>
       ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>
+  },
+  settings: {
+    open: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpen) as Promise<MauzSettings>,
+    update: (payload: MauzSettingsUpdate) =>
+      ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, payload).then((settings: unknown) => {
+        const parsed = MauzSettingsSchema.parse(settings);
+        return parsed;
+      })
   },
   events: {
     onActivation: (callback) => {

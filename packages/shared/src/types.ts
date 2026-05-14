@@ -99,6 +99,16 @@ export type PermissionError = {
   message: string;
 };
 
+export type ShakeSensitivity = "relaxed" | "normal" | "strict";
+
+export type MauzSettings = {
+  nativeShakeEnabled: boolean;
+  devHotkeyEnabled: boolean;
+  shakeSensitivity: ShakeSensitivity;
+};
+
+export type MauzSettingsUpdate = Partial<MauzSettings>;
+
 export type MouseMoveSample = {
   x: number;
   y: number;
@@ -119,6 +129,10 @@ export type MauzBridge = {
   };
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;
+  };
+  settings: {
+    open(): Promise<MauzSettings>;
+    update(payload: MauzSettingsUpdate): Promise<MauzSettings>;
   };
   events: {
     onActivation(callback: () => void): () => void;

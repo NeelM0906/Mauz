@@ -26,6 +26,16 @@ export const PermissionErrorSchema = z.object({
   message: z.string()
 });
 
+export const ShakeSensitivitySchema = z.enum(["relaxed", "normal", "strict"]);
+
+export const MauzSettingsSchema = z.object({
+  nativeShakeEnabled: z.boolean(),
+  devHotkeyEnabled: z.boolean(),
+  shakeSensitivity: ShakeSensitivitySchema
+});
+
+export const MauzSettingsUpdateSchema = MauzSettingsSchema.partial();
+
 export const MouseMoveSampleSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),

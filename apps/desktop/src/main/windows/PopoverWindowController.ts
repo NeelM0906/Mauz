@@ -1,6 +1,6 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "node:path";
-import { IPC_CHANNELS, MAUZ_ASK_PANEL_SIZE, MAUZ_POPUP_SIZE } from "@mauzai/shared";
+import { IPC_CHANNELS, MAUZ_ASK_PANEL_SIZE, MAUZ_POPUP_SIZE, MAUZ_SETTINGS_PANEL_SIZE } from "@mauzai/shared";
 import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosition";
 
 type PopoverWindowControllerOptions = {
@@ -116,6 +116,11 @@ export class PopoverWindowController {
 
   resizeForAsk(): void {
     this.setSize(MAUZ_ASK_PANEL_SIZE);
+    this.repositionAtLastAnchor();
+  }
+
+  resizeForSettings(): void {
+    this.setSize(MAUZ_SETTINGS_PANEL_SIZE);
     this.repositionAtLastAnchor();
   }
 

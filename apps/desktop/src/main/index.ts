@@ -2,19 +2,23 @@ import { app, dialog } from "electron";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_MAUZ_API_PORT, readBooleanEnv } from "@mauzai/shared";
+import { DEFAULT_MAUZ_API_PORT, type MauzSettings, type MauzSettingsUpdate } from "@mauzai/shared";
 import { ContextCollector } from "./context/ContextCollector";
 import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
 import type { InputProvider } from "./input/InputProvider";
 import { MacInputAgentProvider } from "./input/MacInputAgentProvider";
+import { getShakeDetectorConfigForSensitivity, ShakeDetector } from "./input/ShakeDetector";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers";
 import { launchLocalApi, type LocalApiHandle } from "./server/launchLocalApi";
+import { SettingsService } from "./settings/SettingsService";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let popover: PopoverWindowController | null = null;
 let apiHandle: LocalApiHandle | null = null;
+let contextCollector: ContextCollector | null = null;
+let settingsService: SettingsService | null = null;
 let inputProviders: InputProvider[] = [];
 let bootstrapPromise: Promise<void> | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -52,15 +56,57 @@ async function bootstrap(): Promise<void> {
   }
 
   apiHandle = launchedApi;
-  const contextCollector = new ContextCollector({
+  settingsService = new SettingsService();
+  const initialSettings = await settingsService.get();
+  contextCollector = new ContextCollector({
     captureHider: popover
   });
-  registerIpcHandlers({ popover, contextCollector, api: apiHandle, localApiToken });
-  inputProviders = createInputProviders();
+  registerIpcHandlers({
+    popover,
+    contextCollector,
+    api: apiHandle,
+    localApiToken,
+    getSettings: () => settingsService!.get(),
+    updateSettings: applySettingsUpdate
+  });
+  startInputProviders(initialSettings);
+}
+
+async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSettings> {
+  if (settingsService === null) {
+    throw new Error("Mauz settings are not available yet.");
+  }
+
+  const settings = await settingsService.update(update);
+  restartInputProviders(settings);
+
+  return settings;
+}
+
+function createInputProviders(settings: MauzSettings): InputProvider[] {
+  const providers: InputProvider[] = [];
+
+  if (settings.devHotkeyEnabled) {
+    providers.push(new DevHotkeyInputProvider());
+  }
+
+  if (process.platform === "darwin" && settings.nativeShakeEnabled) {
+    providers.push(
+      new MacInputAgentProvider({
+        detector: new ShakeDetector(getShakeDetectorConfigForSensitivity(settings.shakeSensitivity))
+      })
+    );
+  }
+
+  return providers;
+}
+
+function startInputProviders(settings: MauzSettings): void {
+  inputProviders = createInputProviders(settings);
 
   for (const provider of inputProviders) {
     provider.onActivation((event) => {
-      void popover?.showAt(event.cursor);
+      void handleActivation(event.cursor);
     });
     provider.onPermissionError((error) => {
       popover?.hide();
@@ -70,18 +116,23 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-function createInputProviders(): InputProvider[] {
-  const providers: InputProvider[] = [];
+function restartInputProviders(settings: MauzSettings): void {
+  const providers = inputProviders;
+  inputProviders = [];
 
-  if (readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true)) {
-    providers.push(new DevHotkeyInputProvider());
+  for (const provider of providers) {
+    provider.stop();
   }
 
-  if (process.platform === "darwin" && readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, false)) {
-    providers.push(new MacInputAgentProvider());
-  }
+  startInputProviders(settings);
+}
 
-  return providers;
+async function handleActivation(cursor: { x: number; y: number }): Promise<void> {
+  try {
+    await contextCollector?.prepareForActivation();
+  } finally {
+    await popover?.showAt(cursor);
+  }
 }
 
 function startBootstrap(): void {
@@ -133,6 +184,8 @@ async function shutdownResources(): Promise<void> {
 
   const currentPopover = popover;
   popover = null;
+  contextCollector = null;
+  settingsService = null;
 
   try {
     currentPopover?.destroy();

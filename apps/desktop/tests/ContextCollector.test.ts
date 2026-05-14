@@ -10,6 +10,8 @@ vi.mock("electron", () => ({
 }));
 
 import { ContextCollector } from "../src/main/context/ContextCollector";
+import type { ActiveWindowService } from "../src/main/context/ActiveWindowService";
+import type { SelectedTextService } from "../src/main/context/SelectedTextService";
 import { ScreenshotCaptureError, type ScreenshotService } from "../src/main/context/ScreenshotService";
 
 const pointerContext: PointerContext = {
@@ -62,6 +64,8 @@ describe("ContextCollector", () => {
     };
     const collector = new ContextCollector({
       screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService(),
       captureHider
     });
 
@@ -85,7 +89,9 @@ describe("ContextCollector", () => {
       })
     } as unknown as ScreenshotService;
     const collector = new ContextCollector({
-      screenshotService
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService()
     });
 
     const context = await collector.collectForAsk();
@@ -97,4 +103,78 @@ describe("ContextCollector", () => {
       message: "Mauz needs Screen Recording permission to capture screenshot context."
     });
   });
+
+  it("keeps Ask working when active app metadata capture fails", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: {
+        capture: vi.fn(async () => {
+          throw new Error("Accessibility unavailable");
+        })
+      } as unknown as ActiveWindowService,
+      selectedTextService: createSelectedTextService()
+    });
+
+    const context = await collector.collectForAsk();
+
+    expect(context.activeApp).toBeUndefined();
+    expect(context.activeWindow).toBeUndefined();
+    expect(context.pointer).toEqual(pointerContext);
+  });
+
+  it("includes selected text in desktop and pointer context when available", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const activeWindowService = createActiveWindowService({
+      activeApp: {
+        name: "Code",
+        bundleId: "com.microsoft.VSCode",
+        processId: 4242
+      },
+      activeWindow: {
+        title: "MauzAI",
+        bounds: {
+          x: 10,
+          y: 20,
+          width: 900,
+          height: 700
+        }
+      }
+    });
+    const selectedTextService = {
+      capture: vi.fn(async () => "selected error text")
+    } as unknown as SelectedTextService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService,
+      selectedTextService
+    });
+
+    const context = await collector.collectForAsk();
+
+    expect(selectedTextService.capture).toHaveBeenCalledWith({
+      processId: 4242
+    });
+    expect(context.selectedText).toBe("selected error text");
+    expect(context.pointer?.selectedText).toBe("selected error text");
+    expect(context.pointer?.activeWindow?.title).toBe("MauzAI");
+  });
 });
+
+function createActiveWindowService(
+  metadata: Awaited<ReturnType<ActiveWindowService["capture"]>> = {}
+): ActiveWindowService {
+  return {
+    capture: vi.fn(async () => metadata)
+  } as unknown as ActiveWindowService;
+}
+
+function createSelectedTextService(selectedText?: string): SelectedTextService {
+  return {
+    capture: vi.fn(async () => selectedText)
+  } as unknown as SelectedTextService;
+}

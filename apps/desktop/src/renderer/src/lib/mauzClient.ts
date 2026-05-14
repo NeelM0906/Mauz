@@ -4,6 +4,8 @@ import type {
   MauzDesktopContext,
   MauzBridge,
   Platform,
+  MauzSettings,
+  MauzSettingsUpdate,
   PermissionError,
   RealtimeSessionResponse
 } from "@mauzai/shared";
@@ -33,6 +35,18 @@ const browserPreviewBridge: MauzBridge = {
     createSession: async () => {
       throw new Error("Realtime API is not implemented in this milestone.");
     }
+  },
+  settings: {
+    open: async () => ({
+      nativeShakeEnabled: false,
+      devHotkeyEnabled: true,
+      shakeSensitivity: "normal"
+    }),
+    update: async (payload: MauzSettingsUpdate) => ({
+      nativeShakeEnabled: payload.nativeShakeEnabled ?? false,
+      devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
+      shakeSensitivity: payload.shakeSensitivity ?? "normal"
+    })
   },
   events: {
     onActivation: () => () => {},
@@ -90,6 +104,12 @@ export const mauzClient = {
   },
   createRealtimeSession(): Promise<RealtimeSessionResponse> {
     return getBridge().realtime.createSession();
+  },
+  openSettings(): Promise<MauzSettings> {
+    return getBridge().settings.open();
+  },
+  updateSettings(payload: MauzSettingsUpdate): Promise<MauzSettings> {
+    return getBridge().settings.update(payload);
   },
   onActivation(callback: () => void): () => void {
     return getBridge().events.onActivation(callback);

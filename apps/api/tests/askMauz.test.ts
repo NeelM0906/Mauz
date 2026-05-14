@@ -64,4 +64,20 @@ describe("Ask Mauz prompt payload", () => {
       "resolve the reference in this order: selected text, cursor-centered crop, active window metadata, full screenshot, cursor position"
     );
   });
+
+  it("puts selected text ahead of cursor crop in the text context", () => {
+    const contextText = buildContextText({
+      ...requestWithPointerContext,
+      context: {
+        ...requestWithPointerContext.context,
+        selectedText: "TypeError: Cannot read properties of undefined"
+      }
+    });
+
+    expect(contextText).toContain(
+      "Reference resolution priority: selected text > cursor-centered crop > active window metadata > full screenshot > cursor position."
+    );
+    expect(contextText).toContain("Selected text: TypeError: Cannot read properties of undefined");
+    expect(contextText.indexOf("Selected text:")).toBeLessThan(contextText.indexOf("Pointer context:"));
+  });
 });

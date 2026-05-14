@@ -1,4 +1,13 @@
-import { ArrowLeft, Camera, LoaderCircle, MousePointer2, Send, TextCursorInput, X } from "lucide-react";
+import {
+  AppWindow,
+  ArrowLeft,
+  Camera,
+  LoaderCircle,
+  MousePointer2,
+  Send,
+  TextCursorInput,
+  X
+} from "lucide-react";
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -93,6 +102,12 @@ export function AskPanel(): React.JSX.Element {
         <span>
           <TextCursorInput aria-hidden="true" size={14} />
           {currentContext?.selectedText?.trim() ? "Selected text found" : "No selected text"}
+        </span>
+        <span>
+          <AppWindow aria-hidden="true" size={14} />
+          {currentContext?.activeWindow !== undefined || currentContext?.activeApp !== undefined
+            ? "Window detected"
+            : "No window"}
         </span>
       </div>
 

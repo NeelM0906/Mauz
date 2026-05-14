@@ -1,4 +1,4 @@
-import type { MouseMoveSample } from "@mauzai/shared";
+import type { MouseMoveSample, ShakeSensitivity } from "@mauzai/shared";
 
 export type ShakeDetectorConfig = {
   windowMs: number;
@@ -24,6 +24,31 @@ export const DEFAULT_SHAKE_CONFIG: ShakeDetectorConfig = {
   cooldownMs: 2500,
   maxHorizontalToVerticalRatio: 1.25
 };
+
+export const SHAKE_SENSITIVITY_PRESETS = {
+  relaxed: {
+    minReversals: 4,
+    minAmplitudePx: 70,
+    minVerticalTravelPx: 320
+  },
+  normal: {
+    minReversals: 5,
+    minAmplitudePx: 90,
+    minVerticalTravelPx: 420
+  },
+  strict: {
+    minReversals: 6,
+    minAmplitudePx: 120,
+    minVerticalTravelPx: 520
+  }
+} as const satisfies Record<ShakeSensitivity, Partial<ShakeDetectorConfig>>;
+
+export function getShakeDetectorConfigForSensitivity(sensitivity: ShakeSensitivity): ShakeDetectorConfig {
+  return {
+    ...DEFAULT_SHAKE_CONFIG,
+    ...SHAKE_SENSITIVITY_PRESETS[sensitivity]
+  };
+}
 
 export class ShakeDetector {
   private readonly config: ShakeDetectorConfig;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MouseMoveSample } from "@mauzai/shared";
-import { ShakeDetector } from "../src/main/input/ShakeDetector";
+import { getShakeDetectorConfigForSensitivity, ShakeDetector } from "../src/main/input/ShakeDetector";
 
 function feed(detector: ShakeDetector, samples: MouseMoveSample[]): boolean {
   let activated = false;
@@ -80,5 +80,23 @@ describe("ShakeDetector", () => {
     const detector = new ShakeDetector();
 
     expect(feed(detector, verticalShake(1_000, { xDrift: 240 }))).toBe(false);
+  });
+
+  it("maps sensitivity presets to detector config thresholds", () => {
+    expect(getShakeDetectorConfigForSensitivity("relaxed")).toMatchObject({
+      minReversals: 4,
+      minAmplitudePx: 70,
+      minVerticalTravelPx: 320
+    });
+    expect(getShakeDetectorConfigForSensitivity("normal")).toMatchObject({
+      minReversals: 5,
+      minAmplitudePx: 90,
+      minVerticalTravelPx: 420
+    });
+    expect(getShakeDetectorConfigForSensitivity("strict")).toMatchObject({
+      minReversals: 6,
+      minAmplitudePx: 120,
+      minVerticalTravelPx: 520
+    });
   });
 });

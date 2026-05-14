@@ -102,10 +102,10 @@ export function buildContextText({ question, context }: AskMauzRequest): string 
     `- Timestamp: ${context.timestamp}`,
     `- Platform: ${context.platform}`,
     `- Cursor: (${Math.round(context.cursor.x)}, ${Math.round(context.cursor.y)})`,
+    `- Selected text: ${formatSelectedText(context)}`,
     `- Pointer context: ${formatPointerContext(context)}`,
     `- Active app: ${formatActiveApp(context)}`,
     `- Active window: ${formatActiveWindow(context)}`,
-    `- Selected text: ${context.selectedText?.trim() ? context.selectedText : "none provided"}`,
     `- Screenshot: ${formatScreenshot(context)}`
   ].join("\n");
 }
@@ -115,31 +115,41 @@ function toDataUrl(image: ScreenshotPayload): string {
 }
 
 function formatActiveApp(context: MauzDesktopContext): string {
-  if (context.activeApp === undefined) {
+  const activeApp = context.activeApp ?? context.pointer?.activeApp;
+
+  if (activeApp === undefined) {
     return "unknown";
   }
 
   return [
-    context.activeApp.name,
-    context.activeApp.bundleId === undefined ? undefined : `bundle ${context.activeApp.bundleId}`,
-    context.activeApp.processId === undefined ? undefined : `pid ${context.activeApp.processId}`
+    activeApp.name,
+    activeApp.bundleId === undefined ? undefined : `bundle ${activeApp.bundleId}`,
+    activeApp.processId === undefined ? undefined : `pid ${activeApp.processId}`
   ]
     .filter(Boolean)
     .join(", ");
 }
 
 function formatActiveWindow(context: MauzDesktopContext): string {
-  if (context.activeWindow === undefined) {
+  const activeWindow = context.activeWindow ?? context.pointer?.activeWindow;
+
+  if (activeWindow === undefined) {
     return "unknown";
   }
 
-  const bounds = context.activeWindow.bounds;
+  const bounds = activeWindow.bounds;
   const boundsText =
     bounds === undefined
       ? undefined
       : `${Math.round(bounds.width)}x${Math.round(bounds.height)} at ${Math.round(bounds.x)},${Math.round(bounds.y)}`;
 
-  return [context.activeWindow.title, boundsText].filter(Boolean).join(", ") || "unknown";
+  return [activeWindow.title, boundsText].filter(Boolean).join(", ") || "unknown";
+}
+
+function formatSelectedText(context: MauzDesktopContext): string {
+  const selectedText = context.selectedText ?? context.pointer?.selectedText;
+
+  return selectedText?.trim() ? selectedText : "none provided";
 }
 
 function formatScreenshot(context: MauzDesktopContext): string {

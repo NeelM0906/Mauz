@@ -8,6 +8,11 @@ export const MAUZ_ASK_PANEL_SIZE = {
   height: 520
 } as const;
 
+export const MAUZ_SETTINGS_PANEL_SIZE = {
+  width: 360,
+  height: 330
+} as const;
+
 export const LOCAL_API_TOKEN_HEADER = "x-mauz-local-token";
 
 export const IPC_CHANNELS = {
@@ -16,6 +21,8 @@ export const IPC_CHANNELS = {
   menuStartAsk: "mauz:menu:start-ask",
   menuStartTalk: "mauz:menu:start-talk",
   menuStartScreenShare: "mauz:menu:start-screen-share",
+  settingsOpen: "mauz:settings:open",
+  settingsUpdate: "mauz:settings:update",
   askSubmit: "mauz:ask:submit",
   realtimeCreateSession: "mauz:realtime:create-session",
   activation: "mauz:events:activation",

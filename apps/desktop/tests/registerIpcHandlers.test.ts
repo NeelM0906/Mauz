@@ -21,6 +21,8 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
   IPC_CHANNELS.menuStartScreenShare,
+  IPC_CHANNELS.settingsOpen,
+  IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.realtimeCreateSession
 ] as const;
@@ -94,7 +96,8 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   const popover = {
     hide: vi.fn(),
     resizeForAsk: vi.fn(),
-    resizeForMenu: vi.fn()
+    resizeForMenu: vi.fn(),
+    resizeForSettings: vi.fn()
   } as unknown as PopoverWindowController;
   const contextCollector = {
     collectBasicContext: vi.fn(),
@@ -109,6 +112,16 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     popover,
     contextCollector,
     api,
-    localApiToken: "test-token"
+    localApiToken: "test-token",
+    getSettings: vi.fn(async () => ({
+      nativeShakeEnabled: false,
+      devHotkeyEnabled: true,
+      shakeSensitivity: "normal" as const
+    })),
+    updateSettings: vi.fn(async (update) => ({
+      nativeShakeEnabled: update.nativeShakeEnabled ?? false,
+      devHotkeyEnabled: update.devHotkeyEnabled ?? true,
+      shakeSensitivity: update.shakeSensitivity ?? ("normal" as const)
+    }))
   };
 }
