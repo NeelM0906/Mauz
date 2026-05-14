@@ -14,6 +14,7 @@ type WindowWithOptionalBridge = Window & {
 
 const browserPreviewBridge: MauzBridge = {
   menu: {
+    showMenu: async () => {},
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
     startTalk: async () => collectPreviewContext(),
@@ -21,7 +22,11 @@ const browserPreviewBridge: MauzBridge = {
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
-      throw new Error("Ask Mauz API is not implemented in this milestone.");
+      return {
+        answer:
+          "Browser preview is connected. Run the Electron app to ask Mauz with live screenshot context.",
+        model: "preview"
+      };
     }
   },
   realtime: {
@@ -65,6 +70,9 @@ function getPreviewPlatform(): Platform {
 }
 
 export const mauzClient = {
+  showMenu(): Promise<void> {
+    return getBridge().menu.showMenu();
+  },
   close(): Promise<void> {
     return getBridge().menu.close();
   },

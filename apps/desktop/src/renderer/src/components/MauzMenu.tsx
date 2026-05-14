@@ -12,7 +12,7 @@ const actionCopy: Record<MenuAction, string> = {
 };
 
 export function MauzMenu(): React.JSX.Element {
-  const { status, setMode, setStatus } = useMauzStore();
+  const { status, setCurrentContext, setMode, setStatus } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<MenuAction | null>(null);
 
   const handleAction = async (action: MenuAction): Promise<void> => {
@@ -21,17 +21,16 @@ export function MauzMenu(): React.JSX.Element {
 
     try {
       if (action === "ask") {
-        await mauzClient.startAsk();
+        const context = await mauzClient.startAsk();
+        setCurrentContext(context);
         setMode("ask");
       } else if (action === "talk") {
         await mauzClient.startTalk();
-        setMode("talk");
+        setStatus("Talk to Mauz lands in the Realtime milestone.");
       } else {
         await mauzClient.startScreenShare();
-        setMode("screen");
+        setStatus("Screen sharing lands after Ask Mauz.");
       }
-
-      setStatus(`${actionCopy[action]} is ready for the next milestone.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {
@@ -49,21 +48,41 @@ export function MauzMenu(): React.JSX.Element {
           <h1>MauzAI</h1>
           <p>Desktop help, on demand.</p>
         </div>
-        <button className="icon-button" type="button" aria-label="Close Mauz" onClick={() => void mauzClient.close()}>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Close Mauz"
+          onClick={() => void mauzClient.close()}
+        >
           <X aria-hidden="true" size={16} />
         </button>
       </header>
 
       <div className="mauz-actions">
-        <button type="button" className="mauz-action" onClick={() => void handleAction("ask")} disabled={pendingAction !== null}>
+        <button
+          type="button"
+          className="mauz-action"
+          onClick={() => void handleAction("ask")}
+          disabled={pendingAction !== null}
+        >
           <MessageCircleQuestion aria-hidden="true" size={18} />
-          <span>Ask Mauz</span>
+          <span>{pendingAction === "ask" ? "Capturing screen..." : "Ask Mauz"}</span>
         </button>
-        <button type="button" className="mauz-action" onClick={() => void handleAction("talk")} disabled={pendingAction !== null}>
+        <button
+          type="button"
+          className="mauz-action"
+          onClick={() => void handleAction("talk")}
+          disabled={pendingAction !== null}
+        >
           <Mic aria-hidden="true" size={18} />
           <span>Talk to Mauz</span>
         </button>
-        <button type="button" className="mauz-action" onClick={() => void handleAction("screen")} disabled={pendingAction !== null}>
+        <button
+          type="button"
+          className="mauz-action"
+          onClick={() => void handleAction("screen")}
+          disabled={pendingAction !== null}
+        >
           <MonitorUp aria-hidden="true" size={18} />
           <span>Show Mauz my screen</span>
         </button>

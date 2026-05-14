@@ -18,6 +18,8 @@
     "exactOptionalPropertyTypes": true,
     "baseUrl": ".",
     "paths": {
+      "@mauzai/api": ["apps/api/src/index.ts"],
+      "@mauzai/api/*": ["apps/api/src/*"],
       "@mauzai/shared": ["packages/shared/src/index.ts"],
       "@mauzai/shared/*": ["packages/shared/src/*"],
       "@renderer/*": ["apps/desktop/src/renderer/src/*"]

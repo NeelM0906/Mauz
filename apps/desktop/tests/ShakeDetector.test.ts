@@ -12,7 +12,10 @@ function feed(detector: ShakeDetector, samples: MouseMoveSample[]): boolean {
   return activated;
 }
 
-function verticalShake(startTs = 1_000, options: { buttons?: number; xDrift?: number } = {}): MouseMoveSample[] {
+function verticalShake(
+  startTs = 1_000,
+  options: { buttons?: number; xDrift?: number } = {}
+): MouseMoveSample[] {
   const yValues = [100, 225, 95, 222, 90, 218, 85];
   const xDrift = options.xDrift ?? 24;
 

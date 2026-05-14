@@ -20,7 +20,6 @@ async function bootstrap(): Promise<void> {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const preloadPath = join(__dirname, "../preload/index.mjs");
   const rendererFile = join(__dirname, "../renderer/index.html");
-  const contextCollector = new ContextCollector();
 
   popover = new PopoverWindowController({
     preloadPath,
@@ -29,9 +28,11 @@ async function bootstrap(): Promise<void> {
   });
 
   await popover.create();
-  registerIpcHandlers({ popover, contextCollector });
-
   apiHandle = await launchLocalApi();
+  const contextCollector = new ContextCollector({
+    captureHider: popover
+  });
+  registerIpcHandlers({ popover, contextCollector, api: apiHandle });
   inputProviders = createInputProviders();
 
   for (const provider of inputProviders) {

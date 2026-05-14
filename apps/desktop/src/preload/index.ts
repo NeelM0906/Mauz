@@ -11,16 +11,20 @@ import { IPC_CHANNELS, PermissionErrorSchema } from "@mauzai/shared";
 
 const mauzApi: MauzBridge = {
   menu: {
+    showMenu: () => ipcRenderer.invoke(IPC_CHANNELS.menuShowMenu) as Promise<void>,
     close: () => ipcRenderer.invoke(IPC_CHANNELS.menuClose) as Promise<void>,
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
     startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
-    startScreenShare: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartScreenShare) as Promise<MauzDesktopContext>
+    startScreenShare: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.menuStartScreenShare) as Promise<MauzDesktopContext>
   },
   ask: {
-    submit: (payload: AskMauzRequest) => ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>
+    submit: (payload: AskMauzRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>
   },
   realtime: {
-    createSession: () => ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>
+    createSession: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>
   },
   events: {
     onActivation: (callback) => {

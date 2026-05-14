@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mauzai/api": "workspace:*",
     "@mauzai/shared": "workspace:*",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",

@@ -3,7 +3,13 @@ export const MAUZ_POPUP_SIZE = {
   height: 180
 } as const;
 
+export const MAUZ_ASK_PANEL_SIZE = {
+  width: 420,
+  height: 520
+} as const;
+
 export const IPC_CHANNELS = {
+  menuShowMenu: "mauz:menu:show-menu",
   menuClose: "mauz:menu:close",
   menuStartAsk: "mauz:menu:start-ask",
   menuStartTalk: "mauz:menu:start-talk",

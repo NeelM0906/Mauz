@@ -1,6 +1,6 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "node:path";
-import { IPC_CHANNELS, MAUZ_POPUP_SIZE } from "@mauzai/shared";
+import { IPC_CHANNELS, MAUZ_ASK_PANEL_SIZE, MAUZ_POPUP_SIZE } from "@mauzai/shared";
 
 type Point = {
   x: number;
@@ -13,12 +13,19 @@ type PopoverWindowControllerOptions = {
   rendererFile: string;
 };
 
+type ShowOptions = {
+  notifyActivation?: boolean;
+  preserveSize?: boolean;
+};
+
 const SCREEN_MARGIN = 8;
 const CURSOR_OFFSET = 12;
+const SCREENSHOT_HIDE_DELAY_MS = 120;
 
 export class PopoverWindowController {
   private window: BrowserWindow | null = null;
   private readonly options: PopoverWindowControllerOptions;
+  private lastAnchorPoint: Point | null = null;
 
   constructor(options: PopoverWindowControllerOptions) {
     this.options = options;
@@ -74,21 +81,64 @@ export class PopoverWindowController {
     }
   }
 
-  async showAt(point: Point): Promise<void> {
+  async showAt(point: Point, options: ShowOptions = {}): Promise<void> {
     await this.create();
 
     const win = this.requireWindow();
+    this.lastAnchorPoint = point;
+
+    if (options.preserveSize !== true) {
+      this.resizeForMenu();
+    }
+
     const position = this.getClampedPosition(point);
 
     win.setPosition(position.x, position.y, false);
     win.show();
     win.focus();
-    win.webContents.send(IPC_CHANNELS.activation);
+
+    if (options.notifyActivation ?? true) {
+      win.webContents.send(IPC_CHANNELS.activation);
+    }
+  }
+
+  async showAtLastAnchor(options: ShowOptions = {}): Promise<void> {
+    await this.showAt(this.lastAnchorPoint ?? screen.getCursorScreenPoint(), options);
+  }
+
+  resizeForMenu(): void {
+    this.setSize(MAUZ_POPUP_SIZE);
+  }
+
+  resizeForAsk(): void {
+    this.setSize(MAUZ_ASK_PANEL_SIZE);
   }
 
   hide(): void {
     if (this.window?.isDestroyed() === false && this.window.isVisible()) {
       this.window.hide();
+    }
+  }
+
+  async hideDuringCapture<T>(operation: () => Promise<T>): Promise<T> {
+    const win = this.requireWindow();
+    const wasVisible = win.isVisible();
+    const anchorPoint = this.lastAnchorPoint ?? screen.getCursorScreenPoint();
+
+    if (wasVisible) {
+      win.hide();
+      await delay(SCREENSHOT_HIDE_DELAY_MS);
+    }
+
+    try {
+      return await operation();
+    } finally {
+      if (wasVisible) {
+        await this.showAt(anchorPoint, {
+          notifyActivation: false,
+          preserveSize: true
+        });
+      }
     }
   }
 
@@ -103,16 +153,26 @@ export class PopoverWindowController {
   private getClampedPosition(point: Point): Point {
     const display = screen.getDisplayNearestPoint(point);
     const workArea = display.workArea;
-    const proposedX = point.x + CURSOR_OFFSET + MAUZ_POPUP_SIZE.width > workArea.x + workArea.width
-      ? point.x - CURSOR_OFFSET - MAUZ_POPUP_SIZE.width
-      : point.x + CURSOR_OFFSET;
-    const proposedY = point.y + CURSOR_OFFSET + MAUZ_POPUP_SIZE.height > workArea.y + workArea.height
-      ? point.y - CURSOR_OFFSET - MAUZ_POPUP_SIZE.height
-      : point.y + CURSOR_OFFSET;
+    const proposedX =
+      point.x + CURSOR_OFFSET + MAUZ_POPUP_SIZE.width > workArea.x + workArea.width
+        ? point.x - CURSOR_OFFSET - MAUZ_POPUP_SIZE.width
+        : point.x + CURSOR_OFFSET;
+    const proposedY =
+      point.y + CURSOR_OFFSET + MAUZ_POPUP_SIZE.height > workArea.y + workArea.height
+        ? point.y - CURSOR_OFFSET - MAUZ_POPUP_SIZE.height
+        : point.y + CURSOR_OFFSET;
 
     return {
-      x: clamp(proposedX, workArea.x + SCREEN_MARGIN, workArea.x + workArea.width - MAUZ_POPUP_SIZE.width - SCREEN_MARGIN),
-      y: clamp(proposedY, workArea.y + SCREEN_MARGIN, workArea.y + workArea.height - MAUZ_POPUP_SIZE.height - SCREEN_MARGIN)
+      x: clamp(
+        proposedX,
+        workArea.x + SCREEN_MARGIN,
+        workArea.x + workArea.width - MAUZ_POPUP_SIZE.width - SCREEN_MARGIN
+      ),
+      y: clamp(
+        proposedY,
+        workArea.y + SCREEN_MARGIN,
+        workArea.y + workArea.height - MAUZ_POPUP_SIZE.height - SCREEN_MARGIN
+      )
     };
   }
 
@@ -123,6 +183,12 @@ export class PopoverWindowController {
 
     return this.window;
   }
+
+  private setSize(size: { width: number; height: number }): void {
+    if (this.window?.isDestroyed() === false) {
+      this.window.setSize(size.width, size.height, false);
+    }
+  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -131,4 +197,10 @@ function clamp(value: number, min: number, max: number): number {
   }
 
   return Math.min(Math.max(value, min), max);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

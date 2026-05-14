@@ -10,26 +10,32 @@ export type ScreenshotPayload = {
 export type MauzDesktopContext = {
   timestamp: string;
   platform: Platform;
-  activeApp?: {
-    name?: string;
-    bundleId?: string;
-    processId?: number;
-  };
-  activeWindow?: {
-    title?: string;
-    bounds?: {
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-    };
-  };
+  activeApp?:
+    | {
+        name?: string | undefined;
+        bundleId?: string | undefined;
+        processId?: number | undefined;
+      }
+    | undefined;
+  activeWindow?:
+    | {
+        title?: string | undefined;
+        bounds?:
+          | {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            }
+          | undefined;
+      }
+    | undefined;
   cursor: {
     x: number;
     y: number;
   };
-  selectedText?: string;
-  screenshot?: ScreenshotPayload;
+  selectedText?: string | undefined;
+  screenshot?: ScreenshotPayload | undefined;
 };
 
 export type AskMauzRequest = {
@@ -40,13 +46,13 @@ export type AskMauzRequest = {
 export type AskMauzResponse = {
   answer: string;
   model: string;
-  usage?: unknown;
+  usage?: unknown | undefined;
 };
 
 export type RealtimeSessionResponse = {
   value: string;
-  expires_at?: number;
-  session?: unknown;
+  expires_at?: number | undefined;
+  session?: unknown | undefined;
 };
 
 export type PermissionError = {
@@ -58,11 +64,12 @@ export type MouseMoveSample = {
   x: number;
   y: number;
   ts: number;
-  buttons?: number;
+  buttons?: number | undefined;
 };
 
 export type MauzBridge = {
   menu: {
+    showMenu(): Promise<void>;
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
