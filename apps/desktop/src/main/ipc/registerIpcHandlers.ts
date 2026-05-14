@@ -97,22 +97,24 @@ export function registerIpcHandlers({
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (_event, payload: unknown) => {
     const request = AskMauzRequestSchema.parse(payload);
     const response = await submitAskToLocalApi(api, localApiToken, request);
-    const title = await generateTitleSafely(api, localApiToken, {
-      question: request.question,
-      answer: response.answer
-    });
+    const fallbackTitle = buildFallbackChatTitle(request.question);
 
     try {
       const conversation = await chatHistory.saveAskConversation({
         question: request.question,
         answer: response.answer,
-        title
+        title: fallbackTitle
+      });
+
+      queueGeneratedTitleUpdate(api, localApiToken, chatHistory, conversation.id, {
+        question: request.question,
+        answer: response.answer
       });
 
       return {
         ...response,
         conversationId: conversation.id,
-        conversationTitle: conversation.title
+        conversationTitle: fallbackTitle
       };
     } catch {
       return response;
@@ -145,18 +147,20 @@ export function registerIpcHandlers({
   ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => contextCollector.collectRealtimeFrame());
 }
 
-async function generateTitleSafely(
+function queueGeneratedTitleUpdate(
   api: LocalApiHandle,
   localApiToken: string,
+  chatHistory: ChatHistoryService,
+  conversationId: string,
   payload: { question: string; answer: string }
-): Promise<string> {
-  try {
-    const response = await generateChatTitleFromLocalApi(api, localApiToken, payload);
-
-    return response.title;
-  } catch {
-    return buildFallbackChatTitle(payload.question);
-  }
+): void {
+  void generateChatTitleFromLocalApi(api, localApiToken, payload)
+    .then(async (response) => {
+      await chatHistory.updateTitle(conversationId, response.title);
+    })
+    .catch(() => {
+      // Title generation is deliberately off the answer path.
+    });
 }
 
 function buildFallbackChatTitle(question: string): string {

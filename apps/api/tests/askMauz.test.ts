@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
 import { buildContextText, buildResponseContent } from "../src/openai/askMauz";
 import { MAUZ_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
@@ -34,13 +34,30 @@ const requestWithPointerContext: AskMauzRequest = {
 };
 
 describe("Ask Mauz prompt payload", () => {
-  it("sends the cursor crop before the full screenshot", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("sends only the cursor crop by default for faster pointer asks", () => {
     const content = buildResponseContent(requestWithPointerContext);
 
-    expect(content).toHaveLength(3);
+    expect(content).toHaveLength(2);
     expect(content[0]).toMatchObject({
       type: "input_text"
     });
+    expect(content[1]).toMatchObject({
+      type: "input_image",
+      image_url: "data:image/jpeg;base64,cursor-crop-base64",
+      detail: "auto"
+    });
+  });
+
+  it("can send the cursor crop before the full screenshot when broad context is enabled", () => {
+    vi.stubEnv("OPENAI_INCLUDE_FULL_SCREENSHOT", "true");
+
+    const content = buildResponseContent(requestWithPointerContext);
+
+    expect(content).toHaveLength(3);
     expect(content[1]).toMatchObject({
       type: "input_image",
       image_url: "data:image/jpeg;base64,cursor-crop-base64",

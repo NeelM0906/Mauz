@@ -6,6 +6,7 @@ import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
 
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
 const DEFAULT_SCREENSHOT_DETAIL = "auto";
+const DEFAULT_ASK_MAX_OUTPUT_TOKENS = 700;
 
 export type AskMauzOptions = {
   apiKey?: string;
@@ -28,6 +29,7 @@ export async function askMauz(
   const response = await client.responses.create({
     model,
     store: false,
+    max_output_tokens: getAskMaxOutputTokens(),
     input: [
       {
         role: "system",
@@ -60,7 +62,10 @@ export function buildResponseContent(request: AskMauzRequest): ResponseInputMess
     }
   ];
   const cursorCrop = request.context.pointer?.cursorCrop;
-  const screenshot = request.context.pointer?.screenshot ?? request.context.screenshot;
+  const screenshot =
+    cursorCrop === undefined || shouldIncludeFullScreenshot()
+      ? (request.context.pointer?.screenshot ?? request.context.screenshot)
+      : undefined;
 
   if (cursorCrop !== undefined) {
     content.push({
@@ -89,6 +94,19 @@ function getScreenshotDetail(): "auto" | "low" | "high" {
   }
 
   return DEFAULT_SCREENSHOT_DETAIL;
+}
+
+function getAskMaxOutputTokens(): number {
+  const configured = Number.parseInt(
+    process.env.OPENAI_ASK_MAX_OUTPUT_TOKENS ?? String(DEFAULT_ASK_MAX_OUTPUT_TOKENS),
+    10
+  );
+
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_ASK_MAX_OUTPUT_TOKENS;
+}
+
+export function shouldIncludeFullScreenshot(): boolean {
+  return process.env.OPENAI_INCLUDE_FULL_SCREENSHOT === "true";
 }
 
 export function buildContextText({ question, context }: AskMauzRequest): string {
@@ -153,10 +171,15 @@ function formatSelectedText(context: MauzDesktopContext): string {
 }
 
 function formatScreenshot(context: MauzDesktopContext): string {
+  const cursorCrop = context.pointer?.cursorCrop;
   const screenshot = context.pointer?.screenshot ?? context.screenshot;
 
   if (screenshot === undefined) {
     return "none attached";
+  }
+
+  if (cursorCrop !== undefined && !shouldIncludeFullScreenshot()) {
+    return `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, captured locally but omitted from model image inputs for faster pointer asks`;
   }
 
   return `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, attached as broad image input`;

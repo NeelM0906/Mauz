@@ -103,6 +103,20 @@ export class ChatHistoryService {
     return conversation;
   }
 
+  async updateTitle(id: string, title: string): Promise<ChatConversation | null> {
+    const history = await this.readHistory();
+    const conversation = history.conversations.find((candidate) => candidate.id === id);
+
+    if (conversation === undefined) {
+      return null;
+    }
+
+    conversation.title = title;
+    await this.writeHistory(history);
+
+    return conversation;
+  }
+
   private async readHistory(): Promise<StoredChatHistory> {
     try {
       const raw = await readFile(this.storagePath, "utf8");

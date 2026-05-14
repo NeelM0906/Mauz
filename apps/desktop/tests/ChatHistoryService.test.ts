@@ -38,4 +38,23 @@ describe("ChatHistoryService", () => {
     });
     expect(conversation.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
   });
+
+  it("updates a generated title after the conversation is already saved", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mauz-history-"));
+    tempDirs.push(dir);
+    const service = new ChatHistoryService(join(dir, "history.json"));
+    const saved = await service.saveAskConversation({
+      title: "What is this",
+      question: "What is this?",
+      answer: "This is a build error."
+    });
+
+    await expect(service.updateTitle(saved.id, "Build Error Diagnosis")).resolves.toMatchObject({
+      id: saved.id,
+      title: "Build Error Diagnosis"
+    });
+    await expect(service.get(saved.id)).resolves.toMatchObject({
+      title: "Build Error Diagnosis"
+    });
+  });
 });

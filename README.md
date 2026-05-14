@@ -94,6 +94,8 @@ Copy `.env.example` to `.env` or provide these variables in the shell before run
 ```bash
 OPENAI_API_KEY=
 OPENAI_ASK_MODEL=gpt-5.4-mini
+OPENAI_ASK_MAX_OUTPUT_TOKENS=700
+OPENAI_INCLUDE_FULL_SCREENSHOT=false
 OPENAI_CHAT_TITLE_MODEL=gpt-5.4-nano
 OPENAI_REALTIME_MODEL=gpt-realtime-2
 OPENAI_REALTIME_REASONING_EFFORT=low
@@ -103,6 +105,8 @@ MAUZ_ENABLE_DEV_HOTKEY=true
 ```
 
 `OPENAI_API_KEY` is read only by the local API server in the Electron main process. It is never exposed to the renderer.
+
+`OPENAI_INCLUDE_FULL_SCREENSHOT=false` keeps Ask requests faster by sending the cursor crop as the primary image input and omitting the broad screenshot image when a crop exists. Set it to `true` when you want maximum broad screen context.
 
 `MAUZ_ENABLE_NATIVE_INPUT=true` enables the Swift mouse helper on macOS. macOS requires Accessibility permission for global mouse event monitoring. If permission is missing, Mauz shows:
 
