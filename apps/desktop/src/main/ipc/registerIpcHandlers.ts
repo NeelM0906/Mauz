@@ -12,12 +12,26 @@ type RegisterIpcHandlersOptions = {
   localApiToken: string;
 };
 
+const HANDLED_IPC_CHANNELS = [
+  IPC_CHANNELS.menuShowMenu,
+  IPC_CHANNELS.menuClose,
+  IPC_CHANNELS.menuStartAsk,
+  IPC_CHANNELS.menuStartTalk,
+  IPC_CHANNELS.menuStartScreenShare,
+  IPC_CHANNELS.askSubmit,
+  IPC_CHANNELS.realtimeCreateSession
+] as const;
+
 export function registerIpcHandlers({
   popover,
   contextCollector,
   api,
   localApiToken
 }: RegisterIpcHandlersOptions): void {
+  for (const channel of HANDLED_IPC_CHANNELS) {
+    ipcMain.removeHandler(channel);
+  }
+
   ipcMain.handle(IPC_CHANNELS.menuShowMenu, () => {
     popover.resizeForMenu();
   });
