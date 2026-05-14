@@ -6,3 +6,4 @@ out/
 *.log
 coverage/
 native/macos/MauzInputAgent/MauzInputAgent
+native/macos/MauzInputAgent/MauzInputAgent.app/

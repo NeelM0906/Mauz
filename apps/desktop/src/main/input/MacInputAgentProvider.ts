@@ -35,7 +35,7 @@ export type MacInputAgentProviderOptions = {
 };
 
 const ACCESSIBILITY_PERMISSION_MESSAGE =
-  "Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable Mauz.";
+  "Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable MauzInputAgent.";
 const HELPER_NOT_FOUND_MESSAGE =
   "Mauz native input helper is not built. Run native/macos/MauzInputAgent/build.sh, then restart Mauz.";
 const DEFAULT_MAX_RESTARTS = 2;
@@ -266,9 +266,22 @@ function findDefaultHelperPath(): string {
 
   const currentFileDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
     resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent"),
+    resolve(
+      process.cwd(),
+      "../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
     resolve(process.cwd(), "../../native/macos/MauzInputAgent/MauzInputAgent"),
+    resolve(
+      currentFileDir,
+      "../../../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
     resolve(currentFileDir, "../../../../native/macos/MauzInputAgent/MauzInputAgent"),
+    resolve(
+      currentFileDir,
+      "../../../../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
     resolve(currentFileDir, "../../../../../native/macos/MauzInputAgent/MauzInputAgent")
   ];
 

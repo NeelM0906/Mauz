@@ -29,9 +29,18 @@ func emit<T: Encodable>(_ event: T) {
 func emitPermissionError() {
     emit(
         PermissionErrorEvent(
-            message: "Mauz needs Accessibility permission to detect the mouse shake."
+            message: "Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable MauzInputAgent."
         )
     )
+}
+
+let accessibilityOptions = [
+    kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+] as CFDictionary
+
+guard AXIsProcessTrustedWithOptions(accessibilityOptions) else {
+    emitPermissionError()
+    exit(2)
 }
 
 let eventMask = CGEventMask(1 << CGEventType.mouseMoved.rawValue)

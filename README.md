@@ -98,8 +98,10 @@ MAUZ_ENABLE_DEV_HOTKEY=true
 `MAUZ_ENABLE_NATIVE_INPUT=true` enables the Swift mouse helper on macOS. macOS requires Accessibility permission for global mouse event monitoring. If permission is missing, Mauz shows:
 
 ```text
-Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable Mauz.
+Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable MauzInputAgent.
 ```
+
+The helper build script creates `native/macos/MauzInputAgent/MauzInputAgent.app` with bundle identifier `ai.mauz.input-agent`. If macOS does not list it automatically, add that app bundle in Accessibility settings.
 
 If screenshot capture fails on macOS, grant Screen Recording permission in System Settings, then restart MauzAI. Ask Mauz still allows text-only questions when screenshot capture is unavailable.
 
