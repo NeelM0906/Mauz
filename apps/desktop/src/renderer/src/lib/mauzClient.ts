@@ -7,6 +7,8 @@ import type {
   MauzSettings,
   MauzSettingsUpdate,
   PermissionError,
+  RealtimeConnectRequest,
+  RealtimeConnectResponse,
   RealtimeSessionResponse
 } from "@mauzai/shared";
 
@@ -34,7 +36,11 @@ const browserPreviewBridge: MauzBridge = {
   realtime: {
     createSession: async () => {
       throw new Error("Realtime API is not implemented in this milestone.");
-    }
+    },
+    connect: async () => {
+      throw new Error("Run the Electron app to talk to Mauz with Realtime.");
+    },
+    captureFrame: async () => collectPreviewContext()
   },
   settings: {
     open: async () => ({
@@ -104,6 +110,12 @@ export const mauzClient = {
   },
   createRealtimeSession(): Promise<RealtimeSessionResponse> {
     return getBridge().realtime.createSession();
+  },
+  connectRealtime(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse> {
+    return getBridge().realtime.connect(payload);
+  },
+  captureRealtimeFrame(): Promise<MauzDesktopContext> {
+    return getBridge().realtime.captureFrame();
   },
   openSettings(): Promise<MauzSettings> {
     return getBridge().settings.open();

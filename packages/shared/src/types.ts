@@ -94,6 +94,19 @@ export type RealtimeSessionResponse = {
   session?: unknown | undefined;
 };
 
+export type RealtimeMode = "talk" | "screen";
+
+export type RealtimeConnectRequest = {
+  offerSdp: string;
+  mode: RealtimeMode;
+  context: MauzDesktopContext;
+};
+
+export type RealtimeConnectResponse = {
+  answerSdp: string;
+  model: string;
+};
+
 export type PermissionError = {
   permission: "accessibility" | "screen-recording" | "microphone" | "unknown";
   message: string;
@@ -129,6 +142,8 @@ export type MauzBridge = {
   };
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;
+    connect(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse>;
+    captureFrame(): Promise<MauzDesktopContext>;
   };
   settings: {
     open(): Promise<MauzSettings>;

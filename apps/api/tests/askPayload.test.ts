@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_API_TOKEN_HEADER, type AskMauzRequest } from "@mauzai/shared";
+import { LOCAL_API_TOKEN_HEADER, type AskMauzRequest, type RealtimeConnectRequest } from "@mauzai/shared";
 import { createMauzApiServer } from "../src/server";
 
 const validRequest: AskMauzRequest = {
@@ -12,6 +12,12 @@ const validRequest: AskMauzRequest = {
       y: 240
     }
   }
+};
+
+const validRealtimeRequest: RealtimeConnectRequest = {
+  offerSdp: "v=0\r\nt=- 0 0\r\n",
+  mode: "talk",
+  context: validRequest.context
 };
 
 describe("Ask Mauz API", () => {
@@ -157,5 +163,82 @@ describe("Ask Mauz API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ ok: true });
+  });
+
+  it("rejects Realtime connect requests without the configured local token", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      realtimeConnectHandler: async () => {
+        throw new Error("should not be called");
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/realtime/connect",
+      payload: validRealtimeRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: "Unauthorized local Mauz API request."
+    });
+  });
+
+  it("rejects Realtime connect requests with an invalid configured local token", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      realtimeConnectHandler: async () => {
+        throw new Error("should not be called");
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/realtime/connect",
+      headers: {
+        [LOCAL_API_TOKEN_HEADER]: "wrong-local-test-token"
+      },
+      payload: validRealtimeRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: "Unauthorized local Mauz API request."
+    });
+  });
+
+  it("accepts Realtime connect requests with the configured local token", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      realtimeConnectHandler: async (request) => ({
+        answerSdp: `answer:${request.mode}`,
+        model: "test-realtime-model"
+      })
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/realtime/connect",
+      headers: {
+        [LOCAL_API_TOKEN_HEADER]: "local-test-token"
+      },
+      payload: validRealtimeRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      answerSdp: "answer:talk",
+      model: "test-realtime-model"
+    });
   });
 });

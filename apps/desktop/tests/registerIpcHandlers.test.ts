@@ -24,7 +24,9 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
-  IPC_CHANNELS.realtimeCreateSession
+  IPC_CHANNELS.realtimeCreateSession,
+  IPC_CHANNELS.realtimeConnect,
+  IPC_CHANNELS.realtimeCaptureFrame
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -80,6 +82,26 @@ describe("registerIpcHandlers", () => {
     await expect(handler()).resolves.toEqual(context);
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
   });
+
+  it("opens Realtime mode with captured pointer context", async () => {
+    const options = createOptions();
+    const context: MauzDesktopContext = {
+      timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
+      platform: "darwin",
+      cursor: {
+        x: 200,
+        y: 300
+      }
+    };
+
+    vi.mocked(options.contextCollector.collectForRealtime).mockResolvedValue(context);
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuStartTalk);
+
+    await expect(handler()).resolves.toEqual(context);
+    expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
+  });
 });
 
 function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
@@ -97,11 +119,14 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     hide: vi.fn(),
     resizeForAsk: vi.fn(),
     resizeForMenu: vi.fn(),
+    resizeForRealtime: vi.fn(),
     resizeForSettings: vi.fn()
   } as unknown as PopoverWindowController;
   const contextCollector = {
     collectBasicContext: vi.fn(),
-    collectForAsk: vi.fn()
+    collectForAsk: vi.fn(),
+    collectForRealtime: vi.fn(),
+    collectRealtimeFrame: vi.fn()
   } as unknown as ContextCollector;
   const api: LocalApiHandle = {
     baseUrl: "http://127.0.0.1:38741",

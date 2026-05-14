@@ -4,9 +4,11 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { registerAskRoute, type AskMauzHandler } from "./routes/ask";
 import { registerHealthzRoute } from "./routes/healthz";
+import { registerRealtimeRoute, type RealtimeConnectHandler } from "./routes/realtime";
 
 export type CreateMauzApiServerOptions = {
   askHandler?: AskMauzHandler;
+  realtimeConnectHandler?: RealtimeConnectHandler;
   authToken?: string;
   logger?: boolean;
   loadEnv?: boolean;
@@ -26,6 +28,12 @@ export async function createMauzApiServer(
   await registerHealthzRoute(app);
   await registerAskRoute(app, {
     ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
+    ...(options.authToken === undefined ? {} : { authToken: options.authToken })
+  });
+  await registerRealtimeRoute(app, {
+    ...(options.realtimeConnectHandler === undefined
+      ? {}
+      : { realtimeConnectHandler: options.realtimeConnectHandler }),
     ...(options.authToken === undefined ? {} : { authToken: options.authToken })
   });
 

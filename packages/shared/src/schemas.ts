@@ -129,3 +129,16 @@ export const RealtimeSessionResponseSchema = z.object({
   expires_at: z.number().optional(),
   session: z.unknown().optional()
 });
+
+export const RealtimeModeSchema = z.enum(["talk", "screen"]);
+
+export const RealtimeConnectRequestSchema = z.object({
+  offerSdp: z.string().min(1),
+  mode: RealtimeModeSchema,
+  context: MauzDesktopContextSchema
+});
+
+export const RealtimeConnectResponseSchema = z.object({
+  answerSdp: z.string().min(1),
+  model: z.string().min(1)
+});

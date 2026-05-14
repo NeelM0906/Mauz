@@ -13,6 +13,11 @@ export const MAUZ_SETTINGS_PANEL_SIZE = {
   height: 330
 } as const;
 
+export const MAUZ_REALTIME_PANEL_SIZE = {
+  width: 380,
+  height: 440
+} as const;
+
 export const LOCAL_API_TOKEN_HEADER = "x-mauz-local-token";
 
 export const IPC_CHANNELS = {
@@ -25,6 +30,8 @@ export const IPC_CHANNELS = {
   settingsUpdate: "mauz:settings:update",
   askSubmit: "mauz:ask:submit",
   realtimeCreateSession: "mauz:realtime:create-session",
+  realtimeConnect: "mauz:realtime:connect",
+  realtimeCaptureFrame: "mauz:realtime:capture-frame",
   activation: "mauz:events:activation",
   permissionError: "mauz:events:permission-error"
 } as const;

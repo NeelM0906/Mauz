@@ -10,6 +10,7 @@ import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
 import { submitAskToLocalApi } from "./askApiClient";
+import { connectRealtimeToLocalApi } from "./realtimeApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
@@ -29,7 +30,9 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
-  IPC_CHANNELS.realtimeCreateSession
+  IPC_CHANNELS.realtimeCreateSession,
+  IPC_CHANNELS.realtimeConnect,
+  IPC_CHANNELS.realtimeCaptureFrame
 ] as const;
 
 export function registerIpcHandlers({
@@ -57,8 +60,16 @@ export function registerIpcHandlers({
     popover.resizeForAsk();
     return context;
   });
-  ipcMain.handle(IPC_CHANNELS.menuStartTalk, () => contextCollector.collectBasicContext());
-  ipcMain.handle(IPC_CHANNELS.menuStartScreenShare, () => contextCollector.collectBasicContext());
+  ipcMain.handle(IPC_CHANNELS.menuStartTalk, async () => {
+    const context = await contextCollector.collectForRealtime();
+    popover.resizeForRealtime();
+    return context;
+  });
+  ipcMain.handle(IPC_CHANNELS.menuStartScreenShare, async () => {
+    const context = await contextCollector.collectForRealtime();
+    popover.resizeForRealtime();
+    return context;
+  });
 
   ipcMain.handle(IPC_CHANNELS.settingsOpen, async () => {
     popover.resizeForSettings();
@@ -86,6 +97,12 @@ export function registerIpcHandlers({
       throw new Error("Realtime API is not implemented in this milestone.");
     }
   });
+
+  ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (_event, payload: unknown) => {
+    return connectRealtimeToLocalApi(api, localApiToken, payload);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => contextCollector.collectRealtimeFrame());
 }
 
 function toSettingsUpdate(parsedUpdate: {

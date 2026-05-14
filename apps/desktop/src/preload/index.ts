@@ -7,6 +7,8 @@ import type {
   MauzSettings,
   MauzSettingsUpdate,
   PermissionError,
+  RealtimeConnectRequest,
+  RealtimeConnectResponse,
   RealtimeSessionResponse
 } from "@mauzai/shared";
 import { IPC_CHANNELS, MauzSettingsSchema, PermissionErrorSchema } from "@mauzai/shared";
@@ -26,7 +28,10 @@ const mauzApi: MauzBridge = {
   },
   realtime: {
     createSession: () =>
-      ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>
+      ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>,
+    connect: (payload: RealtimeConnectRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.realtimeConnect, payload) as Promise<RealtimeConnectResponse>,
+    captureFrame: () => ipcRenderer.invoke(IPC_CHANNELS.realtimeCaptureFrame) as Promise<MauzDesktopContext>
   },
   settings: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpen) as Promise<MauzSettings>,
