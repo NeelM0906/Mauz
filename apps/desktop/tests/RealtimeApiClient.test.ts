@@ -36,7 +36,8 @@ describe("connectRealtimeToLocalApi", () => {
     await expect(
       connectRealtimeToLocalApi(
         {
-          baseUrl: "http://127.0.0.1:38741",
+          baseUrl: "http://127.0.0.1:47891",
+          port: 47891,
           stop: async () => {}
         },
         "test-token",
@@ -61,7 +62,8 @@ describe("connectRealtimeToLocalApi", () => {
     await expect(
       connectRealtimeToLocalApi(
         {
-          baseUrl: "http://127.0.0.1:38741",
+          baseUrl: "http://127.0.0.1:47891",
+          port: 47891,
           stop: async () => {}
         },
         "test-token",

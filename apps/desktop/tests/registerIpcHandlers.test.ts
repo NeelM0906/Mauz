@@ -129,7 +129,8 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     collectRealtimeFrame: vi.fn()
   } as unknown as ContextCollector;
   const api: LocalApiHandle = {
-    baseUrl: "http://127.0.0.1:38741",
+    baseUrl: "http://127.0.0.1:47891",
+    port: 47891,
     stop: vi.fn(async () => {})
   };
 

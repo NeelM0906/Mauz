@@ -92,7 +92,7 @@ Copy `.env.example` to `.env` or provide these variables in the shell before run
 OPENAI_API_KEY=
 OPENAI_ASK_MODEL=gpt-5.4-mini
 OPENAI_REALTIME_MODEL=gpt-realtime-2
-MAUZ_API_PORT=38741
+MAUZ_API_PORT=47891
 MAUZ_ENABLE_NATIVE_INPUT=false
 MAUZ_ENABLE_DEV_HOTKEY=true
 ```
@@ -123,7 +123,7 @@ If screenshot capture fails on macOS, grant Screen Recording permission in Syste
 
 ## Local API
 
-The desktop app launches a local Fastify server on `127.0.0.1:${MAUZ_API_PORT}`.
+The desktop app launches a local Fastify server on `127.0.0.1:${MAUZ_API_PORT}`. The default is `47891`; if that port is already in use, the desktop app tries the next nearby ports before failing startup.
 
 - `GET /healthz` returns `{ "ok": true }`.
 - `POST /api/ask` requires `x-mauz-local-token`, validates `AskMauzRequestSchema`, sends text plus optional cursor-crop and screenshot image context to the OpenAI Responses API, and returns `AskMauzResponse`.

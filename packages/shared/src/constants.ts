@@ -36,4 +36,4 @@ export const IPC_CHANNELS = {
   permissionError: "mauz:events:permission-error"
 } as const;
 
-export const DEFAULT_MAUZ_API_PORT = 38741;
+export const DEFAULT_MAUZ_API_PORT = 47891;

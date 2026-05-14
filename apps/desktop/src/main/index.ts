@@ -2,14 +2,19 @@ import { app, dialog } from "electron";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_MAUZ_API_PORT, type MauzSettings, type MauzSettingsUpdate } from "@mauzai/shared";
+import type { MauzSettings, MauzSettingsUpdate } from "@mauzai/shared";
 import { ContextCollector } from "./context/ContextCollector";
 import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
 import type { InputProvider } from "./input/InputProvider";
 import { MacInputAgentProvider } from "./input/MacInputAgentProvider";
 import { getShakeDetectorConfigForSensitivity, ShakeDetector } from "./input/ShakeDetector";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers";
-import { launchLocalApi, type LocalApiHandle } from "./server/launchLocalApi";
+import {
+  getConfiguredLocalApiPort,
+  isPortUnavailable,
+  launchLocalApi,
+  type LocalApiHandle
+} from "./server/launchLocalApi";
 import { SettingsService } from "./settings/SettingsService";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
 
@@ -219,7 +224,7 @@ function showBootstrapError(error: unknown): void {
   if (isPortUnavailable(error)) {
     dialog.showErrorBox(
       title,
-      `The local API server could not start because port ${getConfiguredLocalApiPort()} is already in use. Close the other process or set MAUZ_API_PORT to an available port, then reopen Mauz.`
+      `The local API server could not start after trying ports from ${getConfiguredLocalApiPort()} upward. Close the other process or set MAUZ_API_PORT to an available port, then reopen Mauz.`
     );
     return;
   }
@@ -237,24 +242,6 @@ function showPermissionError(message: string): void {
 
   shownPermissionMessages.add(message);
   dialog.showErrorBox("Mauz permission needed", message);
-}
-
-function getConfiguredLocalApiPort(): number {
-  const configuredPort = Number.parseInt(process.env.MAUZ_API_PORT ?? String(DEFAULT_MAUZ_API_PORT), 10);
-
-  return Number.isFinite(configuredPort) ? configuredPort : DEFAULT_MAUZ_API_PORT;
-}
-
-function isPortUnavailable(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) {
-    return false;
-  }
-
-  if ("code" in error && error.code === "EADDRINUSE") {
-    return true;
-  }
-
-  return "cause" in error && isPortUnavailable(error.cause);
 }
 
 function reportShutdownError(action: string, error: unknown): void {
