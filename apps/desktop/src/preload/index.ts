@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AskMauzRequest,
   AskMauzResponse,
+  ChatConversation,
+  ChatHistoryGetRequest,
+  ChatHistoryListResponse,
   MauzBridge,
   MauzDesktopContext,
   MauzSettings,
@@ -25,6 +28,11 @@ const mauzApi: MauzBridge = {
   ask: {
     submit: (payload: AskMauzRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>
+  },
+  history: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryList) as Promise<ChatHistoryListResponse>,
+    get: (payload: ChatHistoryGetRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryGet, payload) as Promise<ChatConversation>
   },
   realtime: {
     createSession: () =>

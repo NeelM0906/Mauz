@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   IPC_CHANNELS,
   MAUZ_ASK_PANEL_SIZE,
+  MAUZ_HISTORY_PANEL_SIZE,
   MAUZ_POPUP_SIZE,
   MAUZ_REALTIME_PANEL_SIZE,
   MAUZ_SETTINGS_PANEL_SIZE
@@ -127,6 +128,11 @@ export class PopoverWindowController {
 
   resizeForSettings(): void {
     this.setSize(MAUZ_SETTINGS_PANEL_SIZE);
+    this.repositionAtLastAnchor();
+  }
+
+  resizeForHistory(): void {
+    this.setSize(MAUZ_HISTORY_PANEL_SIZE);
     this.repositionAtLastAnchor();
   }
 

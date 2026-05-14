@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { FormattedAnswer } from "./FormattedAnswer";
 
 const QUICK_PROMPTS = ["What is this?", "Explain this", "What should I do here?", "Summarize this"];
 
@@ -18,10 +19,12 @@ export function AskPanel(): React.JSX.Element {
   const {
     currentContext,
     askAnswer,
+    askConversationTitle,
     askError,
     askLoading,
     backToMenu,
     setAskAnswer,
+    setAskConversationTitle,
     setAskError,
     setAskLoading
   } = useMauzStore();
@@ -50,6 +53,7 @@ export function AskPanel(): React.JSX.Element {
     setAskLoading(true);
     setAskError(null);
     setAskAnswer(null);
+    setAskConversationTitle(null);
 
     try {
       const response = await mauzClient.submitAsk({
@@ -58,6 +62,7 @@ export function AskPanel(): React.JSX.Element {
       });
 
       setAskAnswer(response.answer);
+      setAskConversationTitle(response.conversationTitle ?? null);
     } catch (error) {
       setAskError(error instanceof Error ? error.message : "Ask Mauz failed.");
     } finally {
@@ -150,7 +155,14 @@ export function AskPanel(): React.JSX.Element {
 
       <div className="answer-area" aria-live="polite">
         {askError !== null ? <p className="ask-error">{askError}</p> : null}
-        {askAnswer !== null ? <p className="ask-answer">{askAnswer}</p> : null}
+        {askAnswer !== null ? (
+          <>
+            {askConversationTitle !== null ? (
+              <p className="saved-chat-title">Saved as "{askConversationTitle}"</p>
+            ) : null}
+            <FormattedAnswer answer={askAnswer} />
+          </>
+        ) : null}
         {askError === null && askAnswer === null ? (
           <p className="ask-empty">Ask about the area around your cursor.</p>
         ) : null}

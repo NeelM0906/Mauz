@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { AskPanel } from "./components/AskPanel";
+import { ChatHistoryPanel } from "./components/ChatHistoryPanel";
 import { MauzMenu } from "./components/MauzMenu";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TalkPanel } from "./components/TalkPanel";
@@ -30,6 +31,10 @@ function App(): React.JSX.Element {
 
   if (mode === "settings") {
     return <SettingsPanel />;
+  }
+
+  if (mode === "history") {
+    return <ChatHistoryPanel />;
   }
 
   if (mode === "talk" || mode === "screen") {

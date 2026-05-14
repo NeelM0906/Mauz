@@ -85,7 +85,57 @@ export type AskMauzRequest = {
 export type AskMauzResponse = {
   answer: string;
   model: string;
+  conversationId?: string | undefined;
+  conversationTitle?: string | undefined;
   usage?: unknown | undefined;
+};
+
+export type ChatRole = "user" | "assistant";
+
+export type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+  createdAt: string;
+};
+
+export type ChatConversation = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+};
+
+export type ChatHistorySummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  preview: string;
+};
+
+export type ChatHistoryGroup = {
+  dateLabel: string;
+  conversations: ChatHistorySummary[];
+};
+
+export type ChatHistoryListResponse = {
+  groups: ChatHistoryGroup[];
+};
+
+export type ChatHistoryGetRequest = {
+  id: string;
+};
+
+export type ChatTitleRequest = {
+  question: string;
+  answer: string;
+};
+
+export type ChatTitleResponse = {
+  title: string;
+  model: string;
 };
 
 export type RealtimeSessionResponse = {
@@ -139,6 +189,10 @@ export type MauzBridge = {
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;
+  };
+  history: {
+    list(): Promise<ChatHistoryListResponse>;
+    get(payload: ChatHistoryGetRequest): Promise<ChatConversation>;
   };
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;

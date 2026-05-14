@@ -1,4 +1,4 @@
-import { MessageCircleQuestion, Mic, MonitorUp, Settings, X } from "lucide-react";
+import { History, MessageCircleQuestion, Mic, MonitorUp, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -12,7 +12,15 @@ const actionCopy: Record<MenuAction, string> = {
 };
 
 export function MauzMenu(): React.JSX.Element {
-  const { status, setCurrentContext, setMode, setSettings, setStatus } = useMauzStore();
+  const {
+    status,
+    setChatHistory,
+    setCurrentContext,
+    setMode,
+    setSelectedConversation,
+    setSettings,
+    setStatus
+  } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<MenuAction | null>(null);
 
   const handleSettings = async (): Promise<void> => {
@@ -24,6 +32,19 @@ export function MauzMenu(): React.JSX.Element {
       setMode("settings");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz settings failed.");
+    }
+  };
+
+  const handleHistory = async (): Promise<void> => {
+    setStatus(null);
+
+    try {
+      const history = await mauzClient.listChatHistory();
+      setChatHistory(history);
+      setSelectedConversation(null);
+      setMode("history");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Mauz chat history failed.");
     }
   };
 
@@ -109,6 +130,15 @@ export function MauzMenu(): React.JSX.Element {
         >
           <MonitorUp aria-hidden="true" size={18} />
           <span>Show Mauz my screen</span>
+        </button>
+        <button
+          type="button"
+          className="mauz-action"
+          onClick={() => void handleHistory()}
+          disabled={pendingAction !== null}
+        >
+          <History aria-hidden="true" size={18} />
+          <span>Prev chats</span>
         </button>
       </div>
 

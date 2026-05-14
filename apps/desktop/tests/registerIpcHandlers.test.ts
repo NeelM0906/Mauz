@@ -24,6 +24,8 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
+  IPC_CHANNELS.chatHistoryList,
+  IPC_CHANNELS.chatHistoryGet,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.realtimeCaptureFrame
@@ -120,6 +122,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     resizeForAsk: vi.fn(),
     resizeForMenu: vi.fn(),
     resizeForRealtime: vi.fn(),
+    resizeForHistory: vi.fn(),
     resizeForSettings: vi.fn()
   } as unknown as PopoverWindowController;
   const contextCollector = {
@@ -137,6 +140,34 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   return {
     popover,
     contextCollector,
+    chatHistory: {
+      saveAskConversation: vi.fn(async ({ question, answer, title }) => ({
+        id: "conversation-id",
+        title,
+        createdAt: "2026-05-14T12:00:00.000Z",
+        updatedAt: "2026-05-14T12:00:00.000Z",
+        messages: [
+          {
+            id: "question-id",
+            role: "user" as const,
+            content: question,
+            createdAt: "2026-05-14T12:00:00.000Z"
+          },
+          {
+            id: "answer-id",
+            role: "assistant" as const,
+            content: answer,
+            createdAt: "2026-05-14T12:00:00.000Z"
+          }
+        ]
+      })),
+      list: vi.fn(async () => ({
+        groups: []
+      })),
+      get: vi.fn(async () => {
+        throw new Error("not found");
+      })
+    } as never,
     api,
     localApiToken: "test-token",
     getSettings: vi.fn(async () => ({

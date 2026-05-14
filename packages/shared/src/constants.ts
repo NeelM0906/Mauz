@@ -1,6 +1,6 @@
 export const MAUZ_POPUP_SIZE = {
   width: 280,
-  height: 180
+  height: 218
 } as const;
 
 export const MAUZ_ASK_PANEL_SIZE = {
@@ -11,6 +11,11 @@ export const MAUZ_ASK_PANEL_SIZE = {
 export const MAUZ_SETTINGS_PANEL_SIZE = {
   width: 360,
   height: 330
+} as const;
+
+export const MAUZ_HISTORY_PANEL_SIZE = {
+  width: 420,
+  height: 520
 } as const;
 
 export const MAUZ_REALTIME_PANEL_SIZE = {
@@ -29,6 +34,8 @@ export const IPC_CHANNELS = {
   settingsOpen: "mauz:settings:open",
   settingsUpdate: "mauz:settings:update",
   askSubmit: "mauz:ask:submit",
+  chatHistoryList: "mauz:chat-history:list",
+  chatHistoryGet: "mauz:chat-history:get",
   realtimeCreateSession: "mauz:realtime:create-session",
   realtimeConnect: "mauz:realtime:connect",
   realtimeCaptureFrame: "mauz:realtime:capture-frame",

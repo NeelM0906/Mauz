@@ -241,4 +241,61 @@ describe("Ask Mauz API", () => {
       model: "test-realtime-model"
     });
   });
+
+  it("rejects chat title requests without the configured local token", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      chatTitleHandler: async () => {
+        throw new Error("should not be called");
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/title",
+      payload: {
+        question: "What is this?",
+        answer: "It is a settings panel."
+      }
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: "Unauthorized local Mauz API request."
+    });
+  });
+
+  it("accepts chat title requests with the configured local token", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      chatTitleHandler: async () => ({
+        title: "Settings Panel Help",
+        model: "gpt-5.4-nano"
+      })
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat/title",
+      headers: {
+        [LOCAL_API_TOKEN_HEADER]: "local-test-token"
+      },
+      payload: {
+        question: "What is this?",
+        answer: "It is a settings panel."
+      }
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      title: "Settings Panel Help",
+      model: "gpt-5.4-nano"
+    });
+  });
 });

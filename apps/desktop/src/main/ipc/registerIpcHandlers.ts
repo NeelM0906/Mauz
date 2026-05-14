@@ -1,20 +1,25 @@
 import { ipcMain } from "electron";
 import {
+  AskMauzRequestSchema,
+  ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
   MauzSettingsUpdateSchema,
   RealtimeSessionResponseSchema,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
+import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
 import { submitAskToLocalApi } from "./askApiClient";
+import { generateChatTitleFromLocalApi } from "./chatTitleApiClient";
 import { connectRealtimeToLocalApi } from "./realtimeApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
+  chatHistory: ChatHistoryService;
   api: LocalApiHandle;
   localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
@@ -30,6 +35,8 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
+  IPC_CHANNELS.chatHistoryList,
+  IPC_CHANNELS.chatHistoryGet,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.realtimeCaptureFrame
@@ -38,6 +45,7 @@ const HANDLED_IPC_CHANNELS = [
 export function registerIpcHandlers({
   popover,
   contextCollector,
+  chatHistory,
   api,
   localApiToken,
   getSettings,
@@ -87,7 +95,39 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (_event, payload: unknown) => {
-    return submitAskToLocalApi(api, localApiToken, payload);
+    const request = AskMauzRequestSchema.parse(payload);
+    const response = await submitAskToLocalApi(api, localApiToken, request);
+    const title = await generateTitleSafely(api, localApiToken, {
+      question: request.question,
+      answer: response.answer
+    });
+
+    try {
+      const conversation = await chatHistory.saveAskConversation({
+        question: request.question,
+        answer: response.answer,
+        title
+      });
+
+      return {
+        ...response,
+        conversationId: conversation.id,
+        conversationTitle: conversation.title
+      };
+    } catch {
+      return response;
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.chatHistoryList, async () => {
+    popover.resizeForHistory();
+    return chatHistory.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.chatHistoryGet, async (_event, payload: unknown) => {
+    const request = ChatHistoryGetRequestSchema.parse(payload);
+
+    return chatHistory.get(request.id);
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, () => {
@@ -103,6 +143,33 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => contextCollector.collectRealtimeFrame());
+}
+
+async function generateTitleSafely(
+  api: LocalApiHandle,
+  localApiToken: string,
+  payload: { question: string; answer: string }
+): Promise<string> {
+  try {
+    const response = await generateChatTitleFromLocalApi(api, localApiToken, payload);
+
+    return response.title;
+  } catch {
+    return buildFallbackChatTitle(payload.question);
+  }
+}
+
+function buildFallbackChatTitle(question: string): string {
+  const words = question
+    .replace(/["'`]/g, "")
+    .replace(/[.,:;!?()[\]{}]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 7);
+
+  return words.length > 0 ? words.join(" ") : "Untitled Mauz Chat";
 }
 
 function toSettingsUpdate(parsedUpdate: {

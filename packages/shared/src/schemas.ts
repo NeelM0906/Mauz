@@ -121,7 +121,57 @@ export const AskMauzRequestSchema = z.object({
 export const AskMauzResponseSchema = z.object({
   answer: z.string(),
   model: z.string(),
+  conversationId: z.string().optional(),
+  conversationTitle: z.string().optional(),
   usage: z.unknown().optional()
+});
+
+export const ChatRoleSchema = z.enum(["user", "assistant"]);
+
+export const ChatMessageSchema = z.object({
+  id: z.string().min(1),
+  role: ChatRoleSchema,
+  content: z.string(),
+  createdAt: z.string().datetime()
+});
+
+export const ChatConversationSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  messages: z.array(ChatMessageSchema)
+});
+
+export const ChatHistorySummarySchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  preview: z.string()
+});
+
+export const ChatHistoryGroupSchema = z.object({
+  dateLabel: z.string().min(1),
+  conversations: z.array(ChatHistorySummarySchema)
+});
+
+export const ChatHistoryListResponseSchema = z.object({
+  groups: z.array(ChatHistoryGroupSchema)
+});
+
+export const ChatHistoryGetRequestSchema = z.object({
+  id: z.string().min(1)
+});
+
+export const ChatTitleRequestSchema = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1)
+});
+
+export const ChatTitleResponseSchema = z.object({
+  title: z.string().min(1),
+  model: z.string().min(1)
 });
 
 export const RealtimeSessionResponseSchema = z.object({

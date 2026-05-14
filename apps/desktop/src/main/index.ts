@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { MauzSettings, MauzSettingsUpdate } from "@mauzai/shared";
+import { ChatHistoryService } from "./chat/ChatHistoryService";
 import { ContextCollector } from "./context/ContextCollector";
 import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
 import type { InputProvider } from "./input/InputProvider";
@@ -23,6 +24,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 let popover: PopoverWindowController | null = null;
 let apiHandle: LocalApiHandle | null = null;
 let contextCollector: ContextCollector | null = null;
+let chatHistoryService: ChatHistoryService | null = null;
 let settingsService: SettingsService | null = null;
 let inputProviders: InputProvider[] = [];
 let bootstrapPromise: Promise<void> | null = null;
@@ -62,6 +64,7 @@ async function bootstrap(): Promise<void> {
 
   apiHandle = launchedApi;
   settingsService = new SettingsService();
+  chatHistoryService = ChatHistoryService.fromUserDataDir(app.getPath("userData"));
   const initialSettings = await settingsService.get();
   contextCollector = new ContextCollector({
     captureHider: popover
@@ -69,6 +72,7 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers({
     popover,
     contextCollector,
+    chatHistory: chatHistoryService,
     api: apiHandle,
     localApiToken,
     getSettings: () => settingsService!.get(),
@@ -190,6 +194,7 @@ async function shutdownResources(): Promise<void> {
   const currentPopover = popover;
   popover = null;
   contextCollector = null;
+  chatHistoryService = null;
   settingsService = null;
 
   try {

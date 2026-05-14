@@ -1,6 +1,9 @@
 import type {
   AskMauzRequest,
   AskMauzResponse,
+  ChatConversation,
+  ChatHistoryGetRequest,
+  ChatHistoryListResponse,
   MauzDesktopContext,
   MauzBridge,
   Platform,
@@ -31,6 +34,14 @@ const browserPreviewBridge: MauzBridge = {
           "Browser preview is connected. Run the Electron app to ask Mauz with live screenshot context.",
         model: "preview"
       };
+    }
+  },
+  history: {
+    list: async () => ({
+      groups: []
+    }),
+    get: async (_payload: ChatHistoryGetRequest) => {
+      throw new Error("Run the Electron app to view Mauz chat history.");
     }
   },
   realtime: {
@@ -107,6 +118,12 @@ export const mauzClient = {
   },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);
+  },
+  listChatHistory(): Promise<ChatHistoryListResponse> {
+    return getBridge().history.list();
+  },
+  getChatConversation(payload: ChatHistoryGetRequest): Promise<ChatConversation> {
+    return getBridge().history.get(payload);
   },
   createRealtimeSession(): Promise<RealtimeSessionResponse> {
     return getBridge().realtime.createSession();
