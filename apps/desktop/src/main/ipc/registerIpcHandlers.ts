@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   AskMauzRequestSchema,
   ChatHistoryContinueRequestSchema,
@@ -81,8 +81,11 @@ export function registerIpcHandlers({
     return context;
   });
 
-  ipcMain.handle(IPC_CHANNELS.settingsOpen, async () => {
-    popover.resizeForSettings();
+  ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event) => {
+    if (isPopoverEvent(event)) {
+      popover.resizeForSettings();
+    }
+
     return getSettings();
   });
 
@@ -123,8 +126,11 @@ export function registerIpcHandlers({
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.chatHistoryList, async () => {
-    popover.resizeForHistory();
+  ipcMain.handle(IPC_CHANNELS.chatHistoryList, async (event) => {
+    if (isPopoverEvent(event)) {
+      popover.resizeForHistory();
+    }
+
     return chatHistory.list();
   });
 
@@ -135,6 +141,10 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.chatHistoryContinue, async (_event, payload: unknown) => {
+    if (isPopoverEvent(_event)) {
+      throw new Error("Continue chats from the Mauz desktop app.");
+    }
+
     const request = ChatHistoryContinueRequestSchema.parse(payload);
     const conversation = await chatHistory.get(request.id);
     const context = await contextCollector.collectForAsk();
@@ -147,8 +157,6 @@ export function registerIpcHandlers({
       question: request.question,
       answer: response.answer
     });
-
-    popover.resizeForHistory();
 
     return {
       conversation: updatedConversation,
@@ -170,6 +178,20 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => contextCollector.collectRealtimeFrame());
+}
+
+function isPopoverEvent(event: IpcMainInvokeEvent | undefined): boolean {
+  if (event === undefined) {
+    return true;
+  }
+
+  const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
+
+  try {
+    return new URL(frameUrl).searchParams.get("surface") !== "desktop";
+  } catch {
+    return true;
+  }
 }
 
 function queueGeneratedTitleUpdate(

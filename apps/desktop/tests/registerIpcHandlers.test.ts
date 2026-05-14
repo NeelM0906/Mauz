@@ -105,6 +105,34 @@ describe("registerIpcHandlers", () => {
     await expect(handler()).resolves.toEqual(context);
     expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
   });
+
+  it("does not resize the popover when desktop opens settings", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await handler(createInvokeEvent("desktop"));
+
+    expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
+  });
+
+  it("blocks continuing chats from the popover surface", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryContinue);
+
+    await expect(
+      handler(createInvokeEvent("popover"), {
+        id: "conversation-id",
+        question: "Can you expand on this?"
+      })
+    ).rejects.toThrow("Continue chats from the Mauz desktop app.");
+    expect(options.chatHistory.get).not.toHaveBeenCalled();
+  });
 });
 
 function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
@@ -115,6 +143,19 @@ function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<
   }
 
   return call[1] as (...args: unknown[]) => Promise<unknown>;
+}
+
+function createInvokeEvent(surface: "desktop" | "popover"): unknown {
+  const url = `file:///renderer/index.html?surface=${surface}`;
+
+  return {
+    senderFrame: {
+      url
+    },
+    sender: {
+      getURL: () => url
+    }
+  };
 }
 
 function createOptions(): Parameters<typeof registerIpcHandlers>[0] {

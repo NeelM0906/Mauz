@@ -84,9 +84,13 @@ export class PopoverWindowController {
     this.window = win;
 
     if (this.options.rendererUrl !== undefined) {
-      await win.loadURL(this.options.rendererUrl);
+      await win.loadURL(withRendererSurface(this.options.rendererUrl, "popover"));
     } else {
-      await win.loadFile(join(this.options.rendererFile));
+      await win.loadFile(join(this.options.rendererFile), {
+        query: {
+          surface: "popover"
+        }
+      });
     }
   }
 
@@ -291,6 +295,13 @@ export class PopoverWindowController {
       this.targetCueTimer = null;
     }
   }
+}
+
+function withRendererSurface(rendererUrl: string, surface: "popover"): string {
+  const url = new URL(rendererUrl);
+  url.searchParams.set("surface", surface);
+
+  return url.toString();
 }
 
 function delay(ms: number): Promise<void> {

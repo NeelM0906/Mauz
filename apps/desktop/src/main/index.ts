@@ -18,10 +18,12 @@ import {
   type LocalApiHandle
 } from "./server/launchLocalApi";
 import { SettingsService, type MauzRuntimeSettings } from "./settings/SettingsService";
+import { DesktopWindowController } from "./windows/DesktopWindowController";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+let desktopWindow: DesktopWindowController | null = null;
 let popover: PopoverWindowController | null = null;
 let apiHandle: LocalApiHandle | null = null;
 let contextCollector: ContextCollector | null = null;
@@ -44,12 +46,21 @@ async function bootstrap(): Promise<void> {
   settingsService = new SettingsService();
   applyRuntimeEnvironment(await settingsService.getRuntime());
 
+  app.setName("MauzAI");
+
+  desktopWindow = new DesktopWindowController({
+    preloadPath,
+    rendererFile,
+    ...(rendererUrl === undefined ? {} : { rendererUrl })
+  });
+
   popover = new PopoverWindowController({
     preloadPath,
     rendererFile,
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
+  await desktopWindow.create();
   await popover.create();
   if (isShuttingDown()) {
     return;
@@ -81,6 +92,7 @@ async function bootstrap(): Promise<void> {
     updateSettings: applySettingsUpdate
   });
   startInputProviders(initialSettings);
+  await desktopWindow.show();
 }
 
 async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSettings> {
@@ -234,15 +246,18 @@ async function shutdownResources(): Promise<void> {
   }
 
   const currentPopover = popover;
+  const currentDesktopWindow = desktopWindow;
+  desktopWindow = null;
   popover = null;
   contextCollector = null;
   chatHistoryService = null;
   settingsService = null;
 
   try {
+    currentDesktopWindow?.destroy();
     currentPopover?.destroy();
   } catch (error: unknown) {
-    reportShutdownError("destroy the popover", error);
+    reportShutdownError("destroy application windows", error);
   }
 
   const currentApiHandle = apiHandle;
@@ -302,16 +317,16 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    void popover?.showAtLastAnchor();
+    void desktopWindow?.show();
   });
 
   void app.whenReady().then(startBootstrap);
 
   app.on("activate", () => {
-    if (popover === null) {
+    if (desktopWindow === null || popover === null) {
       startBootstrap();
     } else {
-      void popover.showAtLastAnchor();
+      void desktopWindow.show();
     }
   });
 
