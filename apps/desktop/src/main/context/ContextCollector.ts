@@ -1,6 +1,6 @@
 import { screen } from "electron";
-import type { MauzDesktopContext, Platform } from "@mauzai/shared";
-import { ScreenshotService } from "./ScreenshotService";
+import type { MauzDesktopContext, PermissionError, Platform } from "@mauzai/shared";
+import { ScreenshotCaptureError, ScreenshotService } from "./ScreenshotService";
 
 const supportedPlatforms = new Set<NodeJS.Platform>(["darwin", "win32", "linux"]);
 
@@ -35,13 +35,23 @@ export class ContextCollector {
   async collectForAsk(): Promise<MauzDesktopContext> {
     const context = this.collectBasicContext();
     const capture = async () => this.screenshotService.captureDisplayNear(context.cursor);
-    const screenshot =
-      this.captureHider === undefined ? await capture() : await this.captureHider.hideDuringCapture(capture);
 
-    return {
-      ...context,
-      screenshot
-    };
+    try {
+      const screenshot =
+        this.captureHider === undefined
+          ? await capture()
+          : await this.captureHider.hideDuringCapture(capture);
+
+      return {
+        ...context,
+        screenshot
+      };
+    } catch (error) {
+      return {
+        ...context,
+        screenshotError: toScreenshotError(error)
+      };
+    }
   }
 
   private getPlatform(): Platform {
@@ -51,4 +61,18 @@ export class ContextCollector {
 
     return "linux";
   }
+}
+
+function toScreenshotError(error: unknown): PermissionError {
+  if (error instanceof ScreenshotCaptureError) {
+    return {
+      permission: error.permission,
+      message: error.message
+    };
+  }
+
+  return {
+    permission: "unknown",
+    message: "Mauz could not capture screenshot context."
+  };
 }

@@ -36,6 +36,7 @@ export type MauzDesktopContext = {
   };
   selectedText?: string | undefined;
   screenshot?: ScreenshotPayload | undefined;
+  screenshotError?: PermissionError | undefined;
 };
 
 export type AskMauzRequest = {

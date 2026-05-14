@@ -82,15 +82,24 @@ export function AskPanel(): React.JSX.Element {
       <div className="context-strip" aria-label="Context status">
         <span>
           <Camera aria-hidden="true" size={14} />
-          {currentContext?.screenshot === undefined
-            ? "No screenshot"
-            : `${currentContext.screenshot.width}x${currentContext.screenshot.height}`}
+          {formatScreenshotStatus(currentContext)}
         </span>
         <span>
           <TextCursorInput aria-hidden="true" size={14} />
           {currentContext?.selectedText?.trim() ? "Selected text found" : "No selected text"}
         </span>
       </div>
+
+      {currentContext?.screenshotError !== undefined ? (
+        <div className="permission-note" role="status">
+          <strong>{currentContext.screenshotError.message}</strong>
+          {currentContext.screenshotError.permission === "screen-recording" ? (
+            <span>Open System Settings, then Privacy &amp; Security, then Screen Recording.</span>
+          ) : (
+            <span>You can still ask a text-only question.</span>
+          )}
+        </div>
+      ) : null}
 
       <form className="ask-form" onSubmit={(event) => void handleSubmit(event)}>
         <textarea
@@ -126,7 +135,25 @@ function formatContextStatus(context: ReturnType<typeof useMauzStore.getState>["
     return "No context captured.";
   }
 
+  if (context.screenshotError !== undefined) {
+    return "Context captured without screenshot.";
+  }
+
   return context.screenshot === undefined
     ? "Context captured without screenshot."
     : "Screenshot context captured.";
+}
+
+function formatScreenshotStatus(context: ReturnType<typeof useMauzStore.getState>["currentContext"]): string {
+  if (context?.screenshot !== undefined) {
+    return `${context.screenshot.width}x${context.screenshot.height}`;
+  }
+
+  if (context?.screenshotError !== undefined) {
+    return context.screenshotError.permission === "screen-recording"
+      ? "Screen permission needed"
+      : "No screenshot";
+  }
+
+  return "No screenshot";
 }

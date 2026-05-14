@@ -7,6 +7,7 @@ import { registerHealthzRoute } from "./routes/healthz";
 
 export type CreateMauzApiServerOptions = {
   askHandler?: AskMauzHandler;
+  authToken?: string;
   logger?: boolean;
   loadEnv?: boolean;
 };
@@ -24,7 +25,8 @@ export async function createMauzApiServer(
 
   await registerHealthzRoute(app);
   await registerAskRoute(app, {
-    ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler })
+    ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
+    ...(options.authToken === undefined ? {} : { authToken: options.authToken })
   });
 
   return app;

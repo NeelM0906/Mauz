@@ -14,6 +14,11 @@ export const CursorPositionSchema = z.object({
   y: z.number().finite()
 });
 
+export const PermissionErrorSchema = z.object({
+  permission: z.enum(["accessibility", "screen-recording", "microphone", "unknown"]),
+  message: z.string()
+});
+
 export const MauzDesktopContextSchema = z.object({
   timestamp: z.string().datetime(),
   platform: PlatformSchema,
@@ -39,7 +44,8 @@ export const MauzDesktopContextSchema = z.object({
     .optional(),
   cursor: CursorPositionSchema,
   selectedText: z.string().optional(),
-  screenshot: ScreenshotPayloadSchema.optional()
+  screenshot: ScreenshotPayloadSchema.optional(),
+  screenshotError: PermissionErrorSchema.optional()
 });
 
 export const AskMauzRequestSchema = z.object({
@@ -57,9 +63,4 @@ export const RealtimeSessionResponseSchema = z.object({
   value: z.string().min(1),
   expires_at: z.number().optional(),
   session: z.unknown().optional()
-});
-
-export const PermissionErrorSchema = z.object({
-  permission: z.enum(["accessibility", "screen-recording", "microphone", "unknown"]),
-  message: z.string()
 });

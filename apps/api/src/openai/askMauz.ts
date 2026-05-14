@@ -5,6 +5,7 @@ import { MissingOpenAIKeyError } from "../errors";
 import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
 
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
+const DEFAULT_SCREENSHOT_DETAIL = "auto";
 
 export type AskMauzOptions = {
   apiKey?: string;
@@ -62,11 +63,21 @@ export function buildResponseContent(request: AskMauzRequest): ResponseInputMess
     content.push({
       type: "input_image",
       image_url: `data:${request.context.screenshot.mimeType};base64,${request.context.screenshot.base64}`,
-      detail: "low"
+      detail: getScreenshotDetail()
     });
   }
 
   return content;
+}
+
+function getScreenshotDetail(): "auto" | "low" | "high" {
+  const configured = process.env.OPENAI_SCREENSHOT_DETAIL;
+
+  if (configured === "auto" || configured === "low" || configured === "high") {
+    return configured;
+  }
+
+  return DEFAULT_SCREENSHOT_DETAIL;
 }
 
 function buildContextText({ question, context }: AskMauzRequest): string {

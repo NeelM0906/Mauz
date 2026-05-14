@@ -1,4 +1,5 @@
 import { app } from "electron";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readBooleanEnv } from "@mauzai/shared";
@@ -28,11 +29,14 @@ async function bootstrap(): Promise<void> {
   });
 
   await popover.create();
-  apiHandle = await launchLocalApi();
+  const localApiToken = randomUUID();
+  apiHandle = await launchLocalApi({
+    authToken: localApiToken
+  });
   const contextCollector = new ContextCollector({
     captureHider: popover
   });
-  registerIpcHandlers({ popover, contextCollector, api: apiHandle });
+  registerIpcHandlers({ popover, contextCollector, api: apiHandle, localApiToken });
   inputProviders = createInputProviders();
 
   for (const provider of inputProviders) {

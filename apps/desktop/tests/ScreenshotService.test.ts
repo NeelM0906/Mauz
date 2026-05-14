@@ -26,6 +26,7 @@ function createDeps(overrides: Partial<ScreenshotServiceDeps> = {}): ScreenshotS
               width: 1280,
               height: 720
             }),
+            toJPEG: () => Buffer.from("fake-jpeg"),
             toPNG: () => Buffer.from("fake-png")
           }
         }
@@ -36,8 +37,42 @@ function createDeps(overrides: Partial<ScreenshotServiceDeps> = {}): ScreenshotS
 }
 
 describe("ScreenshotService", () => {
-  it("returns a PNG screenshot payload", async () => {
+  it("returns a JPEG screenshot payload when JPEG encoding is available", async () => {
     const service = new ScreenshotService(createDeps());
+
+    await expect(
+      service.captureDisplayNear({
+        x: 10,
+        y: 20
+      })
+    ).resolves.toEqual({
+      mimeType: "image/jpeg",
+      base64: Buffer.from("fake-jpeg").toString("base64"),
+      width: 1280,
+      height: 720
+    });
+  });
+
+  it("falls back to PNG when JPEG encoding is unavailable", async () => {
+    const service = new ScreenshotService(
+      createDeps({
+        desktopCapturer: {
+          getSources: async () => [
+            {
+              display_id: "7",
+              thumbnail: {
+                isEmpty: () => false,
+                getSize: () => ({
+                  width: 1280,
+                  height: 720
+                }),
+                toPNG: () => Buffer.from("fake-png")
+              }
+            }
+          ]
+        }
+      })
+    );
 
     await expect(
       service.captureDisplayNear({
@@ -57,6 +92,28 @@ describe("ScreenshotService", () => {
       createDeps({
         desktopCapturer: {
           getSources: async () => []
+        }
+      })
+    );
+
+    const error = await service
+      .captureDisplayNear({
+        x: 10,
+        y: 20
+      })
+      .catch((captureError: unknown) => captureError);
+
+    expect(error).toBeInstanceOf(ScreenshotCaptureError);
+    expect((error as ScreenshotCaptureError).permission).toBe("screen-recording");
+  });
+
+  it("throws a capture error when desktopCapturer throws", async () => {
+    const service = new ScreenshotService(
+      createDeps({
+        desktopCapturer: {
+          getSources: async () => {
+            throw new Error("permission denied");
+          }
         }
       })
     );

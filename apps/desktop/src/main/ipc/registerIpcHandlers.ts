@@ -1,21 +1,23 @@
 import { ipcMain } from "electron";
-import {
-  AskMauzResponseSchema,
-  AskMauzRequestSchema,
-  IPC_CHANNELS,
-  RealtimeSessionResponseSchema
-} from "@mauzai/shared";
+import { IPC_CHANNELS, RealtimeSessionResponseSchema } from "@mauzai/shared";
 import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
+import { submitAskToLocalApi } from "./askApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
   api: LocalApiHandle;
+  localApiToken: string;
 };
 
-export function registerIpcHandlers({ popover, contextCollector, api }: RegisterIpcHandlersOptions): void {
+export function registerIpcHandlers({
+  popover,
+  contextCollector,
+  api,
+  localApiToken
+}: RegisterIpcHandlersOptions): void {
   ipcMain.handle(IPC_CHANNELS.menuShowMenu, () => {
     popover.resizeForMenu();
   });
@@ -33,26 +35,7 @@ export function registerIpcHandlers({ popover, contextCollector, api }: Register
   ipcMain.handle(IPC_CHANNELS.menuStartScreenShare, () => contextCollector.collectBasicContext());
 
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (_event, payload: unknown) => {
-    const request = AskMauzRequestSchema.parse(payload);
-    const response = await fetch(`${api.baseUrl}/api/ask`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json"
-      },
-      body: JSON.stringify(request)
-    });
-    const body = (await response.json()) as unknown;
-
-    if (!response.ok) {
-      const errorMessage =
-        typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
-          ? body.error
-          : "Ask Mauz failed.";
-
-      throw new Error(errorMessage);
-    }
-
-    return AskMauzResponseSchema.parse(body);
+    return submitAskToLocalApi(api, localApiToken, payload);
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, () => {

@@ -1,4 +1,4 @@
-import type { ScreenshotPayload } from "@mauzai/shared";
+import type { PermissionError, ScreenshotPayload } from "@mauzai/shared";
 
 type Point = {
   x: number;
@@ -19,6 +19,7 @@ type ThumbnailLike = {
     width: number;
     height: number;
   };
+  toJPEG?(quality: number): Buffer;
   toPNG(): Buffer;
 };
 
@@ -47,13 +48,17 @@ export type ScreenshotServiceDeps = {
 };
 
 export class ScreenshotCaptureError extends Error {
-  constructor(message: string) {
+  readonly permission: PermissionError["permission"];
+
+  constructor(message: string, permission: PermissionError["permission"] = "screen-recording") {
     super(message);
     this.name = "ScreenshotCaptureError";
+    this.permission = permission;
   }
 }
 
 const MAX_SCREENSHOT_WIDTH = 1280;
+const JPEG_QUALITY = 75;
 
 export class ScreenshotService {
   constructor(private readonly deps?: ScreenshotServiceDeps) {}
@@ -62,13 +67,12 @@ export class ScreenshotService {
     const deps = this.deps ?? (await loadElectronDeps());
     const display = deps.screen.getDisplayNearestPoint(point);
     const thumbnailSize = getThumbnailSize(display);
-    const sources = await deps.desktopCapturer.getSources({
-      types: ["screen"],
-      thumbnailSize
-    });
+    const sources = await getSources(deps, thumbnailSize);
 
     if (sources.length === 0) {
-      throw new ScreenshotCaptureError("No screen sources were available for screenshot capture.");
+      throw new ScreenshotCaptureError(
+        "Mauz needs Screen Recording permission to capture screenshot context."
+      );
     }
 
     const source = sources.find((candidate) => candidate.display_id === String(display.id)) ?? sources[0];
@@ -78,18 +82,46 @@ export class ScreenshotService {
     }
 
     const size = source.thumbnail.getSize();
-    const image = source.thumbnail.toPNG();
+    const jpegImage = source.thumbnail.toJPEG?.(JPEG_QUALITY);
 
-    if (image.byteLength === 0) {
+    if (jpegImage !== undefined && jpegImage.byteLength > 0) {
+      return {
+        mimeType: "image/jpeg",
+        base64: jpegImage.toString("base64"),
+        width: size.width,
+        height: size.height
+      };
+    }
+
+    const pngImage = source.thumbnail.toPNG();
+
+    if (pngImage.byteLength === 0) {
       throw new ScreenshotCaptureError("The captured screenshot image was empty.");
     }
 
     return {
       mimeType: "image/png",
-      base64: image.toString("base64"),
+      base64: pngImage.toString("base64"),
       width: size.width,
       height: size.height
     };
+  }
+}
+
+async function getSources(
+  deps: ScreenshotServiceDeps,
+  thumbnailSize: {
+    width: number;
+    height: number;
+  }
+): Promise<DesktopCapturerSourceLike[]> {
+  try {
+    return await deps.desktopCapturer.getSources({
+      types: ["screen"],
+      thumbnailSize
+    });
+  } catch {
+    throw new ScreenshotCaptureError("Mauz needs Screen Recording permission to capture screenshot context.");
   }
 }
 

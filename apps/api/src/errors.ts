@@ -1,6 +1,6 @@
 export class MissingOpenAIKeyError extends Error {
   constructor() {
-    super("OPENAI_API_KEY is not configured.");
+    super("Add OPENAI_API_KEY to your .env file, then restart Mauz.");
     this.name = "MissingOpenAIKeyError";
   }
 }

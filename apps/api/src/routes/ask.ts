@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   AskMauzRequestSchema,
   AskMauzResponseSchema,
+  LOCAL_API_TOKEN_HEADER,
   type AskMauzRequest,
   type AskMauzResponse
 } from "@mauzai/shared";
@@ -12,6 +13,7 @@ export type AskMauzHandler = (request: AskMauzRequest) => Promise<AskMauzRespons
 
 export type RegisterAskRouteOptions = {
   askHandler?: AskMauzHandler;
+  authToken?: string;
 };
 
 export async function registerAskRoute(
@@ -21,6 +23,12 @@ export async function registerAskRoute(
   const askHandler = options.askHandler ?? askMauz;
 
   app.post("/api/ask", async (request, reply) => {
+    if (options.authToken !== undefined && request.headers[LOCAL_API_TOKEN_HEADER] !== options.authToken) {
+      return reply.status(401).send({
+        error: "Unauthorized local Mauz API request."
+      });
+    }
+
     const parsed = AskMauzRequestSchema.safeParse(request.body);
 
     if (!parsed.success) {

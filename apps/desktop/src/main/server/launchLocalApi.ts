@@ -6,8 +6,14 @@ export type LocalApiHandle = {
   stop(): Promise<void>;
 };
 
-export async function launchLocalApi(): Promise<LocalApiHandle> {
-  const app = await createMauzApiServer();
+export type LaunchLocalApiOptions = {
+  authToken: string;
+};
+
+export async function launchLocalApi(options: LaunchLocalApiOptions): Promise<LocalApiHandle> {
+  const app = await createMauzApiServer({
+    authToken: options.authToken
+  });
   const configuredPort = Number.parseInt(process.env.MAUZ_API_PORT ?? String(DEFAULT_MAUZ_API_PORT), 10);
   const port = Number.isFinite(configuredPort) ? configuredPort : DEFAULT_MAUZ_API_PORT;
 

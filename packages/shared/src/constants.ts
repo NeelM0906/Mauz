@@ -8,6 +8,8 @@ export const MAUZ_ASK_PANEL_SIZE = {
   height: 520
 } as const;
 
+export const LOCAL_API_TOKEN_HEADER = "x-mauz-local-token";
+
 export const IPC_CHANNELS = {
   menuShowMenu: "mauz:menu:show-menu",
   menuClose: "mauz:menu:close",
