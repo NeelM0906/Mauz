@@ -1,0 +1,81 @@
+import { describe, expect, it } from "vitest";
+import type { MouseMoveSample } from "@mauzai/shared";
+import { ShakeDetector } from "../src/main/input/ShakeDetector";
+
+function feed(detector: ShakeDetector, samples: MouseMoveSample[]): boolean {
+  let activated = false;
+
+  for (const sample of samples) {
+    activated = detector.push(sample).activated || activated;
+  }
+
+  return activated;
+}
+
+function verticalShake(startTs = 1_000, options: { buttons?: number; xDrift?: number } = {}): MouseMoveSample[] {
+  const yValues = [100, 225, 95, 222, 90, 218, 85];
+  const xDrift = options.xDrift ?? 24;
+
+  return yValues.map((y, index) => ({
+    x: 300 + Math.round((index / (yValues.length - 1)) * xDrift),
+    y,
+    ts: startTs + index * 110,
+    ...(options.buttons === undefined ? {} : { buttons: options.buttons })
+  }));
+}
+
+describe("ShakeDetector", () => {
+  it("does not activate on normal mouse movement", () => {
+    const detector = new ShakeDetector();
+    const samples = Array.from({ length: 12 }, (_, index) => ({
+      x: 100 + index * 12,
+      y: 100 + index * 20,
+      ts: 1_000 + index * 80
+    }));
+
+    expect(feed(detector, samples)).toBe(false);
+  });
+
+  it("activates on rapid up/down movement", () => {
+    const detector = new ShakeDetector();
+
+    expect(feed(detector, verticalShake())).toBe(true);
+  });
+
+  it("does not activate during cooldown", () => {
+    const detector = new ShakeDetector();
+
+    expect(feed(detector, verticalShake(1_000))).toBe(true);
+    expect(feed(detector, verticalShake(2_100))).toBe(false);
+    expect(feed(detector, verticalShake(4_300))).toBe(true);
+  });
+
+  it("ignores tiny jitter", () => {
+    const detector = new ShakeDetector();
+    const samples = [100, 105, 98, 106, 99, 104, 100, 103].map((y, index) => ({
+      x: 200 + index,
+      y,
+      ts: 1_000 + index * 90
+    }));
+
+    expect(feed(detector, samples)).toBe(false);
+  });
+
+  it("ignores drag/button-held movement", () => {
+    const detector = new ShakeDetector();
+
+    expect(feed(detector, verticalShake(1_000, { buttons: 1 }))).toBe(false);
+  });
+
+  it("tolerates some horizontal drift", () => {
+    const detector = new ShakeDetector();
+
+    expect(feed(detector, verticalShake(1_000, { xDrift: 100 }))).toBe(true);
+  });
+
+  it("rejects mostly horizontal movement", () => {
+    const detector = new ShakeDetector();
+
+    expect(feed(detector, verticalShake(1_000, { xDrift: 240 }))).toBe(false);
+  });
+});
