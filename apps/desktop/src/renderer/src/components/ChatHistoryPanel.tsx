@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import type { ChatConversation, ChatHistoryGroup } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { BrandLogo } from "./BrandLogo";
 import { FormattedAnswer } from "./FormattedAnswer";
 
 export function ChatHistoryPanel(): React.JSX.Element {
@@ -80,13 +81,16 @@ export function ChatHistoryPanel(): React.JSX.Element {
         <button className="icon-button" type="button" aria-label="Back" onClick={() => void handleBack()}>
           <ArrowLeft aria-hidden="true" size={16} />
         </button>
-        <div>
-          <h1>{selectedConversation === null ? "Prev chats" : selectedConversation.title}</h1>
-          <p>
-            {selectedConversation === null
-              ? "Saved text-only Mauz conversations."
-              : formatConversationDate(selectedConversation)}
-          </p>
+        <div className="panel-title">
+          <BrandLogo className="panel-title-logo" />
+          <div>
+            <h1>{selectedConversation === null ? "Prev chats" : selectedConversation.title}</h1>
+            <p>
+              {selectedConversation === null
+                ? "Saved text-only Mauz conversations."
+                : formatConversationDate(selectedConversation)}
+            </p>
+          </div>
         </div>
         <button
           className="icon-button"

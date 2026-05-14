@@ -27,6 +27,7 @@ import {
 } from "@renderer/lib/realtimeConversation";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { BrandLogo } from "./BrandLogo";
 
 const SCREEN_FRAME_INTERVAL_MS = 2_000;
 
@@ -196,9 +197,12 @@ export function TalkPanel({ mode }: { mode: RealtimeMode }): React.JSX.Element {
         >
           <ArrowLeft aria-hidden="true" size={16} />
         </button>
-        <div>
-          <h1>{title}</h1>
-          <p>{mode === "screen" ? "Mauz can see screenshots you share." : "Voice is connected to Mauz."}</p>
+        <div className="panel-title">
+          <BrandLogo className="panel-title-logo" />
+          <div>
+            <h1>{title}</h1>
+            <p>{mode === "screen" ? "Mauz can see screenshots you share." : "Voice is connected to Mauz."}</p>
+          </div>
         </div>
         <button
           className="icon-button"

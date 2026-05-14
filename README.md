@@ -1,146 +1,65 @@
+<p align="center">
+  <img src="apps/desktop/src/renderer/src/assets/mauzai-logo.png" alt="MauzAI" width="720" />
+</p>
+
 # MauzAI
 
-MauzAI is a macOS-first point-and-ask desktop assistant MVP. Shake your mouse to summon Mauz, point at anything on screen, and ask for help without leaving your flow.
+MauzAI is a macOS desktop assistant that appears where you are working. Shake your mouse or use the shortcut, choose what context to share, and ask about the screen in front of you without switching apps.
 
-## Current Milestone
+## Why MauzAI
 
-Implemented:
+Most assistants wait in a separate tab. MauzAI lives on the desktop, close to the thing you are looking at, so the conversation starts with the right visual context.
 
-- `apps/desktop`: Electron + React + Vite popup shell.
-- `apps/api`: local Fastify API with `GET /healthz`, `POST /api/ask`, and `POST /api/realtime/connect`.
-- `packages/shared`: shared TypeScript types, IPC constants, and Zod schemas.
-- `CommandOrControl+Shift+M`: opens the Mauz popup near the cursor.
-- Native macOS shake helper: optional Swift helper emits global mouse movement samples to the TypeScript `ShakeDetector`.
-- `Ask Mauz`: hides the popup, captures a cursor-centered crop plus the current display screenshot, stores context in memory, accepts a question, and renders an OpenAI answer.
-- Formatted answers: Ask responses render headings, lists, paragraphs, and code blocks instead of raw text dumps.
-- `Prev chats`: opens grouped previous Ask conversations by `MM/DD/YY`. Mauz stores text-only question/answer history and generates a short title with `gpt-5.4-nano`.
-- Pointer context engine: Ask payloads now include cursor coordinates, display metadata, active app/window metadata when available, selected text when available, a cursor-area crop, and a full screenshot fallback.
-- Shake settings: native shake can be enabled or disabled locally, with relaxed, normal, and strict sensitivity presets.
-- `Talk to Mauz`: starts a WebRTC Realtime voice session after the user explicitly chooses Talk.
-- `Show Mauz my screen`: starts a Realtime voice session and sends periodic compressed screenshot frames while sharing is visible and not paused.
-- Local API auth: the Electron main process generates a process-lifetime token for private local API routes.
-- `ShakeDetector`: pure TypeScript vertical-shake detector with unit tests.
-- Prettier formatting via `pnpm format`.
+Use MauzAI when you want help understanding an interface, summarizing visible content, explaining an error, deciding what to do next, or talking through something on your screen.
 
-Not implemented yet:
+## What You Can Do
 
-- Packaging/signing.
+- Ask about the area around your cursor.
+- Start a voice conversation with Mauz.
+- Share your screen explicitly when live visual context matters.
+- Save and revisit previous text conversations.
+- Tune mouse-shake activation so the assistant opens only when you mean it.
+- Keep control of when screenshots, microphone audio, and screen frames are shared.
 
-## Development
+## How It Works
 
-Install dependencies:
+1. Summon Mauz near your cursor with the keyboard shortcut or mouse shake.
+2. Choose Ask, Talk, or Show Mauz my screen.
+3. Mauz uses the context you approved to answer, explain, summarize, or guide your next step.
+4. Close the popup when you are done and return to your work.
 
-```bash
-pnpm install
-```
+## Product Principles
 
-Run the desktop app:
+- Context should be intentional. Mauz does not capture your screen until you choose an action.
+- Desktop help should be fast. The assistant opens near your cursor instead of pulling you into another app.
+- Privacy controls should be visible. Screen sharing, microphone access, and history are all explicit user actions.
+- Answers should be useful in place. Mauz is designed for short, practical help while you keep working.
 
-```bash
-pnpm dev
-```
+## Privacy
 
-Run tests:
+MauzAI is built around user-controlled context sharing.
 
-```bash
-pnpm test
-```
+- Mouse shake only opens the menu.
+- Ask mode captures context after you choose Ask Mauz.
+- Voice starts only after you choose Talk to Mauz or Show Mauz my screen.
+- Screen sharing uses explicit screenshot frames while sharing is active.
+- Previous chats store the typed question, Mauz's text answer, generated title, and timestamps.
+- Cursor crops, screenshots, selected text, and microphone audio are not used until the relevant action is started.
 
-Run type checks:
+## Current Status
 
-```bash
-pnpm typecheck
-```
+MauzAI is in macOS preview. The current product includes point-and-ask help, voice conversations, explicit screen sharing, chat history, native mouse-shake activation, and local settings.
 
-Run the full local gate:
+Packaging, signing, and a public distribution flow are still upcoming.
 
-```bash
-pnpm check
-```
+## Roadmap
 
-Format the repo:
+- Signed macOS builds.
+- A smoother first-run onboarding flow.
+- Richer conversation history controls.
+- More precise context controls for shared windows and selected regions.
+- Product polish for long-running voice and screen-sharing sessions.
 
-```bash
-pnpm format
-```
+## Brand
 
-Build all packages:
-
-```bash
-pnpm build
-```
-
-Build the native macOS input helper:
-
-```bash
-native/macos/MauzInputAgent/build.sh
-```
-
-## Controls
-
-- Press `CommandOrControl+Shift+M` to open the Mauz popup near the current cursor position.
-- On macOS, set `MAUZ_ENABLE_NATIVE_INPUT=true`, build the helper, and rapidly shake the mouse vertically to open Mauz.
-- Click `Ask Mauz` to capture pointer context. Mauz captures a crop around the cursor first, then a full screenshot for broader context.
-- Click `Prev chats` to browse past text conversations grouped by date.
-- Click `Talk to Mauz` to start a natural Realtime voice-agent session with initial pointer/screenshot context. Mauz uses `gpt-realtime-2` with semantic turn detection; mute is only a privacy control.
-- Click `Show Mauz my screen` to start voice plus explicit screen sharing. Mauz sends fresh screenshot frames about every two seconds until you pause, stop, or close the panel. Frames update visual context only; Mauz responds to your spoken turns.
-- Use the settings button in the Mauz menu to toggle native shake and adjust sensitivity. The dev hotkey fallback remains available unless disabled in local settings.
-- Press `Esc` or click away to close the popup.
-
-## Environment
-
-Copy `.env.example` to `.env` or provide these variables in the shell before running `pnpm dev`:
-
-```bash
-OPENAI_API_KEY=
-OPENAI_ASK_MODEL=gpt-5.4-mini
-OPENAI_ASK_MAX_OUTPUT_TOKENS=700
-OPENAI_INCLUDE_FULL_SCREENSHOT=false
-OPENAI_CHAT_TITLE_MODEL=gpt-5.4-nano
-OPENAI_REALTIME_MODEL=gpt-realtime-2
-OPENAI_REALTIME_REASONING_EFFORT=low
-MAUZ_API_PORT=47891
-MAUZ_ENABLE_NATIVE_INPUT=false
-MAUZ_ENABLE_DEV_HOTKEY=true
-```
-
-`OPENAI_API_KEY` is read only by the local API server in the Electron main process. It is never exposed to the renderer.
-
-`OPENAI_INCLUDE_FULL_SCREENSHOT=false` keeps Ask requests faster by sending the cursor crop as the primary image input and omitting the broad screenshot image when a crop exists. Set it to `true` when you want maximum broad screen context.
-
-`MAUZ_ENABLE_NATIVE_INPUT=true` enables the Swift mouse helper on macOS. macOS requires Accessibility permission for global mouse event monitoring. If permission is missing, Mauz shows:
-
-```text
-Mauz needs Accessibility permission to detect the mouse shake. Open System Settings -> Privacy & Security -> Accessibility, then enable MauzInputAgent.
-```
-
-The helper build script creates `native/macos/MauzInputAgent/MauzInputAgent.app` with bundle identifier `ai.mauz.input-agent`. If macOS does not list it automatically, add that app bundle in Accessibility settings.
-
-If screenshot capture fails on macOS, grant Screen Recording permission in System Settings, then restart MauzAI. Ask Mauz still allows text-only questions when screenshot capture is unavailable.
-
-## Privacy Posture
-
-- No screenshot is captured until the user clicks `Ask Mauz`, `Talk to Mauz`, or `Show Mauz my screen`.
-- Mouse shake activation only opens the Mauz menu; it does not capture screenshots.
-- Cursor crops and screenshot context are kept in memory for the current flow.
-- Cursor crops, screenshots, and selected text are not logged or persisted.
-- Previous chats persist only the user's typed question, Mauz's text answer, generated title, and timestamps.
-- Selected text capture uses macOS Accessibility APIs when available and does not mutate the clipboard.
-- The local API requires a private `x-mauz-local-token` header generated inside the Electron main process.
-- The renderer only receives a small typed API via Electron `contextBridge`; raw `ipcRenderer`, filesystem access, OpenAI credentials, and privileged OS APIs are not exposed.
-- Microphone access is requested only after the user chooses `Talk to Mauz` or `Show Mauz my screen`.
-- Muting the mic disables local audio tracks without closing the Realtime session or muting Mauz's audio output.
-- Screen sharing uses explicit periodic screenshot frames, not hidden background capture.
-
-## Local API
-
-The desktop app launches a local Fastify server on `127.0.0.1:${MAUZ_API_PORT}`. The default is `47891`; if that port is already in use, the desktop app tries the next nearby ports before failing startup.
-
-- `GET /healthz` returns `{ "ok": true }`.
-- `POST /api/ask` requires `x-mauz-local-token`, validates `AskMauzRequestSchema`, sends text plus optional cursor-crop and screenshot image context to the OpenAI Responses API, and returns `AskMauzResponse`.
-- `POST /api/chat/title` requires `x-mauz-local-token`, validates `ChatTitleRequestSchema`, generates a 3-7 word conversation title, and returns `ChatTitleResponse`.
-- `POST /api/realtime/connect` requires `x-mauz-local-token`, validates `RealtimeConnectRequestSchema`, sends the renderer-created WebRTC SDP offer to OpenAI Realtime through the server-side unified interface, configures a `gpt-realtime-2` voice-agent session with semantic turn detection, and returns a Realtime SDP answer.
-
-## Realtime Architecture
-
-Mauz uses OpenAI's `/v1/realtime/calls` unified WebRTC interface from the local TypeScript API server. The renderer creates the peer connection and microphone track, but the standard OpenAI API key stays server-side. The session is configured directly as a Realtime voice-agent session because the current MVP needs low-latency speech, pointer context, screen-frame context updates, mute, pause, and stop controls. The Python Agents SDK is deferred until Mauz needs deeper tool orchestration or handoffs that justify a Python runtime in the desktop app.
+The MauzAI identity pairs a fast mouse mark with an electric bolt to match the product goal: quick desktop help the moment you need it.

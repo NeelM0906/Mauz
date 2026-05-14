@@ -2,6 +2,7 @@ import { History, MessageCircleQuestion, Mic, MonitorUp, Settings, X } from "luc
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { BrandLogo } from "./BrandLogo";
 
 type MenuAction = "ask" | "talk" | "screen";
 
@@ -76,11 +77,9 @@ export function MauzMenu(): React.JSX.Element {
   return (
     <section className="mauz-panel" aria-label="Mauz menu">
       <header className="mauz-header">
-        <div className="mauz-mark" aria-hidden="true">
-          M
-        </div>
-        <div>
-          <h1>MauzAI</h1>
+        <div className="mauz-brand">
+          <BrandLogo className="mauz-brand-logo" />
+          <h1 className="sr-only">MauzAI</h1>
           <p>Desktop help, on demand.</p>
         </div>
         <div className="mauz-header-actions">

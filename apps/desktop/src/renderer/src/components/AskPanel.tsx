@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { BrandLogo } from "./BrandLogo";
 import { FormattedAnswer } from "./FormattedAnswer";
 
 const QUICK_PROMPTS = ["What is this?", "Explain this", "What should I do here?", "Summarize this"];
@@ -81,9 +82,12 @@ export function AskPanel(): React.JSX.Element {
         >
           <ArrowLeft aria-hidden="true" size={16} />
         </button>
-        <div>
-          <h1>Ask Mauz</h1>
-          <p>{currentContext === null ? "No context captured." : "Mauz is looking near your cursor."}</p>
+        <div className="panel-title">
+          <BrandLogo className="panel-title-logo" />
+          <div>
+            <h1>Ask Mauz</h1>
+            <p>{currentContext === null ? "No context captured." : "Mauz is looking near your cursor."}</p>
+          </div>
         </div>
         <button
           className="icon-button"

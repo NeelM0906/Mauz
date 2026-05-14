@@ -2,6 +2,7 @@ import { ArrowLeft, Check, MousePointerClick, Zap } from "lucide-react";
 import type { ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { BrandLogo } from "./BrandLogo";
 
 const SENSITIVITY_OPTIONS: Array<{
   value: ShakeSensitivity;
@@ -62,9 +63,12 @@ export function SettingsPanel(): React.JSX.Element {
         >
           <ArrowLeft aria-hidden="true" size={16} />
         </button>
-        <div>
-          <h1>Settings</h1>
-          <p>Mouse shake stays local.</p>
+        <div className="panel-title">
+          <BrandLogo className="panel-title-logo" />
+          <div>
+            <h1>Settings</h1>
+            <p>Mouse shake stays local.</p>
+          </div>
         </div>
       </header>
 
