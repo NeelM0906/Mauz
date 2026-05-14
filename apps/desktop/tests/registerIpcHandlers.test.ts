@@ -9,7 +9,7 @@ vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
 
-import { IPC_CHANNELS } from "@mauzai/shared";
+import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
@@ -54,7 +54,41 @@ describe("registerIpcHandlers", () => {
       ...HANDLED_CHANNELS
     ]);
   });
+
+  it("opens Ask mode even when screenshot capture returned a permission fallback", async () => {
+    const options = createOptions();
+    const context: MauzDesktopContext = {
+      timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
+      platform: "darwin",
+      cursor: {
+        x: 200,
+        y: 300
+      },
+      screenshotError: {
+        permission: "screen-recording",
+        message: "Mauz needs Screen Recording permission to capture screenshot context."
+      }
+    };
+
+    vi.mocked(options.contextCollector.collectForAsk).mockResolvedValue(context);
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuStartAsk);
+
+    await expect(handler()).resolves.toEqual(context);
+    expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
+  });
 });
+
+function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
+  const call = ipcMainMock.handle.mock.calls.find(([registeredChannel]) => registeredChannel === channel);
+
+  if (call === undefined) {
+    throw new Error(`Missing registered handler for ${channel}.`);
+  }
+
+  return call[1] as (...args: unknown[]) => Promise<unknown>;
+}
 
 function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   const popover = {

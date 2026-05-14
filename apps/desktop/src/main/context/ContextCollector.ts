@@ -1,5 +1,5 @@
 import { screen } from "electron";
-import type { MauzDesktopContext, PermissionError, Platform } from "@mauzai/shared";
+import type { MauzDesktopContext, PermissionError, Platform, PointerContext } from "@mauzai/shared";
 import { ScreenshotCaptureError, ScreenshotService } from "./ScreenshotService";
 
 const supportedPlatforms = new Set<NodeJS.Platform>(["darwin", "win32", "linux"]);
@@ -34,17 +34,20 @@ export class ContextCollector {
 
   async collectForAsk(): Promise<MauzDesktopContext> {
     const context = this.collectBasicContext();
-    const capture = async () => this.screenshotService.captureDisplayNear(context.cursor);
+    const capture = async () => this.screenshotService.capturePointerContext(context.cursor);
 
     try {
-      const screenshot =
+      const pointer =
         this.captureHider === undefined
           ? await capture()
           : await this.captureHider.hideDuringCapture(capture);
 
+      const pointerContext = mergePointerMetadata(pointer, context);
+
       return {
         ...context,
-        screenshot
+        pointer: pointerContext,
+        screenshot: pointerContext.screenshot
       };
     } catch (error) {
       return {
@@ -61,6 +64,26 @@ export class ContextCollector {
 
     return "linux";
   }
+}
+
+function mergePointerMetadata(pointer: PointerContext, context: MauzDesktopContext): PointerContext {
+  const pointerContext: PointerContext = {
+    ...pointer
+  };
+
+  if (context.activeApp !== undefined) {
+    pointerContext.activeApp = context.activeApp;
+  }
+
+  if (context.activeWindow !== undefined) {
+    pointerContext.activeWindow = context.activeWindow;
+  }
+
+  if (context.selectedText !== undefined) {
+    pointerContext.selectedText = context.selectedText;
+  }
+
+  return pointerContext;
 }
 
 function toScreenshotError(error: unknown): PermissionError {

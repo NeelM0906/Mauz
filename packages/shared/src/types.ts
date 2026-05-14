@@ -7,6 +7,43 @@ export type ScreenshotPayload = {
   height: number;
 };
 
+export type Bounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type PointerContext = {
+  cursor: {
+    x: number;
+    y: number;
+  };
+  display?:
+    | {
+        id?: string | undefined;
+        scaleFactor?: number | undefined;
+        bounds?: Bounds | undefined;
+      }
+    | undefined;
+  activeApp?:
+    | {
+        name?: string | undefined;
+        bundleId?: string | undefined;
+        processId?: number | undefined;
+      }
+    | undefined;
+  activeWindow?:
+    | {
+        title?: string | undefined;
+        bounds?: Bounds | undefined;
+      }
+    | undefined;
+  selectedText?: string | undefined;
+  cursorCrop?: ScreenshotPayload | undefined;
+  screenshot?: ScreenshotPayload | undefined;
+};
+
 export type MauzDesktopContext = {
   timestamp: string;
   platform: Platform;
@@ -35,6 +72,7 @@ export type MauzDesktopContext = {
     y: number;
   };
   selectedText?: string | undefined;
+  pointer?: PointerContext | undefined;
   screenshot?: ScreenshotPayload | undefined;
   screenshotError?: PermissionError | undefined;
 };

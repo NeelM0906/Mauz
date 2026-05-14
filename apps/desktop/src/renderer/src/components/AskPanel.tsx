@@ -1,7 +1,9 @@
-import { ArrowLeft, Camera, LoaderCircle, Send, TextCursorInput, X } from "lucide-react";
+import { ArrowLeft, Camera, LoaderCircle, MousePointer2, Send, TextCursorInput, X } from "lucide-react";
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+
+const QUICK_PROMPTS = ["What is this?", "Explain this", "What should I do here?", "Summarize this"];
 
 export function AskPanel(): React.JSX.Element {
   const {
@@ -67,7 +69,7 @@ export function AskPanel(): React.JSX.Element {
         </button>
         <div>
           <h1>Ask Mauz</h1>
-          <p>{formatContextStatus(currentContext)}</p>
+          <p>{currentContext === null ? "No context captured." : "Mauz is looking near your cursor."}</p>
         </div>
         <button
           className="icon-button"
@@ -80,6 +82,10 @@ export function AskPanel(): React.JSX.Element {
       </header>
 
       <div className="context-strip" aria-label="Context status">
+        <span>
+          <MousePointer2 aria-hidden="true" size={14} />
+          {formatCursorCropStatus(currentContext)}
+        </span>
         <span>
           <Camera aria-hidden="true" size={14} />
           {formatScreenshotStatus(currentContext)}
@@ -100,6 +106,14 @@ export function AskPanel(): React.JSX.Element {
           )}
         </div>
       ) : null}
+
+      <div className="quick-prompts" aria-label="Quick prompts">
+        {QUICK_PROMPTS.map((prompt) => (
+          <button key={prompt} type="button" disabled={askLoading} onClick={() => setQuestion(prompt)}>
+            {prompt}
+          </button>
+        ))}
+      </div>
 
       <form className="ask-form" onSubmit={(event) => void handleSubmit(event)}>
         <textarea
@@ -123,30 +137,30 @@ export function AskPanel(): React.JSX.Element {
         {askError !== null ? <p className="ask-error">{askError}</p> : null}
         {askAnswer !== null ? <p className="ask-answer">{askAnswer}</p> : null}
         {askError === null && askAnswer === null ? (
-          <p className="ask-empty">Mauz will answer using the screenshot captured when you opened Ask.</p>
+          <p className="ask-empty">Ask about the area around your cursor.</p>
         ) : null}
       </div>
     </section>
   );
 }
 
-function formatContextStatus(context: ReturnType<typeof useMauzStore.getState>["currentContext"]): string {
-  if (context === null) {
-    return "No context captured.";
+function formatCursorCropStatus(context: ReturnType<typeof useMauzStore.getState>["currentContext"]): string {
+  if (context?.pointer?.cursorCrop !== undefined) {
+    return "Cursor area attached";
   }
 
-  if (context.screenshotError !== undefined) {
-    return "Context captured without screenshot.";
+  if (context?.screenshotError !== undefined) {
+    return "No cursor area";
   }
 
-  return context.screenshot === undefined
-    ? "Context captured without screenshot."
-    : "Screenshot context captured.";
+  return "Cursor area pending";
 }
 
 function formatScreenshotStatus(context: ReturnType<typeof useMauzStore.getState>["currentContext"]): string {
-  if (context?.screenshot !== undefined) {
-    return `${context.screenshot.width}x${context.screenshot.height}`;
+  const screenshot = context?.pointer?.screenshot ?? context?.screenshot;
+
+  if (screenshot !== undefined) {
+    return "Screenshot attached";
   }
 
   if (context?.screenshotError !== undefined) {

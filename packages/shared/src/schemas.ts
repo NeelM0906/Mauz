@@ -9,6 +9,13 @@ export const ScreenshotPayloadSchema = z.object({
   height: z.number().int().positive()
 });
 
+export const BoundsSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite(),
+  width: z.number().finite().nonnegative(),
+  height: z.number().finite().nonnegative()
+});
+
 export const CursorPositionSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite()
@@ -39,6 +46,33 @@ export const MacInputAgentEventSchema = z.discriminatedUnion("type", [
   MacInputAgentPermissionErrorEventSchema
 ]);
 
+export const PointerContextSchema = z.object({
+  cursor: CursorPositionSchema,
+  display: z
+    .object({
+      id: z.string().optional(),
+      scaleFactor: z.number().positive().optional(),
+      bounds: BoundsSchema.optional()
+    })
+    .optional(),
+  activeApp: z
+    .object({
+      name: z.string().optional(),
+      bundleId: z.string().optional(),
+      processId: z.number().int().nonnegative().optional()
+    })
+    .optional(),
+  activeWindow: z
+    .object({
+      title: z.string().optional(),
+      bounds: BoundsSchema.optional()
+    })
+    .optional(),
+  selectedText: z.string().optional(),
+  cursorCrop: ScreenshotPayloadSchema.optional(),
+  screenshot: ScreenshotPayloadSchema.optional()
+});
+
 export const MauzDesktopContextSchema = z.object({
   timestamp: z.string().datetime(),
   platform: PlatformSchema,
@@ -64,6 +98,7 @@ export const MauzDesktopContextSchema = z.object({
     .optional(),
   cursor: CursorPositionSchema,
   selectedText: z.string().optional(),
+  pointer: PointerContextSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional(),
   screenshotError: PermissionErrorSchema.optional()
 });

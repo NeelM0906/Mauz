@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
-import type { AskMauzRequest, AskMauzResponse, MauzDesktopContext } from "@mauzai/shared";
+import type { AskMauzRequest, AskMauzResponse, MauzDesktopContext, ScreenshotPayload } from "@mauzai/shared";
 import { MissingOpenAIKeyError } from "../errors";
 import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
 
@@ -59,11 +59,21 @@ export function buildResponseContent(request: AskMauzRequest): ResponseInputMess
       text: buildContextText(request)
     }
   ];
+  const cursorCrop = request.context.pointer?.cursorCrop;
+  const screenshot = request.context.pointer?.screenshot ?? request.context.screenshot;
 
-  if (request.context.screenshot !== undefined) {
+  if (cursorCrop !== undefined) {
     content.push({
       type: "input_image",
-      image_url: `data:${request.context.screenshot.mimeType};base64,${request.context.screenshot.base64}`,
+      image_url: toDataUrl(cursorCrop),
+      detail: getScreenshotDetail()
+    });
+  }
+
+  if (screenshot !== undefined) {
+    content.push({
+      type: "input_image",
+      image_url: toDataUrl(screenshot),
       detail: getScreenshotDetail()
     });
   }
@@ -81,19 +91,27 @@ function getScreenshotDetail(): "auto" | "low" | "high" {
   return DEFAULT_SCREENSHOT_DETAIL;
 }
 
-function buildContextText({ question, context }: AskMauzRequest): string {
+export function buildContextText({ question, context }: AskMauzRequest): string {
   return [
     `User question: ${question}`,
+    "",
+    "Reference resolution priority: selected text > cursor-centered crop > active window metadata > full screenshot > cursor position.",
+    "When the user says this, that, or here, use the cursor-centered crop as the pointed target unless selected text is available.",
     "",
     "Desktop context:",
     `- Timestamp: ${context.timestamp}`,
     `- Platform: ${context.platform}`,
     `- Cursor: (${Math.round(context.cursor.x)}, ${Math.round(context.cursor.y)})`,
+    `- Pointer context: ${formatPointerContext(context)}`,
     `- Active app: ${formatActiveApp(context)}`,
     `- Active window: ${formatActiveWindow(context)}`,
     `- Selected text: ${context.selectedText?.trim() ? context.selectedText : "none provided"}`,
     `- Screenshot: ${formatScreenshot(context)}`
   ].join("\n");
+}
+
+function toDataUrl(image: ScreenshotPayload): string {
+  return `data:${image.mimeType};base64,${image.base64}`;
 }
 
 function formatActiveApp(context: MauzDesktopContext): string {
@@ -125,9 +143,37 @@ function formatActiveWindow(context: MauzDesktopContext): string {
 }
 
 function formatScreenshot(context: MauzDesktopContext): string {
-  if (context.screenshot === undefined) {
+  const screenshot = context.pointer?.screenshot ?? context.screenshot;
+
+  if (screenshot === undefined) {
     return "none attached";
   }
 
-  return `${context.screenshot.mimeType}, ${context.screenshot.width}x${context.screenshot.height}, attached as image input`;
+  return `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, attached as broad image input`;
+}
+
+function formatPointerContext(context: MauzDesktopContext): string {
+  const pointer = context.pointer;
+
+  if (pointer === undefined) {
+    return "cursor coordinates only";
+  }
+
+  const displayBounds = pointer.display?.bounds;
+  const displayText =
+    displayBounds === undefined
+      ? undefined
+      : `display ${Math.round(displayBounds.width)}x${Math.round(displayBounds.height)} at ${Math.round(displayBounds.x)},${Math.round(displayBounds.y)}`;
+  const cursorCrop =
+    pointer.cursorCrop === undefined
+      ? "no cursor crop"
+      : `cursor-centered crop ${pointer.cursorCrop.mimeType}, ${pointer.cursorCrop.width}x${pointer.cursorCrop.height}, attached as first image input`;
+
+  return [
+    `cursor (${Math.round(pointer.cursor.x)}, ${Math.round(pointer.cursor.y)})`,
+    displayText,
+    cursorCrop
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
