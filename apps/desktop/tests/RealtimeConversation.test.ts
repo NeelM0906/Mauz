@@ -43,6 +43,14 @@ describe("Realtime voice event mapping", () => {
     expect(
       getVoiceStateForRealtimeEvent(
         {
+          type: "response.output_audio.delta"
+        },
+        { muted: false }
+      )
+    ).toBe("mauz_speaking");
+    expect(
+      getVoiceStateForRealtimeEvent(
+        {
           type: "response.done"
         },
         { muted: false }

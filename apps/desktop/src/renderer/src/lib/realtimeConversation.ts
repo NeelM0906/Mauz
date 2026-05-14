@@ -39,7 +39,7 @@ export function getVoiceStateForRealtimeEvent(
     return options.muted ? "muted" : "thinking";
   }
 
-  if (event.type === "response.audio.delta") {
+  if (event.type === "response.audio.delta" || event.type === "response.output_audio.delta") {
     return "mauz_speaking";
   }
 
