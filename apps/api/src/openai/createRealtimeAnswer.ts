@@ -38,6 +38,14 @@ export async function createRealtimeAnswer(
       type: "realtime",
       model,
       instructions: buildRealtimeInstructions(request),
+      turn_detection: {
+        type: "server_vad",
+        threshold: 0.5,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 650,
+        create_response: true,
+        interrupt_response: true
+      },
       audio: {
         output: {
           voice: options.voice ?? process.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE
@@ -72,7 +80,7 @@ export function buildRealtimeInstructions({ mode, context }: RealtimeConnectRequ
     "Resolve references in this order: selected text, cursor crop, active window metadata, full screenshot, cursor position.",
     "Answer directly unless the pointed target is genuinely ambiguous. If it is ambiguous, ask one short follow-up.",
     mode === "screen"
-      ? "The user explicitly enabled screen sharing. They may send periodic screenshot frames as the screen changes."
+      ? "The user is in explicit screen-sharing voice mode. Voice is the primary interaction channel. You may receive periodic screenshots as updated visual context. Use the newest screen frame as the current visual context when answering. Do not narrate every screen change or respond merely because a new frame arrived. Wait for the user to ask, unless they explicitly requested proactive guidance."
       : "The user explicitly enabled voice chat. Use the initial screenshot context only unless they share more context.",
     "",
     "Initial desktop context:",
