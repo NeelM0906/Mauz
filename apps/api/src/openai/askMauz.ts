@@ -27,6 +27,7 @@ export async function askMauz(
   const client = options.client ?? new OpenAI({ apiKey });
   const response = await client.responses.create({
     model,
+    store: false,
     input: [
       {
         role: "system",

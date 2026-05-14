@@ -38,6 +38,32 @@ describe("Ask Mauz API", () => {
     });
   });
 
+  it("rejects Ask requests with an invalid configured local token", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      askHandler: async () => {
+        throw new Error("should not be called");
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ask",
+      headers: {
+        [LOCAL_API_TOKEN_HEADER]: "wrong-local-test-token"
+      },
+      payload: validRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({
+      error: "Unauthorized local Mauz API request."
+    });
+  });
+
   it("accepts Ask requests with the configured local token", async () => {
     const app = await createMauzApiServer({
       loadEnv: false,
