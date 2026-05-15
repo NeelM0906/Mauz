@@ -70,7 +70,7 @@ describe("connectRealtimeToLocalApi", () => {
         validRequest,
         fetchImpl
       )
-    ).rejects.toThrow("Add OPENAI_API_KEY to your .env file, then restart Mauz.");
+    ).rejects.toThrow("Configure OpenAI API key access in Mauz settings, then try again.");
   });
 });
 

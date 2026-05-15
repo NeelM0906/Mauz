@@ -1,6 +1,6 @@
 export class MissingOpenAIKeyError extends Error {
-  constructor() {
-    super("Add OPENAI_API_KEY to your .env file, then restart Mauz.");
+  constructor(message = "Configure OpenAI access in Mauz settings, then try again.") {
+    super(message);
     this.name = "MissingOpenAIKeyError";
   }
 }

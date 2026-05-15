@@ -93,4 +93,12 @@ describe("createRealtimeAnswer", () => {
     expect(screenInstructions).toContain("Do not narrate every screen change");
     expect(screenInstructions).toContain("Wait for the user to ask");
   });
+
+  it("requires API key auth for Realtime when Codex auth is selected", async () => {
+    await expect(
+      createRealtimeAnswer(validRealtimeRequest, {
+        authMode: "codex"
+      })
+    ).rejects.toThrow("Realtime voice requires API key authentication.");
+  });
 });

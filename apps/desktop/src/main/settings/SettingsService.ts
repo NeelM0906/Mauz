@@ -24,6 +24,7 @@ const DEFAULT_CHAT_TITLE_MODEL = "gpt-5.4-nano";
 const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
 const DEFAULT_REALTIME_REASONING_EFFORT = "low";
+const DEFAULT_OPENAI_AUTH_MODE = "api-key";
 
 type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured"> & {
   openAiApiKey?: string | undefined;
@@ -81,6 +82,7 @@ export class SettingsService {
     applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
     applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
     applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
+    applyDefinedSetting(nextSettings, "openAiAuthMode", parsedUpdate.openAiAuthMode);
     applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
     applyDefinedSetting(nextSettings, "chatTitleModel", parsedUpdate.chatTitleModel);
     applyDefinedSetting(nextSettings, "realtimeModel", parsedUpdate.realtimeModel);
@@ -142,6 +144,7 @@ function getDefaultSettings(): StoredMauzSettings {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, false),
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
+    openAiAuthMode: process.env.OPENAI_AUTH_MODE === "codex" ? "codex" : DEFAULT_OPENAI_AUTH_MODE,
     askModel: process.env.OPENAI_ASK_MODEL?.trim() || DEFAULT_ASK_MODEL,
     chatTitleModel: process.env.OPENAI_CHAT_TITLE_MODEL?.trim() || DEFAULT_CHAT_TITLE_MODEL,
     realtimeModel: process.env.OPENAI_REALTIME_MODEL?.trim() || DEFAULT_REALTIME_MODEL,
@@ -178,6 +181,7 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     nativeShakeEnabled: publicSettings.data.nativeShakeEnabled,
     devHotkeyEnabled: publicSettings.data.devHotkeyEnabled,
     shakeSensitivity: publicSettings.data.shakeSensitivity,
+    openAiAuthMode: publicSettings.data.openAiAuthMode,
     askModel: publicSettings.data.askModel,
     chatTitleModel: publicSettings.data.chatTitleModel,
     realtimeModel: publicSettings.data.realtimeModel,
@@ -193,6 +197,7 @@ function toPublicSettings(settings: StoredMauzSettings, environmentApiKey: strin
     nativeShakeEnabled: settings.nativeShakeEnabled,
     devHotkeyEnabled: settings.devHotkeyEnabled,
     shakeSensitivity: settings.shakeSensitivity,
+    openAiAuthMode: settings.openAiAuthMode,
     askModel: settings.askModel,
     chatTitleModel: settings.chatTitleModel,
     realtimeModel: settings.realtimeModel,

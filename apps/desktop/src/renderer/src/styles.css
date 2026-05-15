@@ -1210,6 +1210,10 @@ button {
   gap: 4px;
 }
 
+.segmented-control.auth-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .segmented-control button {
   min-width: 0;
   height: 30px;

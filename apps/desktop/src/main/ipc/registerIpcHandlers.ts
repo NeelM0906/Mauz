@@ -227,6 +227,7 @@ function toSettingsUpdate(parsedUpdate: {
   nativeShakeEnabled?: boolean | undefined;
   devHotkeyEnabled?: boolean | undefined;
   shakeSensitivity?: MauzSettings["shakeSensitivity"] | undefined;
+  openAiAuthMode?: MauzSettings["openAiAuthMode"] | undefined;
   askModel?: string | undefined;
   chatTitleModel?: string | undefined;
   realtimeModel?: string | undefined;
@@ -247,6 +248,10 @@ function toSettingsUpdate(parsedUpdate: {
 
   if (parsedUpdate.shakeSensitivity !== undefined) {
     update.shakeSensitivity = parsedUpdate.shakeSensitivity;
+  }
+
+  if (parsedUpdate.openAiAuthMode !== undefined) {
+    update.openAiAuthMode = parsedUpdate.openAiAuthMode;
   }
 
   if (parsedUpdate.askModel !== undefined) {

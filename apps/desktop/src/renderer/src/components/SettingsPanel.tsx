@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, Cpu, KeyRound, MousePointerClick, Save, Settings2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { MauzSettings, RealtimeReasoningEffort, ShakeSensitivity } from "@mauzai/shared";
+import type { MauzSettings, OpenAiAuthMode, RealtimeReasoningEffort, ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -28,6 +28,19 @@ const TITLE_MODEL_OPTIONS = ["gpt-5.4-nano", "gpt-5.4-mini"];
 const REALTIME_MODEL_OPTIONS = ["gpt-realtime-2", "gpt-realtime-mini"];
 const VOICE_OPTIONS = ["marin", "cedar", "alloy"];
 const REASONING_OPTIONS: RealtimeReasoningEffort[] = ["low", "medium", "high"];
+const AUTH_OPTIONS: Array<{
+  value: OpenAiAuthMode;
+  label: string;
+}> = [
+  {
+    value: "codex",
+    label: "Codex"
+  },
+  {
+    value: "api-key",
+    label: "API key"
+  }
+];
 
 type SettingsPanelProps = {
   chrome?: "popover" | "desktop";
@@ -97,13 +110,16 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         nativeShakeEnabled: draft.nativeShakeEnabled,
         devHotkeyEnabled: draft.devHotkeyEnabled,
         shakeSensitivity: draft.shakeSensitivity,
+        openAiAuthMode: draft.openAiAuthMode,
         askModel: draft.askModel,
         chatTitleModel: draft.chatTitleModel,
         realtimeModel: draft.realtimeModel,
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
         includeFullScreenshot: draft.includeFullScreenshot,
-        ...(apiKeyInput.trim().length > 0 ? { openAiApiKey: apiKeyInput.trim() } : {})
+        ...(draft.openAiAuthMode === "api-key" && apiKeyInput.trim().length > 0
+          ? { openAiApiKey: apiKeyInput.trim() }
+          : {})
       });
       setSettings(nextSettings);
       setApiKeyInput("");
@@ -158,21 +174,39 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             <KeyRound aria-hidden="true" size={15} />
             <span>OpenAI</span>
           </div>
-          <label className="settings-field">
-            <span>API key</span>
-            <input
-              type="password"
-              value={apiKeyInput}
-              placeholder={draft.apiKeyConfigured ? "Saved" : "Paste key"}
-              autoComplete="off"
-              onChange={(event) => setApiKeyInput(event.target.value)}
-            />
-          </label>
-          <div className="settings-inline-actions">
-            <button type="button" className="secondary-button" onClick={() => void handleClearApiKey()}>
-              Clear key
-            </button>
+          <div className="segmented-control auth-control" role="group" aria-label="OpenAI access method">
+            {AUTH_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={draft.openAiAuthMode === option.value}
+                onClick={() => updateDraft("openAiAuthMode", option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
+          {draft.openAiAuthMode === "api-key" ? (
+            <>
+              <label className="settings-field">
+                <span>API key</span>
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  placeholder={draft.apiKeyConfigured ? "Saved" : "Paste key"}
+                  autoComplete="off"
+                  onChange={(event) => setApiKeyInput(event.target.value)}
+                />
+              </label>
+              <div className="settings-inline-actions">
+                <button type="button" className="secondary-button" onClick={() => void handleClearApiKey()}>
+                  Clear key
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="settings-message">Codex auth selected.</p>
+          )}
         </div>
 
         <div className="settings-section">

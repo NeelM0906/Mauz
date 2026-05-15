@@ -17,6 +17,7 @@ export type CreateRealtimeAnswerOptions = {
   apiKey?: string;
   model?: string;
   voice?: string;
+  authMode?: "api-key" | "codex";
   fetchImpl?: FetchLike;
 };
 
@@ -26,6 +27,13 @@ export async function createRealtimeAnswer(
 ): Promise<RealtimeConnectResponse> {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const model = options.model ?? process.env.OPENAI_REALTIME_MODEL ?? DEFAULT_REALTIME_MODEL;
+  const authMode = options.authMode ?? getOpenAiAuthMode();
+
+  if (authMode === "codex") {
+    throw new MissingOpenAIKeyError(
+      "Realtime voice requires API key authentication. Switch Mauz OpenAI access to API key."
+    );
+  }
 
   if (!apiKey) {
     throw new MissingOpenAIKeyError();
@@ -61,6 +69,10 @@ export async function createRealtimeAnswer(
     answerSdp,
     model
   };
+}
+
+function getOpenAiAuthMode(): "api-key" | "codex" {
+  return process.env.OPENAI_AUTH_MODE === "codex" ? "codex" : "api-key";
 }
 
 export type RealtimeSessionConfigOptions = {
@@ -141,7 +153,7 @@ function formatBounds(bounds: Bounds | undefined): string | undefined {
 
 function getRealtimeErrorMessage(status: number, body: string): string {
   if (status === 401) {
-    return "OpenAI rejected the Realtime request. Check OPENAI_API_KEY and restart Mauz.";
+    return "OpenAI rejected the Realtime request. Check API key access in Mauz settings.";
   }
 
   if (body.trim().length > 0) {

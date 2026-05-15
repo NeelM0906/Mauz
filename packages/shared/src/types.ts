@@ -178,10 +178,13 @@ export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
 export type RealtimeReasoningEffort = "low" | "medium" | "high";
 
+export type OpenAiAuthMode = "api-key" | "codex";
+
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
   devHotkeyEnabled: boolean;
   shakeSensitivity: ShakeSensitivity;
+  openAiAuthMode: OpenAiAuthMode;
   askModel: string;
   chatTitleModel: string;
   realtimeModel: string;

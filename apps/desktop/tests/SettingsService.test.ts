@@ -49,6 +49,19 @@ describe("SettingsService", () => {
       openAiApiKey: "sk-env"
     });
   });
+
+  it("persists the selected OpenAI auth mode", async () => {
+    const service = createSettingsService({
+      settingsJson: JSON.stringify(DEFAULT_SETTINGS)
+    });
+
+    await expect(service.update({ openAiAuthMode: "codex" })).resolves.toMatchObject({
+      openAiAuthMode: "codex"
+    });
+    await expect(service.getRuntime()).resolves.toMatchObject({
+      openAiAuthMode: "codex"
+    });
+  });
 });
 
 function createSettingsService({
@@ -75,6 +88,7 @@ const DEFAULT_SETTINGS = {
   nativeShakeEnabled: true,
   devHotkeyEnabled: true,
   shakeSensitivity: "normal",
+  openAiAuthMode: "api-key",
   askModel: "gpt-5.4-mini",
   chatTitleModel: "gpt-5.4-nano",
   realtimeModel: "gpt-realtime-2",

@@ -68,7 +68,7 @@ describe("submitAskToLocalApi", () => {
         validRequest,
         fetchImpl
       )
-    ).rejects.toThrow("Add OPENAI_API_KEY to your .env file, then restart Mauz.");
+    ).rejects.toThrow("Configure OpenAI access in Mauz settings, then try again.");
   });
 });
 

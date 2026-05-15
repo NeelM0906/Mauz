@@ -9,6 +9,7 @@ export type GenerateChatTitleOptions = {
   apiKey?: string;
   model?: string;
   client?: OpenAI;
+  authMode?: "api-key" | "codex";
 };
 
 export async function generateChatTitle(
@@ -17,6 +18,25 @@ export async function generateChatTitle(
 ): Promise<ChatTitleResponse> {
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const model = options.model ?? process.env.OPENAI_CHAT_TITLE_MODEL ?? DEFAULT_CHAT_TITLE_MODEL;
+  const authMode = options.authMode ?? getOpenAiAuthMode();
+
+  if (authMode === "codex" && options.client === undefined) {
+    const { generateChatTitleWithCodexAuth } = await import("./codexAuth");
+    const title = normalizeChatTitle(
+      await generateChatTitleWithCodexAuth(request, {
+        model
+      })
+    );
+
+    if (title.length === 0) {
+      throw new Error("Mauz could not generate a chat title.");
+    }
+
+    return {
+      title,
+      model
+    };
+  }
 
   if (!apiKey && options.client === undefined) {
     throw new MissingOpenAIKeyError();
@@ -48,6 +68,10 @@ export async function generateChatTitle(
     title,
     model
   };
+}
+
+function getOpenAiAuthMode(): "api-key" | "codex" {
+  return process.env.OPENAI_AUTH_MODE === "codex" ? "codex" : "api-key";
 }
 
 export function buildFallbackChatTitle(question: string): string {
