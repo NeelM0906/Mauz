@@ -48,9 +48,23 @@ xcrun swiftc \
   -o "$OUTPUT"
 
 chmod +x "$OUTPUT"
-xattr -cr "$APP_DIR"
-xattr -d com.apple.FinderInfo "$APP_DIR" 2>/dev/null || true
-xattr -d 'com.apple.fileprovider.fpfs#P' "$APP_DIR" 2>/dev/null || true
-codesign --force --sign - "$APP_DIR" >/dev/null
+clear_codesign_metadata() {
+  xattr -cr "$APP_DIR" 2>/dev/null || true
+
+  while IFS= read -r -d '' path; do
+    xattr -d com.apple.FinderInfo "$path" 2>/dev/null || true
+    xattr -d com.apple.ResourceFork "$path" 2>/dev/null || true
+    xattr -d 'com.apple.fileprovider.fpfs#P' "$path" 2>/dev/null || true
+  done < <(find "$APP_DIR" -print0)
+}
+
+clear_codesign_metadata
+if ! codesign \
+  --force \
+  --sign - \
+  --requirements '=designated => identifier "ai.mauz.input-agent"' \
+  "$APP_DIR" >/dev/null; then
+  echo "Warning: could not sign $APP_DIR; the packaged app signs its bundled copy." >&2
+fi
 
 echo "Built $APP_DIR"

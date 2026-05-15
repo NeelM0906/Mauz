@@ -35,6 +35,8 @@ let shutdownPromise: Promise<void> | null = null;
 let shutdownComplete = false;
 const shownPermissionMessages = new Set<string>();
 
+app.commandLine.appendSwitch("use-mock-keychain");
+
 type QuitEvent = {
   preventDefault(): void;
 };

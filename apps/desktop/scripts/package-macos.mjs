@@ -19,6 +19,8 @@ const frameworksDir = join(outputApp, "Contents/Frameworks");
 const packagedAppDir = join(resourcesDir, "app");
 const iconPath = resolve(appRoot, "build/mauzai.icns");
 const nativeInputAgent = resolve(appRoot, "../../native/macos/MauzInputAgent/MauzInputAgent.app");
+const nativeInputAgentBuildScript = resolve(appRoot, "../../native/macos/MauzInputAgent/build.sh");
+const nativeInputAgentStandaloneBinary = resolve(appRoot, "../../native/macos/MauzInputAgent/MauzInputAgent");
 const desktopPackage = JSON.parse(await readFile(resolve(appRoot, "package.json"), "utf8"));
 const version = typeof desktopPackage.version === "string" ? desktopPackage.version : "0.0.0";
 
@@ -56,6 +58,7 @@ await writeFile(
   )}\n`
 );
 await cp(iconPath, join(resourcesDir, "mauzai.icns"));
+await ensureNativeInputAgent();
 await copyNativeInputAgent();
 await renameHelperApps();
 
@@ -81,17 +84,41 @@ await cp(join(outputApp, "Contents/MacOS/Electron"), join(outputApp, "Contents/M
 await rm(join(outputApp, "Contents/MacOS/Electron"), { force: true });
 await clearCodeSignDetritus();
 await signBundle();
+await cleanupNativeInputAgentBuildOutput();
 
 console.log(`Packaged ${outputApp}`);
 
-async function copyNativeInputAgent() {
-  if (!existsSync(nativeInputAgent)) {
+async function ensureNativeInputAgent() {
+  if (existsSync(nativeInputAgent)) {
     return;
   }
 
+  if (process.platform !== "darwin") {
+    throw new Error("MauzInputAgent.app is required for macOS packaging and can only be built on macOS.");
+  }
+
+  if (!existsSync(nativeInputAgentBuildScript)) {
+    throw new Error(`Mauz input helper build script is missing at ${nativeInputAgentBuildScript}`);
+  }
+
+  await execFileAsync(nativeInputAgentBuildScript, [], {
+    cwd: dirname(nativeInputAgentBuildScript)
+  });
+
+  if (!existsSync(nativeInputAgent)) {
+    throw new Error(`Mauz input helper build did not produce ${nativeInputAgent}`);
+  }
+}
+
+async function copyNativeInputAgent() {
   const destination = resolve(packagedAppDir, "native/macos/MauzInputAgent/MauzInputAgent.app");
   await mkdir(dirname(destination), { recursive: true });
   await ditto(nativeInputAgent, destination);
+}
+
+async function cleanupNativeInputAgentBuildOutput() {
+  await rm(nativeInputAgent, { recursive: true, force: true });
+  await rm(nativeInputAgentStandaloneBinary, { force: true });
 }
 
 async function renameHelperApps() {
@@ -169,13 +196,25 @@ async function signBundle() {
   }
 
   for (const target of nestedSignTargets) {
-    await prepareCodeSignTarget(target);
-    await execFileAsync("codesign", ["--force", "--sign", "-", target]);
+    await signCodeTarget(target);
   }
 
-  await prepareCodeSignTarget(outputApp);
-  await execFileAsync("codesign", ["--force", "--sign", "-", outputApp]);
+  await signCodeTarget(outputApp);
   await execFileAsync("codesign", ["--verify", "--deep", "--strict", outputApp]);
+}
+
+async function signCodeTarget(target) {
+  await prepareCodeSignTarget(target);
+
+  const args = ["--force", "--sign", "-"];
+  const bundleIdentifier = target.endsWith(".app") ? await getPlistValue(join(target, "Contents/Info.plist"), "CFBundleIdentifier") : null;
+
+  if (bundleIdentifier !== null) {
+    args.push("--requirements", `=designated => identifier "${bundleIdentifier}"`);
+  }
+
+  args.push(target);
+  await execFileAsync("codesign", args);
 }
 
 async function clearCodeSignDetritus() {
@@ -255,5 +294,16 @@ async function setPlistValue(plistPath, key, value) {
     await execFileAsync("/usr/libexec/PlistBuddy", ["-c", `Set :${key} ${value}`, plistPath]);
   } catch {
     await execFileAsync("/usr/libexec/PlistBuddy", ["-c", `Add :${key} string ${value}`, plistPath]);
+  }
+}
+
+async function getPlistValue(plistPath, key) {
+  try {
+    const { stdout } = await execFileAsync("/usr/libexec/PlistBuddy", ["-c", `Print :${key}`, plistPath]);
+    const value = stdout.trim();
+
+    return value.length > 0 ? value : null;
+  } catch {
+    return null;
   }
 }

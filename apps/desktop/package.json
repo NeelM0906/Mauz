@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package:mac": "electron-vite build && node scripts/package-macos.mjs",
+    "package:mac": "pnpm --filter @mauzai/shared build && pnpm --filter @mauzai/api build && electron-vite build && node scripts/package-macos.mjs",
     "launch:mac": "node scripts/launch-macos.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
