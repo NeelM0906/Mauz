@@ -60,7 +60,6 @@ async function bootstrap(): Promise<void> {
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
-  await desktopWindow.create();
   await popover.create();
   if (isShuttingDown()) {
     return;
