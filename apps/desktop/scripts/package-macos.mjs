@@ -207,7 +207,9 @@ async function signCodeTarget(target) {
   await prepareCodeSignTarget(target);
 
   const args = ["--force", "--sign", "-"];
-  const bundleIdentifier = target.endsWith(".app") ? await getPlistValue(join(target, "Contents/Info.plist"), "CFBundleIdentifier") : null;
+  const bundleIdentifier = target.endsWith(".app")
+    ? await getPlistValue(join(target, "Contents/Info.plist"), "CFBundleIdentifier")
+    : null;
 
   if (bundleIdentifier !== null) {
     args.push("--requirements", `=designated => identifier "${bundleIdentifier}"`);

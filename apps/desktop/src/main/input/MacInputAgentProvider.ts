@@ -220,7 +220,14 @@ export class MacInputAgentProvider implements InputProvider {
         return;
       }
 
-      const child = this.spawnHelper("/usr/bin/open", ["-n", "-W", helperAppPath, "--args", "--socket", socketPath]);
+      const child = this.spawnHelper("/usr/bin/open", [
+        "-n",
+        "-W",
+        helperAppPath,
+        "--args",
+        "--socket",
+        socketPath
+      ]);
       this.child = child;
 
       child.stderr?.on("data", () => {

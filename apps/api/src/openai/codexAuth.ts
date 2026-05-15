@@ -302,5 +302,7 @@ function throwCodexError(stderr: string): never {
 
   const normalized = stderr.trim();
 
-  throw new Error(normalized.length > 0 ? `ChatGPT auth request failed: ${normalized}` : "ChatGPT auth request failed.");
+  throw new Error(
+    normalized.length > 0 ? `ChatGPT auth request failed: ${normalized}` : "ChatGPT auth request failed."
+  );
 }
