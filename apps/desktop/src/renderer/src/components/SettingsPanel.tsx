@@ -23,8 +23,8 @@ const SENSITIVITY_OPTIONS: Array<{
   }
 ];
 
-const ASK_MODEL_OPTIONS = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
-const TITLE_MODEL_OPTIONS = ["gpt-5.4-nano", "gpt-5.4-mini"];
+const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
+const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const REALTIME_MODEL_OPTIONS = ["gpt-realtime-2", "gpt-realtime-mini"];
 const VOICE_OPTIONS = ["marin", "cedar", "alloy"];
 const REASONING_OPTIONS: RealtimeReasoningEffort[] = ["low", "medium", "high"];
@@ -33,8 +33,8 @@ const AUTH_OPTIONS: Array<{
   label: string;
 }> = [
   {
-    value: "codex",
-    label: "Codex"
+    value: "chatgpt",
+    label: "ChatGPT"
   },
   {
     value: "api-key",
@@ -205,7 +205,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
               </div>
             </>
           ) : (
-            <p className="settings-message">Codex auth selected.</p>
+            <p className="settings-message">Uses your signed-in ChatGPT plan through Codex.</p>
           )}
         </div>
 

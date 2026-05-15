@@ -178,7 +178,7 @@ export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
 export type RealtimeReasoningEffort = "low" | "medium" | "high";
 
-export type OpenAiAuthMode = "api-key" | "codex";
+export type OpenAiAuthMode = "api-key" | "chatgpt";
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;

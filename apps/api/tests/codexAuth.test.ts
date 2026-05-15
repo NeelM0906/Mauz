@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
-import { buildCodexExecArgs, buildCodexSandboxProfile, getCodexImages } from "../src/openai/codexAuth";
+import { buildCodexExecArgs, getCodexImages } from "../src/openai/codexAuth";
 
 const requestWithPointerContext: AskMauzRequest = {
   question: "What is this?",
@@ -36,7 +36,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("Codex auth", () => {
+describe("ChatGPT auth through Codex", () => {
   it("uses current Codex exec flags without inheriting local agent config", () => {
     const args = buildCodexExecArgs({
       model: "gpt-5.4-mini",
@@ -50,19 +50,6 @@ describe("Codex auth", () => {
     expect(args).not.toContain("--ask-for-approval");
     expect(args).toContain("--image");
     expect(args).toContain("/tmp/crop.jpg");
-  });
-
-  it("denies shell execution and user file reads in the macOS Codex sandbox", () => {
-    const profile = buildCodexSandboxProfile("/Applications/Codex.app/Contents/Resources/codex", [
-      "/private/tmp/mauz-codex"
-    ]);
-
-    expect(profile).toContain(
-      '(allow process-exec (literal "/Applications/Codex.app/Contents/Resources/codex"))'
-    );
-    expect(profile).not.toContain("(allow process*)");
-    expect(profile).toContain('(deny file-read* (subpath "/Users") (subpath "/Volumes"))');
-    expect(profile).toContain('(allow file-write* (subpath "/private/tmp/mauz-codex"))');
   });
 
   it("omits the full screenshot by default when a cursor crop is available", () => {

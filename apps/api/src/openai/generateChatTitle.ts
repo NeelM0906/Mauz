@@ -9,7 +9,7 @@ export type GenerateChatTitleOptions = {
   apiKey?: string;
   model?: string;
   client?: OpenAI;
-  authMode?: "api-key" | "codex";
+  authMode?: "api-key" | "chatgpt";
 };
 
 export async function generateChatTitle(
@@ -20,10 +20,10 @@ export async function generateChatTitle(
   const model = options.model ?? process.env.OPENAI_CHAT_TITLE_MODEL ?? DEFAULT_CHAT_TITLE_MODEL;
   const authMode = options.authMode ?? getOpenAiAuthMode();
 
-  if (authMode === "codex" && options.client === undefined) {
-    const { generateChatTitleWithCodexAuth } = await import("./codexAuth");
+  if (authMode === "chatgpt" && options.client === undefined) {
+    const { generateChatTitleWithChatGptAuth } = await import("./codexAuth");
     const title = normalizeChatTitle(
-      await generateChatTitleWithCodexAuth(request, {
+      await generateChatTitleWithChatGptAuth(request, {
         model
       })
     );
@@ -70,8 +70,10 @@ export async function generateChatTitle(
   };
 }
 
-function getOpenAiAuthMode(): "api-key" | "codex" {
-  return process.env.OPENAI_AUTH_MODE === "codex" ? "codex" : "api-key";
+function getOpenAiAuthMode(): "api-key" | "chatgpt" {
+  return process.env.OPENAI_AUTH_MODE === "chatgpt" || process.env.OPENAI_AUTH_MODE === "codex"
+    ? "chatgpt"
+    : "api-key";
 }
 
 export function buildFallbackChatTitle(question: string): string {

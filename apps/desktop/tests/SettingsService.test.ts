@@ -55,11 +55,24 @@ describe("SettingsService", () => {
       settingsJson: JSON.stringify(DEFAULT_SETTINGS)
     });
 
-    await expect(service.update({ openAiAuthMode: "codex" })).resolves.toMatchObject({
-      openAiAuthMode: "codex"
+    await expect(service.update({ openAiAuthMode: "chatgpt" })).resolves.toMatchObject({
+      openAiAuthMode: "chatgpt"
     });
     await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiAuthMode: "codex"
+      openAiAuthMode: "chatgpt"
+    });
+  });
+
+  it("migrates the old Codex auth mode setting to ChatGPT", async () => {
+    const service = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        openAiAuthMode: "codex"
+      })
+    });
+
+    await expect(service.get()).resolves.toMatchObject({
+      openAiAuthMode: "chatgpt"
     });
   });
 });

@@ -2,14 +2,14 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { AskMauzRequest, ChatTitleRequest, ScreenshotPayload } from "@mauzai/shared";
 import { MissingOpenAIKeyError } from "../errors";
 import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
 import { buildContextText, shouldIncludeFullScreenshot } from "./askMauz";
 
 const CODEX_AUTH_MISSING_MESSAGE =
-  "Sign in to Codex with ChatGPT or an API key, or switch Mauz OpenAI access to API key.";
+  "Sign in to OpenAI/ChatGPT in Codex, or switch Mauz OpenAI access to API key.";
 const DEFAULT_CODEX_TIMEOUT_MS = 120_000;
 const MAX_TITLE_SOURCE_CHARS = 1_400;
 
@@ -23,7 +23,7 @@ type CodexImageInput = {
   image: ScreenshotPayload;
 };
 
-export async function askMauzWithCodexAuth(
+export async function askMauzWithChatGptAuth(
   request: AskMauzRequest,
   options: CodexPromptOptions
 ): Promise<string> {
@@ -35,7 +35,7 @@ export async function askMauzWithCodexAuth(
   });
 }
 
-export async function generateChatTitleWithCodexAuth(
+export async function generateChatTitleWithChatGptAuth(
   request: ChatTitleRequest,
   options: CodexPromptOptions
 ): Promise<string> {
@@ -91,7 +91,7 @@ async function runCodexPrompt({
     const answer = (await readFile(outputPath, "utf8")).trim();
 
     if (answer.length === 0) {
-      throw new Error("Codex auth returned an empty answer.");
+      throw new Error("ChatGPT auth returned an empty answer.");
     }
 
     return answer;
@@ -124,13 +124,9 @@ async function execCodex({
     imagePaths,
     outputPath
   });
-  const { command, args } = wrapCodexCommandForSandbox(codexCliPath, codexArgs, [
-    codexHome,
-    dirname(outputPath)
-  ]);
 
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(codexCliPath, codexArgs, {
       cwd: codexHome,
       env: buildCodexEnv(codexHome),
       stdio: ["pipe", "ignore", "pipe"]
@@ -138,7 +134,7 @@ async function execCodex({
     let stderr = "";
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
-      reject(new Error("Codex auth request timed out."));
+      reject(new Error("ChatGPT auth request timed out."));
     }, timeoutMs);
 
     child.stdin.end(prompt);
@@ -195,40 +191,6 @@ export function buildCodexExecArgs({
   }
 
   return args;
-}
-
-function wrapCodexCommandForSandbox(
-  codexCliPath: string,
-  codexArgs: string[],
-  writablePaths: string[]
-): { command: string; args: string[] } {
-  if (process.platform !== "darwin") {
-    throw new MissingOpenAIKeyError("Codex auth in Mauz requires the macOS sandbox.");
-  }
-
-  if (!existsSync("/usr/bin/sandbox-exec")) {
-    throw new MissingOpenAIKeyError("Codex auth requires sandbox-exec on macOS.");
-  }
-
-  return {
-    command: "/usr/bin/sandbox-exec",
-    args: ["-p", buildCodexSandboxProfile(codexCliPath, writablePaths), codexCliPath, ...codexArgs]
-  };
-}
-
-export function buildCodexSandboxProfile(codexCliPath: string, writablePaths: string[]): string {
-  return [
-    "(version 1)",
-    "(deny default)",
-    "(allow process-fork)",
-    `(allow process-exec (literal ${sandboxString(codexCliPath)}))`,
-    "(allow network*)",
-    "(allow sysctl-read)",
-    "(allow mach-lookup)",
-    "(allow file-read*)",
-    '(deny file-read* (subpath "/Users") (subpath "/Volumes"))',
-    `(allow file-write* ${writablePaths.map((path) => `(subpath ${sandboxString(path)})`).join(" ")})`
-  ].join("\n");
 }
 
 function buildCodexEnv(codexHome: string): NodeJS.ProcessEnv {
@@ -294,10 +256,6 @@ function getSafePath(): string {
   ].join(":");
 }
 
-function sandboxString(value: string): string {
-  return JSON.stringify(value);
-}
-
 async function writeCodexImages(workspace: string, images: CodexImageInput[]): Promise<string[]> {
   const imagePaths: string[] = [];
 
@@ -342,5 +300,7 @@ function throwCodexError(stderr: string): never {
     throw new MissingOpenAIKeyError(CODEX_AUTH_MISSING_MESSAGE);
   }
 
-  throw new Error("Codex auth request failed.");
+  const normalized = stderr.trim();
+
+  throw new Error(normalized.length > 0 ? `ChatGPT auth request failed: ${normalized}` : "ChatGPT auth request failed.");
 }

@@ -28,7 +28,10 @@ export const PermissionErrorSchema = z.object({
 
 export const ShakeSensitivitySchema = z.enum(["relaxed", "normal", "strict"]);
 export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
-export const OpenAiAuthModeSchema = z.enum(["api-key", "codex"]);
+export const OpenAiAuthModeSchema = z.preprocess(
+  (value) => (value === "codex" ? "chatgpt" : value),
+  z.enum(["api-key", "chatgpt"])
+);
 
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),

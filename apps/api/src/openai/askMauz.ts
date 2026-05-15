@@ -12,7 +12,7 @@ export type AskMauzOptions = {
   apiKey?: string;
   model?: string;
   client?: OpenAI;
-  authMode?: "api-key" | "codex";
+  authMode?: "api-key" | "chatgpt";
 };
 
 export async function askMauz(
@@ -23,9 +23,9 @@ export async function askMauz(
   const model = options.model ?? process.env.OPENAI_ASK_MODEL ?? DEFAULT_ASK_MODEL;
   const authMode = options.authMode ?? getOpenAiAuthMode();
 
-  if (authMode === "codex" && options.client === undefined) {
-    const { askMauzWithCodexAuth } = await import("./codexAuth");
-    const answer = await askMauzWithCodexAuth(request, {
+  if (authMode === "chatgpt" && options.client === undefined) {
+    const { askMauzWithChatGptAuth } = await import("./codexAuth");
+    const answer = await askMauzWithChatGptAuth(request, {
       model
     });
 
@@ -68,8 +68,10 @@ export async function askMauz(
   };
 }
 
-function getOpenAiAuthMode(): "api-key" | "codex" {
-  return process.env.OPENAI_AUTH_MODE === "codex" ? "codex" : "api-key";
+function getOpenAiAuthMode(): "api-key" | "chatgpt" {
+  return process.env.OPENAI_AUTH_MODE === "chatgpt" || process.env.OPENAI_AUTH_MODE === "codex"
+    ? "chatgpt"
+    : "api-key";
 }
 
 export function buildResponseContent(request: AskMauzRequest): ResponseInputMessageContentList {

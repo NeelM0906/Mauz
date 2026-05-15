@@ -94,10 +94,10 @@ describe("createRealtimeAnswer", () => {
     expect(screenInstructions).toContain("Wait for the user to ask");
   });
 
-  it("requires API key auth for Realtime when Codex auth is selected", async () => {
+  it("requires API key auth for Realtime when ChatGPT auth is selected", async () => {
     await expect(
       createRealtimeAnswer(validRealtimeRequest, {
-        authMode: "codex"
+        authMode: "chatgpt"
       })
     ).rejects.toThrow("Realtime voice requires API key authentication.");
   });
