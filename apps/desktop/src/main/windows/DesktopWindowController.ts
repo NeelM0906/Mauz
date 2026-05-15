@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 type DesktopWindowControllerOptions = {
   preloadPath: string;
+  iconPath: string;
   rendererUrl?: string;
   rendererFile: string;
 };
@@ -34,6 +35,7 @@ export class DesktopWindowController {
       minHeight: DESKTOP_WINDOW_SIZE.minHeight,
       show: false,
       title: "MauzAI",
+      icon: this.options.iconPath,
       autoHideMenuBar: true,
       backgroundColor: "#f4f5f1",
       webPreferences: {

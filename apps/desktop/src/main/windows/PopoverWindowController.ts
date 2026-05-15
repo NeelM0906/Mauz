@@ -12,6 +12,7 @@ import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosit
 
 type PopoverWindowControllerOptions = {
   preloadPath: string;
+  iconPath: string;
   rendererUrl?: string;
   rendererFile: string;
 };
@@ -50,6 +51,7 @@ export class PopoverWindowController {
       height: MAUZ_POPUP_SIZE.height,
       show: false,
       frame: false,
+      icon: this.options.iconPath,
       transparent: true,
       resizable: false,
       maximizable: false,
@@ -257,6 +259,7 @@ export class PopoverWindowController {
       height: TARGET_CUE_SIZE,
       show: false,
       frame: false,
+      icon: this.options.iconPath,
       transparent: true,
       resizable: false,
       movable: false,

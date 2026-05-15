@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
+  "productName": "MauzAI",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "package:mac": "electron-vite build && node scripts/package-macos.mjs",
+    "launch:mac": "node scripts/launch-macos.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"

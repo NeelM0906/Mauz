@@ -43,20 +43,23 @@ async function bootstrap(): Promise<void> {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const preloadPath = join(__dirname, "../preload/index.mjs");
   const rendererFile = join(__dirname, "../renderer/index.html");
+  const appIconPath = getAppIconPath();
   settingsService = new SettingsService();
   applyRuntimeEnvironment(await settingsService.getRuntime());
 
-  app.setName("MauzAI");
+  configureAppIdentity(appIconPath);
 
   desktopWindow = new DesktopWindowController({
     preloadPath,
     rendererFile,
+    iconPath: appIconPath,
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
   popover = new PopoverWindowController({
     preloadPath,
     rendererFile,
+    iconPath: appIconPath,
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
@@ -142,12 +145,36 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   process.env.OPENAI_INCLUDE_FULL_SCREENSHOT = settings.includeFullScreenshot ? "true" : "false";
 }
 
+function configureAppIdentity(iconPath: string): void {
+  app.setName("MauzAI");
+  app.setAppUserModelId("ai.mauz.desktop");
+  app.setAboutPanelOptions({
+    applicationName: "MauzAI",
+    applicationVersion: app.getVersion(),
+    iconPath
+  });
+}
+
+function getAppIconPath(): string {
+  const candidates = [
+    resolve(process.resourcesPath, "mauzai.icns"),
+    resolve(process.cwd(), "build/mauzai.icns"),
+    resolve(process.cwd(), "apps/desktop/build/mauzai.icns"),
+    resolve(__dirname, "../../build/mauzai.icns"),
+    resolve(__dirname, "../../../../apps/desktop/build/mauzai.icns")
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
+}
+
 function getNativeInputAgentPath(): string {
   if (process.env.MAUZ_INPUT_AGENT_PATH !== undefined && process.env.MAUZ_INPUT_AGENT_PATH.length > 0) {
     return process.env.MAUZ_INPUT_AGENT_PATH;
   }
 
   const candidates = [
+    resolve(app.getAppPath(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
+    resolve(app.getAppPath(), "native/macos/MauzInputAgent/MauzInputAgent"),
     resolve(
       app.getAppPath(),
       "../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
