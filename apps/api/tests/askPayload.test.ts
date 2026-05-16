@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { LOCAL_API_TOKEN_HEADER, type AskMauzRequest, type RealtimeConnectRequest } from "@mauzai/shared";
+import { MissingOpenAIKeyError } from "../src/errors";
 import { createMauzApiServer } from "../src/server";
 
 const validRequest: AskMauzRequest = {
@@ -214,7 +215,7 @@ describe("Ask Mauz API", () => {
     });
   });
 
-  it("accepts Realtime connect requests with the configured local token", async () => {
+  it("accepts Realtime connect requests after auth and validation", async () => {
     const realtimeConnectHandler = vi.fn(async (request) => ({
       answerSdp: `answer:${request.mode}`,
       model: "test-realtime-model"
@@ -236,12 +237,38 @@ describe("Ask Mauz API", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(201);
     expect(response.json()).toEqual({
       answerSdp: "answer:talk",
       model: "test-realtime-model"
     });
     expect(realtimeConnectHandler).toHaveBeenCalledWith(validRealtimeRequest);
+  });
+
+  it("maps missing API keys for Realtime connect requests", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      authToken: "local-test-token",
+      realtimeConnectHandler: async () => {
+        throw new MissingOpenAIKeyError();
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/realtime/connect",
+      headers: {
+        [LOCAL_API_TOKEN_HEADER]: "local-test-token"
+      },
+      payload: validRealtimeRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      error: "Set OPENAI_API_KEY before launching Mauz, then try again."
+    });
   });
 
   it("rejects chat title requests without the configured local token", async () => {

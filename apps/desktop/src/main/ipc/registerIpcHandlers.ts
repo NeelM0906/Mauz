@@ -40,7 +40,6 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect
 ] as const;
-const FEATURE_UNAVAILABLE_MESSAGE = "Still working on this.";
 
 export function registerIpcHandlers({
   popover,
@@ -159,7 +158,7 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, () => {
-    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
+    throw new Error("Mauz uses the Realtime WebRTC unified connection path.");
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (_event, payload: unknown) => {

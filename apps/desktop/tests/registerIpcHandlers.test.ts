@@ -4,12 +4,16 @@ const ipcMainMock = vi.hoisted(() => ({
   handle: vi.fn(),
   removeHandler: vi.fn()
 }));
+const realtimeApiClientMock = vi.hoisted(() => ({
+  connectRealtimeToLocalApi: vi.fn()
+}));
 
 vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
+vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
 
-import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
+import { IPC_CHANNELS, type MauzDesktopContext, type RealtimeConnectRequest } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
@@ -34,6 +38,7 @@ describe("registerIpcHandlers", () => {
   beforeEach(() => {
     ipcMainMock.handle.mockClear();
     ipcMainMock.removeHandler.mockClear();
+    realtimeApiClientMock.connectRealtimeToLocalApi.mockReset();
   });
 
   it("removes owned invoke handlers before registering them", () => {
@@ -84,16 +89,9 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
   });
 
-  it("opens Talk mode with realtime context", async () => {
+  it("opens Talk mode with Realtime context", async () => {
     const options = createOptions();
-    const context: MauzDesktopContext = {
-      timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
-      platform: "darwin",
-      cursor: {
-        x: 200,
-        y: 300
-      }
-    };
+    const context = createRealtimeContext();
 
     vi.mocked(options.contextCollector.collectForRealtime).mockResolvedValue(context);
     registerIpcHandlers(options);
@@ -105,45 +103,31 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
   });
 
-  it("forwards Realtime connect requests to the local API", async () => {
+  it("connects Realtime through the local API", async () => {
     const options = createOptions();
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        answerSdp: "answer-sdp",
-        model: "test-realtime-model"
-      })
-    } as Response);
+    const request: RealtimeConnectRequest = {
+      offerSdp: "v=0\r\nt=- 0 0\r\n",
+      mode: "talk",
+      context: createRealtimeContext()
+    };
+
+    realtimeApiClientMock.connectRealtimeToLocalApi.mockResolvedValue({
+      answerSdp: "answer-sdp",
+      model: "test-realtime-model"
+    });
     registerIpcHandlers(options);
 
     const handler = getRegisteredHandler(IPC_CHANNELS.realtimeConnect);
 
-    await expect(
-      handler(undefined, {
-        offerSdp: "offer-sdp",
-        mode: "talk",
-        context: {
-          timestamp: "2026-05-14T12:00:00.000Z",
-          platform: "darwin",
-          cursor: {
-            x: 10,
-            y: 20
-          }
-        }
-      })
-    ).resolves.toEqual({
+    await expect(handler(undefined, request)).resolves.toEqual({
       answerSdp: "answer-sdp",
       model: "test-realtime-model"
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:47891/api/realtime/connect",
-      expect.objectContaining({
-        method: "POST"
-      })
+    expect(realtimeApiClientMock.connectRealtimeToLocalApi).toHaveBeenCalledWith(
+      options.api,
+      "test-token",
+      request
     );
-
-    fetchMock.mockRestore();
   });
 
   it("does not resize the popover when desktop opens settings", async () => {
@@ -194,6 +178,29 @@ function createInvokeEvent(surface: "desktop" | "popover"): unknown {
     },
     sender: {
       getURL: () => url
+    }
+  };
+}
+
+function createRealtimeContext(): MauzDesktopContext {
+  return {
+    timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
+    platform: "darwin",
+    cursor: {
+      x: 200,
+      y: 300
+    },
+    pointer: {
+      cursor: {
+        x: 200,
+        y: 300
+      },
+      cursorCrop: {
+        mimeType: "image/jpeg",
+        base64: "cursor-crop",
+        width: 320,
+        height: 240
+      }
     }
   };
 }
