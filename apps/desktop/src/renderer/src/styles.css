@@ -616,6 +616,26 @@ button {
   padding-left: 2px;
 }
 
+.formatted-answer strong {
+  color: #111312;
+  font-weight: 760;
+}
+
+.formatted-answer p code,
+.formatted-answer li code,
+.formatted-answer h2 code,
+.formatted-answer h3 code,
+.formatted-answer h4 code {
+  padding: 1px 4px;
+  border: 1px solid rgb(23 23 23 / 10%);
+  border-radius: 5px;
+  background: rgb(23 23 23 / 6%);
+  color: #1f2523;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.94em;
+  font-weight: 650;
+}
+
 .formatted-answer pre {
   position: relative;
   overflow: auto;
@@ -1008,6 +1028,11 @@ button {
   color: #174b43;
 }
 
+.secondary-button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
 .danger-button {
   border: 1px solid rgb(155 44 44 / 16%);
   background: rgb(155 44 44 / 9%);
@@ -1182,6 +1207,10 @@ button {
   gap: 8px;
 }
 
+.settings-field.api-key-field {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
 .settings-field span,
 .settings-check span,
 .settings-message,
@@ -1220,7 +1249,7 @@ button {
 }
 
 .settings-inline-actions .secondary-button {
-  width: 96px;
+  width: 128px;
   height: 28px;
   font-size: 10px;
 }

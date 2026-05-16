@@ -5,7 +5,6 @@ import {
   ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
   MauzSettingsUpdateSchema,
-  RealtimeSessionResponseSchema,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
@@ -15,7 +14,6 @@ import type { PopoverWindowController } from "../windows/PopoverWindowController
 import type { ContextCollector } from "../context/ContextCollector";
 import { submitAskToLocalApi } from "./askApiClient";
 import { generateChatTitleFromLocalApi } from "./chatTitleApiClient";
-import { connectRealtimeToLocalApi } from "./realtimeApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
@@ -43,6 +41,7 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.realtimeCaptureFrame
 ] as const;
+const FEATURE_UNAVAILABLE_MESSAGE = "Still working on this.";
 
 export function registerIpcHandlers({
   popover,
@@ -71,14 +70,10 @@ export function registerIpcHandlers({
     return context;
   });
   ipcMain.handle(IPC_CHANNELS.menuStartTalk, async () => {
-    const context = await contextCollector.collectForRealtime();
-    popover.resizeForRealtime();
-    return context;
+    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
   });
   ipcMain.handle(IPC_CHANNELS.menuStartScreenShare, async () => {
-    const context = await contextCollector.collectForRealtime();
-    popover.resizeForRealtime();
-    return context;
+    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event) => {
@@ -166,18 +161,18 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, () => {
-    const unavailable = RealtimeSessionResponseSchema.safeParse({ value: "" });
-
-    if (!unavailable.success) {
-      throw new Error("Realtime API is not implemented in this milestone.");
-    }
+    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
   });
 
-  ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (_event, payload: unknown) => {
-    return connectRealtimeToLocalApi(api, localApiToken, payload);
+  ipcMain.handle(IPC_CHANNELS.realtimeConnect, () => {
+    void api;
+    void localApiToken;
+    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
   });
 
-  ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => contextCollector.collectRealtimeFrame());
+  ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => {
+    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
+  });
 }
 
 function isPopoverEvent(event: IpcMainInvokeEvent | undefined): boolean {
@@ -234,6 +229,8 @@ function toSettingsUpdate(parsedUpdate: {
   realtimeVoice?: string | undefined;
   realtimeReasoningEffort?: MauzSettings["realtimeReasoningEffort"] | undefined;
   includeFullScreenshot?: boolean | undefined;
+  openAiApiKey?: string | null | undefined;
+  clearOpenAiApiKey?: boolean | undefined;
 }): MauzSettingsUpdate {
   const update: MauzSettingsUpdate = {};
 
@@ -275,6 +272,14 @@ function toSettingsUpdate(parsedUpdate: {
 
   if (parsedUpdate.includeFullScreenshot !== undefined) {
     update.includeFullScreenshot = parsedUpdate.includeFullScreenshot;
+  }
+
+  if (parsedUpdate.openAiApiKey !== undefined) {
+    update.openAiApiKey = parsedUpdate.openAiApiKey;
+  }
+
+  if (parsedUpdate.clearOpenAiApiKey !== undefined) {
+    update.clearOpenAiApiKey = parsedUpdate.clearOpenAiApiKey;
   }
 
   return update;

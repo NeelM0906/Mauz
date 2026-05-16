@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LOCAL_API_TOKEN_HEADER, type AskMauzRequest, type RealtimeConnectRequest } from "@mauzai/shared";
 import { createMauzApiServer } from "../src/server";
 
@@ -214,14 +214,15 @@ describe("Ask Mauz API", () => {
     });
   });
 
-  it("accepts Realtime connect requests with the configured local token", async () => {
+  it("marks Realtime connect requests as still in progress after auth and validation", async () => {
+    const realtimeConnectHandler = vi.fn(async (request) => ({
+      answerSdp: `answer:${request.mode}`,
+      model: "test-realtime-model"
+    }));
     const app = await createMauzApiServer({
       loadEnv: false,
       authToken: "local-test-token",
-      realtimeConnectHandler: async (request) => ({
-        answerSdp: `answer:${request.mode}`,
-        model: "test-realtime-model"
-      })
+      realtimeConnectHandler
     });
 
     const response = await app.inject({
@@ -235,11 +236,11 @@ describe("Ask Mauz API", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(501);
     expect(response.json()).toEqual({
-      answerSdp: "answer:talk",
-      model: "test-realtime-model"
+      error: "Still working on this."
     });
+    expect(realtimeConnectHandler).not.toHaveBeenCalled();
   });
 
   it("rejects chat title requests without the configured local token", async () => {

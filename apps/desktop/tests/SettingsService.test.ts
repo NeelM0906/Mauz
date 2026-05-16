@@ -6,13 +6,24 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("electron", () => ({
   app: {
     getPath: () => tmpdir()
+  },
+  safeStorage: {
+    isEncryptionAvailable: () => false,
+    encryptString: (value: string) => Buffer.from(value),
+    decryptString: (value: Buffer) => value.toString("utf8")
   }
 }));
 
 import { SettingsService } from "../src/main/settings/SettingsService";
 
+type TestSecretCodec = {
+  isAvailable(): boolean;
+  encrypt(value: string): string;
+  decrypt(value: string): string;
+};
+
 describe("SettingsService", () => {
-  it("removes legacy saved API keys and only uses the launch environment key", async () => {
+  it("removes legacy plaintext API keys from stored settings", async () => {
     const { service, writes } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
@@ -43,6 +54,57 @@ describe("SettingsService", () => {
       openAiApiKey: "sk-env"
     });
     expect(writes.at(-1)).not.toContain("openAiApiKey");
+  });
+
+  it("lets a saved encrypted API key replace the launch environment key at runtime", async () => {
+    const secretCodec = createTestSecretCodec();
+    const { service } = createSettingsService({
+      environmentApiKey: "sk-env",
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        encryptedOpenAiApiKey: secretCodec.encrypt("sk-saved")
+      }),
+      secretCodec
+    });
+
+    await expect(service.getRuntime()).resolves.toMatchObject({
+      openAiApiKey: "sk-saved"
+    });
+  });
+
+  it("stores updated API keys encrypted and uses them at runtime", async () => {
+    const { service, writes } = createSettingsService({
+      settingsJson: JSON.stringify(DEFAULT_SETTINGS),
+      secretCodec: createTestSecretCodec()
+    });
+
+    await expect(service.update({ openAiApiKey: " sk-new " })).resolves.toMatchObject({
+      apiKeyConfigured: true
+    });
+    await expect(service.getRuntime()).resolves.toMatchObject({
+      openAiApiKey: "sk-new"
+    });
+    expect(writes.at(-1)).toContain("encryptedOpenAiApiKey");
+    expect(writes.at(-1)).not.toContain("sk-new");
+  });
+
+  it("clears a saved encrypted API key", async () => {
+    const secretCodec = createTestSecretCodec();
+    const { service, writes } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        encryptedOpenAiApiKey: secretCodec.encrypt("sk-saved")
+      }),
+      secretCodec
+    });
+
+    await expect(service.get()).resolves.toMatchObject({
+      apiKeyConfigured: true
+    });
+    await expect(service.update({ clearOpenAiApiKey: true })).resolves.toMatchObject({
+      apiKeyConfigured: false
+    });
+    expect(writes.at(-1)).not.toContain("encryptedOpenAiApiKey");
   });
 
   it("keeps OpenAI auth mode on the API key path", async () => {
@@ -85,10 +147,12 @@ describe("SettingsService", () => {
 
 function createSettingsService({
   environmentApiKey = null,
-  settingsJson
+  settingsJson,
+  secretCodec
 }: {
   environmentApiKey?: string | null | undefined;
   settingsJson: string;
+  secretCodec?: TestSecretCodec;
 }): { service: SettingsService; writes: string[] } {
   const writes: string[] = [];
 
@@ -99,10 +163,19 @@ function createSettingsService({
     writeTextFile: async (_path, value) => {
       writes.push(value);
     },
-    ensureDirectory: async () => {}
+    ensureDirectory: async () => {},
+    ...(secretCodec === undefined ? {} : { secretCodec })
   });
 
   return { service, writes };
+}
+
+function createTestSecretCodec(): TestSecretCodec {
+  return {
+    isAvailable: () => true,
+    encrypt: (value: string) => Buffer.from(value, "utf8").toString("base64"),
+    decrypt: (value: string) => Buffer.from(value, "base64").toString("utf8")
+  };
 }
 
 const DEFAULT_SETTINGS = {

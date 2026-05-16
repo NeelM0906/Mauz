@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { parseFormattedAnswer, type FormattedAnswerBlock } from "@renderer/lib/formatAnswer";
 
 export function FormattedAnswer({ answer }: { answer: string }): React.JSX.Element {
@@ -16,7 +17,7 @@ function AnswerBlock({ block }: { block: FormattedAnswerBlock }): React.JSX.Elem
   if (block.type === "heading") {
     const Heading = `h${Math.min(block.level + 1, 4)}` as "h2" | "h3" | "h4";
 
-    return <Heading>{block.text}</Heading>;
+    return <Heading>{renderInlineFormatting(block.text)}</Heading>;
   }
 
   if (block.type === "list") {
@@ -25,7 +26,7 @@ function AnswerBlock({ block }: { block: FormattedAnswerBlock }): React.JSX.Elem
     return (
       <List>
         {block.items.map((item, index) => (
-          <li key={`${item}-${index}`}>{item}</li>
+          <li key={`${item}-${index}`}>{renderInlineFormatting(item)}</li>
         ))}
       </List>
     );
@@ -40,5 +41,36 @@ function AnswerBlock({ block }: { block: FormattedAnswerBlock }): React.JSX.Elem
     );
   }
 
-  return <p>{block.text}</p>;
+  return <p>{renderInlineFormatting(block.text)}</p>;
+}
+
+function renderInlineFormatting(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const inlinePattern = /(\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = inlinePattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      nodes.push(text.slice(cursor, match.index));
+    }
+
+    const strongText = match[2] ?? match[3];
+    const codeText = match[4];
+    const key = `${match.index}-${match[0]}`;
+
+    if (strongText !== undefined) {
+      nodes.push(<strong key={key}>{strongText}</strong>);
+    } else if (codeText !== undefined) {
+      nodes.push(<code key={key}>{codeText}</code>);
+    }
+
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+
+  return nodes.length > 0 ? nodes : [text];
 }

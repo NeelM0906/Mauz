@@ -1,16 +1,10 @@
-import { History, MessageCircleQuestion, Mic, MonitorUp, Settings, X } from "lucide-react";
+import { History, MessageCircleQuestion, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = "ask" | "talk" | "screen";
-
-const actionCopy: Record<MenuAction, string> = {
-  ask: "Ask Mauz",
-  talk: "Talk to Mauz",
-  screen: "Show Mauz my screen"
-};
+type MenuAction = "ask";
 
 export function MauzMenu(): React.JSX.Element {
   const {
@@ -54,19 +48,9 @@ export function MauzMenu(): React.JSX.Element {
     setStatus(null);
 
     try {
-      if (action === "ask") {
-        const context = await mauzClient.startAsk();
-        setCurrentContext(context);
-        setMode("ask");
-      } else if (action === "talk") {
-        const context = await mauzClient.startTalk();
-        setCurrentContext(context);
-        setMode("talk");
-      } else {
-        const context = await mauzClient.startScreenShare();
-        setCurrentContext(context);
-        setMode("screen");
-      }
+      const context = await mauzClient.startAsk();
+      setCurrentContext(context);
+      setMode("ask");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {
@@ -111,24 +95,6 @@ export function MauzMenu(): React.JSX.Element {
         >
           <MessageCircleQuestion aria-hidden="true" size={18} />
           <span>{pendingAction === "ask" ? "Capturing screen..." : "Ask Mauz"}</span>
-        </button>
-        <button
-          type="button"
-          className="mauz-action"
-          onClick={() => void handleAction("talk")}
-          disabled={pendingAction !== null}
-        >
-          <Mic aria-hidden="true" size={18} />
-          <span>Talk to Mauz</span>
-        </button>
-        <button
-          type="button"
-          className="mauz-action"
-          onClick={() => void handleAction("screen")}
-          disabled={pendingAction !== null}
-        >
-          <MonitorUp aria-hidden="true" size={18} />
-          <span>Show Mauz my screen</span>
         </button>
         <button
           type="button"
