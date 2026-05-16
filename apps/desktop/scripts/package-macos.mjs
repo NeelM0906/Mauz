@@ -72,7 +72,10 @@ const plistUpdates = [
   ["CFBundlePackageType", "APPL"],
   ["CFBundleShortVersionString", version],
   ["CFBundleVersion", version],
-  ["NSHumanReadableCopyright", "Copyright (c) MauzAI"]
+  [
+    "NSHumanReadableCopyright",
+    "Created by FirstPoint Labs. Copyright (c) FirstPoint Labs and previous authors."
+  ]
 ];
 
 for (const [key, value] of plistUpdates) {
