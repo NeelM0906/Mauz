@@ -30,7 +30,7 @@ describe("createRealtimeAnswer", () => {
 
     await createRealtimeAnswer(validRealtimeRequest, {
       apiKey: "test-api-key",
-      model: "test-realtime-model",
+      model: "gpt-realtime-2",
       fetchImpl: async (_url, init) => {
         expect(init.body).toBeInstanceOf(FormData);
 
@@ -59,7 +59,7 @@ describe("createRealtimeAnswer", () => {
     };
 
     expect(session.type).toBe("realtime");
-    expect(session.model).toBe("test-realtime-model");
+    expect(session.model).toBe("gpt-realtime-2");
     expect(session.output_modalities).toEqual(["audio"]);
     expect(session.reasoning).toEqual({ effort: "low" });
     expect(session.turn_detection).toBeUndefined();
@@ -95,6 +95,17 @@ describe("createRealtimeAnswer", () => {
     expect(session.audio?.input?.transcription?.model).toBe("gpt-4o-transcribe");
     expect(session.audio?.input?.turn_detection?.type).toBe("semantic_vad");
     expect(session.audio?.output?.voice).toBe("cedar");
+  });
+
+  it("omits reasoning config for Realtime models that do not support reasoning", () => {
+    const session = buildRealtimeSessionConfig(validRealtimeRequest, {
+      model: "gpt-realtime-mini",
+      voice: "marin",
+      reasoningEffort: "low",
+      transcriptionModel: "gpt-4o-mini-transcribe"
+    });
+
+    expect(session.reasoning).toBeUndefined();
   });
 
   it("tells talk mode to use only the initial screenshot context", () => {

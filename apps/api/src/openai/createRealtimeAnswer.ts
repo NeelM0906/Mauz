@@ -92,14 +92,11 @@ export function buildRealtimeSessionConfig(
   request: RealtimeConnectRequest,
   options: RealtimeSessionConfigOptions
 ): Record<string, unknown> {
-  return {
+  const session: Record<string, unknown> = {
     type: "realtime",
     model: options.model,
     instructions: buildRealtimeInstructions(request),
     output_modalities: ["audio"],
-    reasoning: {
-      effort: options.reasoningEffort
-    },
     audio: {
       input: {
         transcription: {
@@ -117,6 +114,20 @@ export function buildRealtimeSessionConfig(
       }
     }
   };
+
+  if (supportsRealtimeReasoning(options.model)) {
+    session.reasoning = {
+      effort: options.reasoningEffort
+    };
+  }
+
+  return session;
+}
+
+function supportsRealtimeReasoning(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+
+  return normalized === "gpt-realtime-2" || normalized.startsWith("gpt-realtime-2-");
 }
 
 export function buildRealtimeInstructions({ context }: RealtimeConnectRequest): string {
