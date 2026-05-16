@@ -17,12 +17,16 @@ type ContextCollectorOptions = {
   captureHider?: CaptureHider;
 };
 
+type ActivationSnapshot = ActiveWindowMetadata & {
+  selectedText?: string | undefined;
+};
+
 export class ContextCollector {
   private readonly screenshotService: ScreenshotService;
   private readonly activeWindowService: ActiveWindowService;
   private readonly selectedTextService: SelectedTextService;
   private readonly captureHider: CaptureHider | undefined;
-  private activationMetadata: ActiveWindowMetadata | null = null;
+  private activationSnapshot: ActivationSnapshot | null = null;
 
   constructor(options: ContextCollectorOptions = {}) {
     this.screenshotService = options.screenshotService ?? new ScreenshotService();
@@ -79,7 +83,13 @@ export class ContextCollector {
   }
 
   async prepareForActivation(): Promise<void> {
-    this.activationMetadata = await this.captureActiveWindowMetadata();
+    const metadata = await this.captureActiveWindowMetadata();
+    const selectedText = await this.captureSelectedText(metadata);
+
+    this.activationSnapshot = withOptionalActivationFields({
+      ...metadata,
+      selectedText
+    });
   }
 
   private getPlatform(): Platform {
@@ -92,9 +102,10 @@ export class ContextCollector {
 
   private async collectAskBaseContext(): Promise<MauzDesktopContext> {
     const basicContext = this.collectBasicContext();
-    const activeMetadata = this.activationMetadata ?? (await this.captureActiveWindowMetadata());
-    this.activationMetadata = null;
-    const selectedText = await this.captureSelectedText(activeMetadata);
+    const activeMetadata: ActivationSnapshot =
+      this.activationSnapshot ?? (await this.captureActiveWindowMetadata());
+    this.activationSnapshot = null;
+    const selectedText = activeMetadata.selectedText ?? (await this.captureSelectedText(activeMetadata));
 
     return withOptionalContextFields({
       ...basicContext,
@@ -162,6 +173,24 @@ function withOptionalContextFields(context: MauzDesktopContext): MauzDesktopCont
   }
 
   return nextContext;
+}
+
+function withOptionalActivationFields(snapshot: ActivationSnapshot): ActivationSnapshot {
+  const nextSnapshot: ActivationSnapshot = {};
+
+  if (snapshot.activeApp !== undefined) {
+    nextSnapshot.activeApp = snapshot.activeApp;
+  }
+
+  if (snapshot.activeWindow !== undefined) {
+    nextSnapshot.activeWindow = snapshot.activeWindow;
+  }
+
+  if (snapshot.selectedText?.trim()) {
+    nextSnapshot.selectedText = snapshot.selectedText;
+  }
+
+  return nextSnapshot;
 }
 
 function toScreenshotError(error: unknown): PermissionError {

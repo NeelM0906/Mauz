@@ -26,8 +26,12 @@ const browserPreviewBridge: MauzBridge = {
     showMenu: async () => {},
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
-    startTalk: async () => collectPreviewContext(),
-    startScreenShare: async () => collectPreviewContext()
+    startTalk: async () => {
+      throw new Error("Still working on this.");
+    },
+    startScreenShare: async () => {
+      throw new Error("Still working on this.");
+    }
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
@@ -83,7 +87,8 @@ const browserPreviewBridge: MauzBridge = {
       realtimeVoice: payload.realtimeVoice ?? "marin",
       realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
       includeFullScreenshot: payload.includeFullScreenshot ?? false,
-      apiKeyConfigured: false
+      apiKeyConfigured:
+        payload.clearOpenAiApiKey === true ? false : (payload.openAiApiKey?.trim().length ?? 0) > 0
     })
   },
   events: {

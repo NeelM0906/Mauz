@@ -80,6 +80,9 @@ describe("Ask Mauz prompt payload", () => {
     expect(MAUZ_SYSTEM_PROMPT).toContain(
       "resolve the reference in this order: selected text, cursor-centered crop, active window metadata, full screenshot, cursor position"
     );
+    expect(MAUZ_SYSTEM_PROMPT).toContain(
+      "You are MauzAI, a focused desktop assistant created by FirstPoint Labs."
+    );
   });
 
   it("puts selected text ahead of cursor crop in the text context", () => {

@@ -194,7 +194,10 @@ export type MauzSettings = {
   apiKeyConfigured: boolean;
 };
 
-export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">>;
+export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">> & {
+  openAiApiKey?: string | null | undefined;
+  clearOpenAiApiKey?: boolean | undefined;
+};
 
 export type MouseMoveSample = {
   x: number;

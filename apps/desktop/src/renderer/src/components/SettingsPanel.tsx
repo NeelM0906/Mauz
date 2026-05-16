@@ -1,6 +1,17 @@
-import { ArrowLeft, Check, Cpu, KeyRound, Lock, MousePointerClick, Save, Settings2, Zap } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Cpu,
+  KeyRound,
+  Lock,
+  MousePointerClick,
+  Save,
+  Settings2,
+  Trash2,
+  Zap
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import type { MauzSettings, RealtimeReasoningEffort, ShakeSensitivity } from "@mauzai/shared";
+import type { MauzSettings, MauzSettingsUpdate, ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -25,19 +36,16 @@ const SENSITIVITY_OPTIONS: Array<{
 
 const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
 const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
-const REALTIME_MODEL_OPTIONS = ["gpt-realtime-2", "gpt-realtime-mini"];
-const VOICE_OPTIONS = ["marin", "cedar", "alloy"];
-const REASONING_OPTIONS: RealtimeReasoningEffort[] = ["low", "medium", "high"];
 const PROVIDER_OPTIONS = [
   {
     name: "OpenAI API",
     status: "active",
-    description: "Uses OPENAI_API_KEY from the launch environment."
+    description: "Uses the launch environment key or a locally encrypted saved key."
   },
   {
     name: "ChatGPT account",
-    status: "unavailable",
-    description: "OpenAI does not expose ChatGPT web-login sessions for local API calls."
+    status: "still working",
+    description: "OpenAI API calls stay on the supported API-key auth path for now."
   },
   {
     name: "z.ai",
@@ -63,11 +71,15 @@ type SettingsPanelProps = {
 export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): React.JSX.Element {
   const { settings, setSettings, setStatus, backToMenu } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
+  const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
+  const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDraft(settings);
+    setOpenAiApiKeyDraft("");
+    setClearSavedOpenAiApiKey(false);
   }, [settings]);
 
   useEffect(() => {
@@ -80,6 +92,8 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         if (!disposed) {
           setSettings(nextSettings);
           setDraft(nextSettings);
+          setOpenAiApiKeyDraft("");
+          setClearSavedOpenAiApiKey(false);
         }
       } catch (error) {
         if (!disposed) {
@@ -119,7 +133,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
     setSettingsMessage(null);
 
     try {
-      const nextSettings = await mauzClient.updateSettings({
+      const update: MauzSettingsUpdate = {
         nativeShakeEnabled: draft.nativeShakeEnabled,
         devHotkeyEnabled: draft.devHotkeyEnabled,
         shakeSensitivity: draft.shakeSensitivity,
@@ -129,8 +143,21 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
         includeFullScreenshot: draft.includeFullScreenshot
-      });
+      };
+      const trimmedApiKeyDraft = openAiApiKeyDraft.trim();
+
+      if (trimmedApiKeyDraft.length > 0) {
+        update.openAiApiKey = trimmedApiKeyDraft;
+      }
+
+      if (clearSavedOpenAiApiKey) {
+        update.clearOpenAiApiKey = true;
+      }
+
+      const nextSettings = await mauzClient.updateSettings(update);
       setSettings(nextSettings);
+      setOpenAiApiKeyDraft("");
+      setClearSavedOpenAiApiKey(false);
       setSettingsMessage("Settings saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update Mauz settings.";
@@ -188,6 +215,35 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
               </div>
             ))}
           </div>
+          <label className="settings-field api-key-field">
+            <span>API key</span>
+            <input
+              type="password"
+              value={openAiApiKeyDraft}
+              placeholder={draft.apiKeyConfigured ? "Configured - enter new key to replace" : "sk-..."}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setOpenAiApiKeyDraft(event.target.value);
+                setClearSavedOpenAiApiKey(false);
+              }}
+            />
+          </label>
+          <div className="settings-inline-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={saving || clearSavedOpenAiApiKey}
+              onClick={() => {
+                setOpenAiApiKeyDraft("");
+                setClearSavedOpenAiApiKey(true);
+                setSettingsMessage("Saved OpenAI key will be cleared on Save.");
+              }}
+            >
+              <Trash2 aria-hidden="true" size={12} />
+              <span>{clearSavedOpenAiApiKey ? "Marked clear" : "Clear saved key"}</span>
+            </button>
+          </div>
         </div>
 
         <div className="settings-section">
@@ -206,24 +262,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             value={draft.chatTitleModel}
             options={TITLE_MODEL_OPTIONS}
             onChange={(chatTitleModel) => updateDraft("chatTitleModel", chatTitleModel)}
-          />
-          <SettingsSelect
-            label="Realtime"
-            value={draft.realtimeModel}
-            options={REALTIME_MODEL_OPTIONS}
-            onChange={(realtimeModel) => updateDraft("realtimeModel", realtimeModel)}
-          />
-          <SettingsSelect
-            label="Voice"
-            value={draft.realtimeVoice}
-            options={VOICE_OPTIONS}
-            onChange={(realtimeVoice) => updateDraft("realtimeVoice", realtimeVoice)}
-          />
-          <SettingsSelect
-            label="Reasoning"
-            value={draft.realtimeReasoningEffort}
-            options={REASONING_OPTIONS}
-            onChange={(value) => updateDraft("realtimeReasoningEffort", value as RealtimeReasoningEffort)}
           />
         </div>
 

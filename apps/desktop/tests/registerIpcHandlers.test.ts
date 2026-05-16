@@ -86,24 +86,15 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
   });
 
-  it("opens Realtime mode with captured pointer context", async () => {
+  it("marks Talk mode as still in progress", async () => {
     const options = createOptions();
-    const context: MauzDesktopContext = {
-      timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
-      platform: "darwin",
-      cursor: {
-        x: 200,
-        y: 300
-      }
-    };
-
-    vi.mocked(options.contextCollector.collectForRealtime).mockResolvedValue(context);
     registerIpcHandlers(options);
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuStartTalk);
 
-    await expect(handler()).resolves.toEqual(context);
-    expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
+    await expect(handler()).rejects.toThrow("Still working on this.");
+    expect(options.contextCollector.collectForRealtime).not.toHaveBeenCalled();
+    expect(options.popover.resizeForRealtime).not.toHaveBeenCalled();
   });
 
   it("does not resize the popover when desktop opens settings", async () => {

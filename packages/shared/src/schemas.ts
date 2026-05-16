@@ -46,7 +46,12 @@ export const MauzSettingsSchema = z.object({
 
 export const MauzSettingsUpdateSchema = MauzSettingsSchema.omit({
   apiKeyConfigured: true
-}).partial();
+})
+  .partial()
+  .extend({
+    openAiApiKey: z.string().nullable().optional(),
+    clearOpenAiApiKey: z.boolean().optional()
+  });
 
 export const MouseMoveSampleSchema = z.object({
   x: z.number().finite(),

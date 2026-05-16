@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { app } from "electron";
+import { app, safeStorage } from "electron";
 import {
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
@@ -14,6 +14,7 @@ type SettingsServiceOptions = {
   readTextFile?: (path: string) => Promise<string>;
   writeTextFile?: (path: string, value: string) => Promise<void>;
   ensureDirectory?: (path: string) => Promise<void>;
+  secretCodec?: SecretCodec;
   defaults?: StoredMauzSettings;
   environmentApiKey?: string | null | undefined;
 };
@@ -25,9 +26,22 @@ const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
 const DEFAULT_REALTIME_REASONING_EFFORT = "low";
 
-type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured">;
+type SecretCodec = {
+  isAvailable(): boolean;
+  encrypt(value: string): string;
+  decrypt(value: string): string;
+};
 
-export type MauzRuntimeSettings = StoredMauzSettings & {
+type ApiKeySettingsUpdate = {
+  openAiApiKey?: string | null | undefined;
+  clearOpenAiApiKey?: boolean | undefined;
+};
+
+type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured"> & {
+  encryptedOpenAiApiKey?: string | undefined;
+};
+
+export type MauzRuntimeSettings = Omit<StoredMauzSettings, "encryptedOpenAiApiKey"> & {
   openAiApiKey?: string | undefined;
 };
 
@@ -36,6 +50,7 @@ export class SettingsService {
   private readonly readTextFile: (path: string) => Promise<string>;
   private readonly writeTextFile: (path: string, value: string) => Promise<void>;
   private readonly ensureDirectory: (path: string) => Promise<void>;
+  private readonly secretCodec: SecretCodec;
   private readonly defaults: StoredMauzSettings;
   private readonly environmentApiKey: string | undefined;
   private cachedSettings: StoredMauzSettings | null = null;
@@ -48,20 +63,24 @@ export class SettingsService {
     this.readTextFile = options.readTextFile ?? readFileUtf8;
     this.writeTextFile = options.writeTextFile ?? writeFileUtf8;
     this.ensureDirectory = options.ensureDirectory ?? ensureDirectoryExists;
+    this.secretCodec = options.secretCodec ?? createSafeStorageCodec();
     this.defaults = options.defaults ?? getDefaultSettings();
     this.environmentApiKey = normalizeApiKey(rawEnvironmentApiKey);
   }
 
   async get(): Promise<MauzSettings> {
-    return toPublicSettings(await this.getStored(), this.environmentApiKey);
+    return toPublicSettings(await this.getStored(), this.environmentApiKey, this.secretCodec);
   }
 
   async getRuntime(): Promise<MauzRuntimeSettings> {
     const stored = await this.getStored();
+    const { encryptedOpenAiApiKey: _encryptedOpenAiApiKey, ...runtimeSettings } = stored;
+    const savedApiKey = decryptStoredApiKey(stored, this.secretCodec);
+    const runtimeApiKey = savedApiKey ?? this.environmentApiKey;
 
     return {
-      ...stored,
-      ...(this.environmentApiKey ? { openAiApiKey: this.environmentApiKey } : {})
+      ...runtimeSettings,
+      ...(runtimeApiKey ? { openAiApiKey: runtimeApiKey } : {})
     };
   }
 
@@ -80,12 +99,13 @@ export class SettingsService {
     applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
     applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
     applyDefinedSetting(nextSettings, "includeFullScreenshot", parsedUpdate.includeFullScreenshot);
+    applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
 
     await this.ensureDirectory(dirname(this.settingsPath));
     await this.writeTextFile(this.settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`);
     this.cachedSettings = nextSettings;
 
-    return toPublicSettings(nextSettings, this.environmentApiKey);
+    return toPublicSettings(nextSettings, this.environmentApiKey, this.secretCodec);
   }
 
   private async getStored(): Promise<StoredMauzSettings> {
@@ -134,6 +154,36 @@ function applyDefinedSetting<Key extends keyof StoredMauzSettings>(
   }
 }
 
+function applyApiKeyUpdate(
+  settings: StoredMauzSettings,
+  update: ApiKeySettingsUpdate,
+  secretCodec: SecretCodec
+): void {
+  if (update.clearOpenAiApiKey === true || update.openAiApiKey === null) {
+    delete settings.encryptedOpenAiApiKey;
+  }
+
+  if (typeof update.openAiApiKey !== "string") {
+    return;
+  }
+
+  const normalizedApiKey = normalizeApiKey(update.openAiApiKey);
+
+  if (normalizedApiKey === undefined) {
+    return;
+  }
+
+  if (!secretCodec.isAvailable()) {
+    throw new Error("Mauz could not save the OpenAI API key securely on this Mac.");
+  }
+
+  try {
+    settings.encryptedOpenAiApiKey = secretCodec.encrypt(normalizedApiKey);
+  } catch {
+    throw new Error("Mauz could not save the OpenAI API key securely on this Mac.");
+  }
+}
+
 function getDefaultSettings(): StoredMauzSettings {
   return {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, true),
@@ -158,9 +208,10 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     return null;
   }
 
+  const parsedRecord = parsed as Record<string, unknown>;
   const candidate = {
     ...getDefaultSettings(),
-    ...parsed,
+    ...parsedRecord,
     apiKeyConfigured: false
   };
   const publicSettings = MauzSettingsSchema.safeParse(candidate);
@@ -168,6 +219,12 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
   if (!publicSettings.success) {
     return null;
   }
+
+  const encryptedOpenAiApiKey =
+    typeof parsedRecord.encryptedOpenAiApiKey === "string" &&
+    parsedRecord.encryptedOpenAiApiKey.trim().length > 0
+      ? parsedRecord.encryptedOpenAiApiKey.trim()
+      : undefined;
 
   return {
     nativeShakeEnabled: publicSettings.data.nativeShakeEnabled,
@@ -179,7 +236,8 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeModel: publicSettings.data.realtimeModel,
     realtimeVoice: publicSettings.data.realtimeVoice,
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
-    includeFullScreenshot: publicSettings.data.includeFullScreenshot
+    includeFullScreenshot: publicSettings.data.includeFullScreenshot,
+    ...(encryptedOpenAiApiKey === undefined ? {} : { encryptedOpenAiApiKey })
   };
 }
 
@@ -191,7 +249,11 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
   return "openAiApiKey" in parsed || ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key");
 }
 
-function toPublicSettings(settings: StoredMauzSettings, environmentApiKey: string | undefined): MauzSettings {
+function toPublicSettings(
+  settings: StoredMauzSettings,
+  environmentApiKey: string | undefined,
+  secretCodec: SecretCodec
+): MauzSettings {
   return {
     nativeShakeEnabled: settings.nativeShakeEnabled,
     devHotkeyEnabled: settings.devHotkeyEnabled,
@@ -203,7 +265,28 @@ function toPublicSettings(settings: StoredMauzSettings, environmentApiKey: strin
     realtimeVoice: settings.realtimeVoice,
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
     includeFullScreenshot: settings.includeFullScreenshot,
-    apiKeyConfigured: environmentApiKey !== undefined
+    apiKeyConfigured:
+      environmentApiKey !== undefined || decryptStoredApiKey(settings, secretCodec) !== undefined
+  };
+}
+
+function decryptStoredApiKey(settings: StoredMauzSettings, secretCodec: SecretCodec): string | undefined {
+  if (settings.encryptedOpenAiApiKey === undefined || !secretCodec.isAvailable()) {
+    return undefined;
+  }
+
+  try {
+    return normalizeApiKey(secretCodec.decrypt(settings.encryptedOpenAiApiKey));
+  } catch {
+    return undefined;
+  }
+}
+
+function createSafeStorageCodec(): SecretCodec {
+  return {
+    isAvailable: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (value) => safeStorage.encryptString(value).toString("base64"),
+    decrypt: (value) => safeStorage.decryptString(Buffer.from(value, "base64"))
   };
 }
 

@@ -11,6 +11,7 @@ type SelectedTextTarget = {
 };
 
 const DEFAULT_MAX_SELECTED_TEXT_LENGTH = 8_000;
+const BROWSER_SELECTION_SCRIPT = "String(window.getSelection ? window.getSelection().toString() : '')";
 
 const SELECTED_TEXT_SCRIPT = String.raw`
 function readValue(read) {
@@ -24,6 +25,48 @@ function readValue(read) {
 
 function selectedTextFromElement(element) {
   const selectedText = readValue(() => element.attributes.byName("AXSelectedText").value());
+
+  return typeof selectedText === "string" ? selectedText : "";
+}
+
+function selectedTextFromBrowser(process) {
+  const bundleId = readValue(() => process.bundleIdentifier()) || "";
+  const processName = readValue(() => process.name()) || "";
+
+  if (bundleId === "com.apple.Safari" || processName === "Safari") {
+    const safari = Application("Safari");
+    const selectedText = readValue(() =>
+      safari.doJavaScript("${BROWSER_SELECTION_SCRIPT}", { in: safari.documents[0] })
+    );
+
+    return typeof selectedText === "string" ? selectedText : "";
+  }
+
+  const chromeLikeBundleIds = [
+    "com.google.Chrome",
+    "company.thebrowser.Browser",
+    "com.brave.Browser",
+    "com.microsoft.edgemac",
+    "com.vivaldi.Vivaldi",
+    "com.operasoftware.Opera"
+  ];
+  const chromeLikeNames = [
+    "Google Chrome",
+    "Arc",
+    "Brave Browser",
+    "Microsoft Edge",
+    "Vivaldi",
+    "Opera"
+  ];
+
+  if (!chromeLikeBundleIds.includes(bundleId) && !chromeLikeNames.includes(processName)) {
+    return "";
+  }
+
+  const browser = Application(processName);
+  const selectedText = readValue(() =>
+    browser.windows[0].activeTab.execute({ javascript: "${BROWSER_SELECTION_SCRIPT}" })
+  );
 
   return typeof selectedText === "string" ? selectedText : "";
 }
@@ -48,6 +91,12 @@ function run(argv) {
     if (selectedText.trim().length > 0) {
       return selectedText;
     }
+  }
+
+  const browserSelectedText = selectedTextFromBrowser(process);
+
+  if (browserSelectedText.trim().length > 0) {
+    return browserSelectedText;
   }
 
   const windows = readValue(() => process.windows());

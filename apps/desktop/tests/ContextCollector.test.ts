@@ -163,6 +163,39 @@ describe("ContextCollector", () => {
     expect(context.pointer?.selectedText).toBe("selected error text");
     expect(context.pointer?.activeWindow?.title).toBe("MauzAI");
   });
+
+  it("uses selected text captured before the popover steals focus", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const activeWindowService = createActiveWindowService({
+      activeApp: {
+        name: "Safari",
+        processId: 2026
+      },
+      activeWindow: {
+        title: "Docs"
+      }
+    });
+    const selectedTextService = {
+      capture: vi.fn().mockResolvedValueOnce("activation selected text").mockResolvedValueOnce(undefined)
+    } as unknown as SelectedTextService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService,
+      selectedTextService
+    });
+
+    await collector.prepareForActivation();
+    const context = await collector.collectForAsk();
+
+    expect(selectedTextService.capture).toHaveBeenCalledTimes(1);
+    expect(selectedTextService.capture).toHaveBeenCalledWith({
+      processId: 2026
+    });
+    expect(context.selectedText).toBe("activation selected text");
+    expect(context.pointer?.selectedText).toBe("activation selected text");
+  });
 });
 
 function createActiveWindowService(
