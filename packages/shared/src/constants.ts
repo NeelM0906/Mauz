@@ -1,6 +1,6 @@
 export const MAUZ_POPUP_SIZE = {
-  width: 280,
-  height: 248
+  width: 300,
+  height: 318
 } as const;
 
 export const MAUZ_ASK_PANEL_SIZE = {

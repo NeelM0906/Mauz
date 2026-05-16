@@ -73,8 +73,8 @@ export function registerIpcHandlers({
     return context;
   });
 
-  ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event) => {
-    if (isPopoverEvent(event)) {
+  ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event, payload: unknown) => {
+    if (isPopoverEvent(event) && shouldResizeForSettingsOpen(payload)) {
       popover.resizeForSettings();
     }
 
@@ -180,6 +180,14 @@ function isPopoverEvent(event: IpcMainInvokeEvent | undefined): boolean {
   }
 }
 
+function shouldResizeForSettingsOpen(payload: unknown): boolean {
+  if (typeof payload !== "object" || payload === null || !("resizePopover" in payload)) {
+    return true;
+  }
+
+  return payload.resizePopover !== false;
+}
+
 function queueGeneratedTitleUpdate(
   api: LocalApiHandle,
   localApiToken: string,
@@ -214,6 +222,7 @@ function toSettingsUpdate(parsedUpdate: {
   devHotkeyEnabled?: boolean | undefined;
   shakeSensitivity?: MauzSettings["shakeSensitivity"] | undefined;
   openAiAuthMode?: MauzSettings["openAiAuthMode"] | undefined;
+  openAiAuthDisconnected?: MauzSettings["openAiAuthDisconnected"] | undefined;
   askModel?: string | undefined;
   chatTitleModel?: string | undefined;
   realtimeModel?: string | undefined;
@@ -239,6 +248,10 @@ function toSettingsUpdate(parsedUpdate: {
 
   if (parsedUpdate.openAiAuthMode !== undefined) {
     update.openAiAuthMode = parsedUpdate.openAiAuthMode;
+  }
+
+  if (parsedUpdate.openAiAuthDisconnected !== undefined) {
+    update.openAiAuthDisconnected = parsedUpdate.openAiAuthDisconnected;
   }
 
   if (parsedUpdate.askModel !== undefined) {

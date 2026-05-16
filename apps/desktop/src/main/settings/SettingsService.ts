@@ -6,7 +6,8 @@ import {
   MauzSettingsUpdateSchema,
   readBooleanEnv,
   type MauzSettings,
-  type MauzSettingsUpdate
+  type MauzSettingsUpdate,
+  type OpenAiCredentialSource
 } from "@mauzai/shared";
 
 type SettingsServiceOptions = {
@@ -37,7 +38,7 @@ type ApiKeySettingsUpdate = {
   clearOpenAiApiKey?: boolean | undefined;
 };
 
-type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured"> & {
+type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource"> & {
   encryptedOpenAiApiKey?: string | undefined;
 };
 
@@ -76,7 +77,7 @@ export class SettingsService {
     const stored = await this.getStored();
     const { encryptedOpenAiApiKey: _encryptedOpenAiApiKey, ...runtimeSettings } = stored;
     const savedApiKey = decryptStoredApiKey(stored, this.secretCodec);
-    const runtimeApiKey = savedApiKey ?? this.environmentApiKey;
+    const runtimeApiKey = stored.openAiAuthDisconnected ? undefined : (savedApiKey ?? this.environmentApiKey);
 
     return {
       ...runtimeSettings,
@@ -93,6 +94,7 @@ export class SettingsService {
     applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
     applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
     applyDefinedSetting(nextSettings, "openAiAuthMode", parsedUpdate.openAiAuthMode);
+    applyDefinedSetting(nextSettings, "openAiAuthDisconnected", parsedUpdate.openAiAuthDisconnected);
     applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
     applyDefinedSetting(nextSettings, "chatTitleModel", parsedUpdate.chatTitleModel);
     applyDefinedSetting(nextSettings, "realtimeModel", parsedUpdate.realtimeModel);
@@ -179,6 +181,7 @@ function applyApiKeyUpdate(
 
   try {
     settings.encryptedOpenAiApiKey = secretCodec.encrypt(normalizedApiKey);
+    settings.openAiAuthDisconnected = false;
   } catch {
     throw new Error("Mauz could not save the OpenAI API key securely on this Mac.");
   }
@@ -190,6 +193,7 @@ function getDefaultSettings(): StoredMauzSettings {
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
     openAiAuthMode: "api-key",
+    openAiAuthDisconnected: false,
     askModel: process.env.OPENAI_ASK_MODEL?.trim() || DEFAULT_ASK_MODEL,
     chatTitleModel: process.env.OPENAI_CHAT_TITLE_MODEL?.trim() || DEFAULT_CHAT_TITLE_MODEL,
     realtimeModel: process.env.OPENAI_REALTIME_MODEL?.trim() || DEFAULT_REALTIME_MODEL,
@@ -212,7 +216,8 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
   const candidate = {
     ...getDefaultSettings(),
     ...parsedRecord,
-    apiKeyConfigured: false
+    apiKeyConfigured: false,
+    openAiCredentialSource: "none"
   };
   const publicSettings = MauzSettingsSchema.safeParse(candidate);
 
@@ -231,6 +236,7 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     devHotkeyEnabled: publicSettings.data.devHotkeyEnabled,
     shakeSensitivity: publicSettings.data.shakeSensitivity,
     openAiAuthMode: publicSettings.data.openAiAuthMode,
+    openAiAuthDisconnected: publicSettings.data.openAiAuthDisconnected,
     askModel: publicSettings.data.askModel,
     chatTitleModel: publicSettings.data.chatTitleModel,
     realtimeModel: publicSettings.data.realtimeModel,
@@ -254,20 +260,43 @@ function toPublicSettings(
   environmentApiKey: string | undefined,
   secretCodec: SecretCodec
 ): MauzSettings {
+  const openAiCredentialSource = getOpenAiCredentialSource(settings, environmentApiKey, secretCodec);
+
   return {
     nativeShakeEnabled: settings.nativeShakeEnabled,
     devHotkeyEnabled: settings.devHotkeyEnabled,
     shakeSensitivity: settings.shakeSensitivity,
     openAiAuthMode: settings.openAiAuthMode,
+    openAiAuthDisconnected: settings.openAiAuthDisconnected,
+    openAiCredentialSource,
     askModel: settings.askModel,
     chatTitleModel: settings.chatTitleModel,
     realtimeModel: settings.realtimeModel,
     realtimeVoice: settings.realtimeVoice,
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
     includeFullScreenshot: settings.includeFullScreenshot,
-    apiKeyConfigured:
-      environmentApiKey !== undefined || decryptStoredApiKey(settings, secretCodec) !== undefined
+    apiKeyConfigured: openAiCredentialSource !== "none"
   };
+}
+
+function getOpenAiCredentialSource(
+  settings: StoredMauzSettings,
+  environmentApiKey: string | undefined,
+  secretCodec: SecretCodec
+): OpenAiCredentialSource {
+  if (settings.openAiAuthDisconnected) {
+    return "none";
+  }
+
+  if (decryptStoredApiKey(settings, secretCodec) !== undefined) {
+    return "saved";
+  }
+
+  if (environmentApiKey !== undefined) {
+    return "environment";
+  }
+
+  return "none";
 }
 
 function decryptStoredApiKey(settings: StoredMauzSettings, secretCodec: SecretCodec): string | undefined {

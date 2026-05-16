@@ -179,12 +179,15 @@ export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 export type RealtimeReasoningEffort = "low" | "medium" | "high";
 
 export type OpenAiAuthMode = "api-key";
+export type OpenAiCredentialSource = "none" | "environment" | "saved";
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
   devHotkeyEnabled: boolean;
   shakeSensitivity: ShakeSensitivity;
   openAiAuthMode: OpenAiAuthMode;
+  openAiAuthDisconnected: boolean;
+  openAiCredentialSource: OpenAiCredentialSource;
   askModel: string;
   chatTitleModel: string;
   realtimeModel: string;
@@ -194,9 +197,15 @@ export type MauzSettings = {
   apiKeyConfigured: boolean;
 };
 
-export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">> & {
+export type MauzSettingsUpdate = Partial<
+  Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource">
+> & {
   openAiApiKey?: string | null | undefined;
   clearOpenAiApiKey?: boolean | undefined;
+};
+
+export type MauzSettingsOpenOptions = {
+  resizePopover?: boolean | undefined;
 };
 
 export type MouseMoveSample = {
@@ -226,7 +235,7 @@ export type MauzBridge = {
     connect(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse>;
   };
   settings: {
-    open(): Promise<MauzSettings>;
+    open(options?: MauzSettingsOpenOptions): Promise<MauzSettings>;
     update(payload: MauzSettingsUpdate): Promise<MauzSettings>;
   };
   events: {

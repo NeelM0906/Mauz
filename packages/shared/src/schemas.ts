@@ -29,12 +29,15 @@ export const PermissionErrorSchema = z.object({
 export const ShakeSensitivitySchema = z.enum(["relaxed", "normal", "strict"]);
 export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
 export const OpenAiAuthModeSchema = z.preprocess(() => "api-key", z.literal("api-key"));
+export const OpenAiCredentialSourceSchema = z.enum(["none", "environment", "saved"]);
 
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
   shakeSensitivity: ShakeSensitivitySchema,
   openAiAuthMode: OpenAiAuthModeSchema,
+  openAiAuthDisconnected: z.boolean(),
+  openAiCredentialSource: OpenAiCredentialSourceSchema,
   askModel: z.string().min(1),
   chatTitleModel: z.string().min(1),
   realtimeModel: z.string().min(1),
@@ -45,7 +48,8 @@ export const MauzSettingsSchema = z.object({
 });
 
 export const MauzSettingsUpdateSchema = MauzSettingsSchema.omit({
-  apiKeyConfigured: true
+  apiKeyConfigured: true,
+  openAiCredentialSource: true
 })
   .partial()
   .extend({

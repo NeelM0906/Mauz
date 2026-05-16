@@ -48,7 +48,8 @@ describe("SettingsService", () => {
     });
 
     await expect(service.update({ askModel: "gpt-5.4" })).resolves.toMatchObject({
-      apiKeyConfigured: true
+      apiKeyConfigured: true,
+      openAiCredentialSource: "environment"
     });
     await expect(service.getRuntime()).resolves.toMatchObject({
       openAiApiKey: "sk-env"
@@ -70,6 +71,9 @@ describe("SettingsService", () => {
     await expect(service.getRuntime()).resolves.toMatchObject({
       openAiApiKey: "sk-saved"
     });
+    await expect(service.get()).resolves.toMatchObject({
+      openAiCredentialSource: "saved"
+    });
   });
 
   it("stores updated API keys encrypted and uses them at runtime", async () => {
@@ -86,6 +90,51 @@ describe("SettingsService", () => {
     });
     expect(writes.at(-1)).toContain("encryptedOpenAiApiKey");
     expect(writes.at(-1)).not.toContain("sk-new");
+  });
+
+  it("can disconnect and reconnect launch environment credentials at runtime", async () => {
+    const { service } = createSettingsService({
+      environmentApiKey: "sk-env",
+      settingsJson: JSON.stringify(DEFAULT_SETTINGS)
+    });
+
+    await expect(service.get()).resolves.toMatchObject({
+      apiKeyConfigured: true,
+      openAiCredentialSource: "environment"
+    });
+    await expect(service.update({ openAiAuthDisconnected: true })).resolves.toMatchObject({
+      apiKeyConfigured: false,
+      openAiAuthDisconnected: true,
+      openAiCredentialSource: "none"
+    });
+    await expect(service.getRuntime()).resolves.not.toHaveProperty("openAiApiKey");
+    await expect(service.update({ openAiAuthDisconnected: false })).resolves.toMatchObject({
+      apiKeyConfigured: true,
+      openAiAuthDisconnected: false,
+      openAiCredentialSource: "environment"
+    });
+    await expect(service.getRuntime()).resolves.toMatchObject({
+      openAiApiKey: "sk-env"
+    });
+  });
+
+  it("re-enables OpenAI auth when saving a replacement API key", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        openAiAuthDisconnected: true
+      }),
+      secretCodec: createTestSecretCodec()
+    });
+
+    await expect(service.update({ openAiApiKey: "sk-relogin" })).resolves.toMatchObject({
+      apiKeyConfigured: true,
+      openAiAuthDisconnected: false,
+      openAiCredentialSource: "saved"
+    });
+    await expect(service.getRuntime()).resolves.toMatchObject({
+      openAiApiKey: "sk-relogin"
+    });
   });
 
   it("clears a saved encrypted API key", async () => {
@@ -183,6 +232,7 @@ const DEFAULT_SETTINGS = {
   devHotkeyEnabled: true,
   shakeSensitivity: "normal",
   openAiAuthMode: "api-key",
+  openAiAuthDisconnected: false,
   askModel: "gpt-5.4-mini",
   chatTitleModel: "gpt-5.4-nano",
   realtimeModel: "gpt-realtime-2",

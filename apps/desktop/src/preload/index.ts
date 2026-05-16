@@ -10,6 +10,7 @@ import type {
   MauzBridge,
   MauzDesktopContext,
   MauzSettings,
+  MauzSettingsOpenOptions,
   MauzSettingsUpdate,
   PermissionError,
   RealtimeConnectRequest,
@@ -43,7 +44,8 @@ const mauzApi: MauzBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.realtimeConnect, payload) as Promise<RealtimeConnectResponse>
   },
   settings: {
-    open: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpen) as Promise<MauzSettings>,
+    open: (options?: MauzSettingsOpenOptions) =>
+      ipcRenderer.invoke(IPC_CHANNELS.settingsOpen, options) as Promise<MauzSettings>,
     update: (payload: MauzSettingsUpdate) =>
       ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, payload).then((settings: unknown) => {
         const parsed = MauzSettingsSchema.parse(settings);
