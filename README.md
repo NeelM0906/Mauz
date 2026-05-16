@@ -53,6 +53,10 @@ Text answers and Realtime voice use OpenAI API access through `OPENAI_API_KEY`. 
 
 Packaging, signing, and a public distribution flow are still upcoming.
 
+## License
+
+MauzAI is available under the [FirstPoint Labs Research Preview License](LICENSE.md). It may be used, modified, and productionized with required attribution to FirstPoint Labs and relevant previous authors, and may never be used for privacy invasion or surveillance.
+
 ## Roadmap
 
 - Signed macOS builds.
