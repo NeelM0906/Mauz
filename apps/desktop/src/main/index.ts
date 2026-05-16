@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { MauzSettings, MauzSettingsUpdate } from "@mauzai/shared";
+import { OpenAiAuthService } from "./auth/OpenAiAuthService";
 import { ChatHistoryService } from "./chat/ChatHistoryService";
 import { ContextCollector } from "./context/ContextCollector";
 import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
@@ -29,6 +30,7 @@ let apiHandle: LocalApiHandle | null = null;
 let contextCollector: ContextCollector | null = null;
 let chatHistoryService: ChatHistoryService | null = null;
 let settingsService: SettingsService | null = null;
+let openAiAuthService: OpenAiAuthService | null = null;
 let inputProviders: InputProvider[] = [];
 let bootstrapPromise: Promise<void> | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -47,7 +49,8 @@ async function bootstrap(): Promise<void> {
   const rendererFile = join(__dirname, "../renderer/index.html");
   const appIconPath = getAppIconPath();
   settingsService = new SettingsService();
-  applyRuntimeEnvironment(await settingsService.getRuntime());
+  openAiAuthService = new OpenAiAuthService();
+  await applyRuntimeEnvironment(await settingsService.getRuntime());
 
   configureAppIdentity(appIconPath);
 
@@ -72,7 +75,8 @@ async function bootstrap(): Promise<void> {
 
   const localApiToken = randomUUID();
   const launchedApi = await launchLocalApi({
-    authToken: localApiToken
+    authToken: localApiToken,
+    openAiApiKeyProvider: resolveOpenAiCredential
   });
 
   if (isShuttingDown()) {
@@ -93,6 +97,7 @@ async function bootstrap(): Promise<void> {
     api: apiHandle,
     localApiToken,
     getSettings: () => settingsService!.get(),
+    openAiAuth: openAiAuthService,
     updateSettings: applySettingsUpdate
   });
   startInputProviders(initialSettings);
@@ -105,7 +110,7 @@ async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSett
   }
 
   const settings = await settingsService.update(update);
-  applyRuntimeEnvironment(await settingsService.getRuntime());
+  await applyRuntimeEnvironment(await settingsService.getRuntime());
   restartInputProviders(settings);
 
   return settings;
@@ -131,9 +136,11 @@ function createInputProviders(settings: MauzSettings): InputProvider[] {
   return providers;
 }
 
-function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
-  if (settings.openAiApiKey?.trim()) {
-    process.env.OPENAI_API_KEY = settings.openAiApiKey.trim();
+async function applyRuntimeEnvironment(settings: MauzRuntimeSettings): Promise<void> {
+  const credential = await resolveOpenAiCredential(settings);
+
+  if (credential?.trim()) {
+    process.env.OPENAI_API_KEY = credential.trim();
   } else {
     delete process.env.OPENAI_API_KEY;
   }
@@ -144,6 +151,20 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   process.env.OPENAI_REALTIME_VOICE = settings.realtimeVoice;
   process.env.OPENAI_REALTIME_REASONING_EFFORT = settings.realtimeReasoningEffort;
   process.env.OPENAI_INCLUDE_FULL_SCREENSHOT = settings.includeFullScreenshot ? "true" : "false";
+}
+
+async function resolveOpenAiCredential(settings?: MauzRuntimeSettings): Promise<string | undefined> {
+  if (settingsService === null) {
+    return undefined;
+  }
+
+  const runtimeSettings = settings ?? (await settingsService.getRuntime());
+
+  if (runtimeSettings.openAiAuthMode === "openai-auth") {
+    return openAiAuthService?.getAccessToken();
+  }
+
+  return runtimeSettings.openAiApiKey;
 }
 
 function configureAppIdentity(iconPath: string): void {
@@ -293,6 +314,8 @@ async function shutdownResources(): Promise<void> {
   contextCollector = null;
   chatHistoryService = null;
   settingsService = null;
+  openAiAuthService?.dispose();
+  openAiAuthService = null;
 
   try {
     currentDesktopWindow?.destroy();

@@ -178,7 +178,32 @@ export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
 export type RealtimeReasoningEffort = "low" | "medium" | "high";
 
-export type OpenAiAuthMode = "api-key";
+export type OpenAiAuthMode = "api-key" | "openai-auth";
+
+export type OpenAiAuthAccount = {
+  type: "openai";
+  email?: string | undefined;
+  planType?: string | undefined;
+};
+
+export type OpenAiAuthStatus =
+  | {
+      state: "connected";
+      account: OpenAiAuthAccount;
+    }
+  | {
+      state: "signed-out";
+    }
+  | {
+      state: "pending";
+      loginId: string;
+      verificationUrl: string;
+      userCode: string;
+    }
+  | {
+      state: "unavailable";
+      message: string;
+    };
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
@@ -228,6 +253,8 @@ export type MauzBridge = {
   settings: {
     open(): Promise<MauzSettings>;
     update(payload: MauzSettingsUpdate): Promise<MauzSettings>;
+    getOpenAiAuthStatus(): Promise<OpenAiAuthStatus>;
+    startOpenAiLogin(): Promise<OpenAiAuthStatus>;
   };
   events: {
     onActivation(callback: () => void): () => void;

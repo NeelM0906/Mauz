@@ -1265,11 +1265,22 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
+  width: 100%;
   min-height: 44px;
   padding: 8px;
   border: 1px solid rgb(23 23 23 / 10%);
   border-radius: 7px;
   background: rgb(255 255 255 / 70%);
+  text-align: left;
+}
+
+button.auth-provider-card {
+  cursor: pointer;
+}
+
+button.auth-provider-card:disabled {
+  cursor: default;
+  opacity: 0.74;
 }
 
 .auth-provider-card[data-status="active"] {
@@ -1316,6 +1327,38 @@ button {
 .auth-provider-card[data-status="active"] .provider-status {
   border-color: rgb(22 122 107 / 24%);
   color: #167a6b !important;
+}
+
+.openai-login-code {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid rgb(22 122 107 / 18%);
+  border-radius: 7px;
+  background: rgb(22 122 107 / 6%);
+}
+
+.openai-login-code > span {
+  color: #5d6661;
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0;
+}
+
+.openai-login-code strong {
+  color: #171717;
+  font-size: 13px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+}
+
+.openai-login-code .secondary-button {
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
 }
 
 .settings-field {

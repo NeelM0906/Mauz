@@ -47,7 +47,7 @@ MauzAI is built around user-controlled context sharing.
 ## Current Status
 
 MauzAI is in macOS preview. The current product includes point-and-ask help, voice conversations, chat history, native mouse-shake activation, and local settings.
-Text answers and Realtime voice use OpenAI API access through `OPENAI_API_KEY`. MauzAI does not store OpenAI keys in local settings.
+Text answers and Realtime voice can use either a configured OpenAI API key or OpenAI login through Codex auth on the Mac.
 
 Packaging, signing, and a public distribution flow are still upcoming.
 

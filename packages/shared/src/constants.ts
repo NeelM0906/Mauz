@@ -32,6 +32,8 @@ export const IPC_CHANNELS = {
   menuStartTalk: "mauz:menu:start-talk",
   settingsOpen: "mauz:settings:open",
   settingsUpdate: "mauz:settings:update",
+  settingsOpenAiAuthStatus: "mauz:settings:openai-auth-status",
+  settingsStartOpenAiLogin: "mauz:settings:start-openai-login",
   askSubmit: "mauz:ask:submit",
   chatHistoryList: "mauz:chat-history:list",
   chatHistoryGet: "mauz:chat-history:get",

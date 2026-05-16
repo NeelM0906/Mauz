@@ -1,5 +1,6 @@
 import { createMauzApiServer } from "@mauzai/api/server";
 import { DEFAULT_MAUZ_API_PORT } from "@mauzai/shared";
+import type { OpenAiApiKeyProvider } from "@mauzai/api/server";
 
 export type LocalApiHandle = {
   baseUrl: string;
@@ -9,6 +10,7 @@ export type LocalApiHandle = {
 
 export type LaunchLocalApiOptions = {
   authToken: string;
+  openAiApiKeyProvider?: OpenAiApiKeyProvider;
   maxPortAttempts?: number;
 };
 
@@ -20,7 +22,10 @@ export async function launchLocalApi(options: LaunchLocalApiOptions): Promise<Lo
 
   for (const port of candidatePorts) {
     const app = await createMauzApiServer({
-      authToken: options.authToken
+      authToken: options.authToken,
+      ...(options.openAiApiKeyProvider === undefined
+        ? {}
+        : { openAiApiKeyProvider: options.openAiApiKeyProvider })
     });
 
     try {

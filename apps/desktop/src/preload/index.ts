@@ -9,6 +9,7 @@ import type {
   ChatHistoryListResponse,
   MauzBridge,
   MauzDesktopContext,
+  OpenAiAuthStatus,
   MauzSettings,
   MauzSettingsUpdate,
   PermissionError,
@@ -16,7 +17,12 @@ import type {
   RealtimeConnectResponse,
   RealtimeSessionResponse
 } from "@mauzai/shared";
-import { IPC_CHANNELS, MauzSettingsSchema, PermissionErrorSchema } from "@mauzai/shared";
+import {
+  IPC_CHANNELS,
+  MauzSettingsSchema,
+  OpenAiAuthStatusSchema,
+  PermissionErrorSchema
+} from "@mauzai/shared";
 
 const mauzApi: MauzBridge = {
   menu: {
@@ -48,7 +54,17 @@ const mauzApi: MauzBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, payload).then((settings: unknown) => {
         const parsed = MauzSettingsSchema.parse(settings);
         return parsed;
-      })
+      }),
+    getOpenAiAuthStatus: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.settingsOpenAiAuthStatus).then((status: unknown) => {
+        const parsed = OpenAiAuthStatusSchema.parse(status);
+        return parsed;
+      }) as Promise<OpenAiAuthStatus>,
+    startOpenAiLogin: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.settingsStartOpenAiLogin).then((status: unknown) => {
+        const parsed = OpenAiAuthStatusSchema.parse(status);
+        return parsed;
+      }) as Promise<OpenAiAuthStatus>
   },
   events: {
     onActivation: (callback) => {

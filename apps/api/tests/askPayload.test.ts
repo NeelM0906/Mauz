@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { LOCAL_API_TOKEN_HEADER, type AskMauzRequest, type RealtimeConnectRequest } from "@mauzai/shared";
+import type { AskMauzOptions } from "../src/openai/askMauz";
 import { createMauzApiServer } from "../src/server";
 
 const validRequest: AskMauzRequest = {
@@ -146,6 +147,35 @@ describe("Ask Mauz API", () => {
     expect(response.json()).toEqual({
       answer: "Answered: What am I looking at?",
       model: "test-model"
+    });
+  });
+
+  it("passes provided OpenAI credentials into route handlers", async () => {
+    const askHandler = vi.fn(async (request: AskMauzRequest, options?: AskMauzOptions) => ({
+      answer: `${request.question} with ${options?.apiKey}`,
+      model: "test-model"
+    }));
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      openAiApiKeyProvider: () => "openai-auth-token",
+      askHandler
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ask",
+      payload: validRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      answer: "What am I looking at? with openai-auth-token",
+      model: "test-model"
+    });
+    expect(askHandler).toHaveBeenCalledWith(validRequest, {
+      apiKey: "openai-auth-token"
     });
   });
 

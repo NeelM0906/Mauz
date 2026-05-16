@@ -4,9 +4,13 @@ const ipcMainMock = vi.hoisted(() => ({
   handle: vi.fn(),
   removeHandler: vi.fn()
 }));
+const shellMock = vi.hoisted(() => ({
+  openExternal: vi.fn(async () => {})
+}));
 
 vi.mock("electron", () => ({
-  ipcMain: ipcMainMock
+  ipcMain: ipcMainMock,
+  shell: shellMock
 }));
 
 import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
@@ -22,6 +26,8 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuStartTalk,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
+  IPC_CHANNELS.settingsOpenAiAuthStatus,
+  IPC_CHANNELS.settingsStartOpenAiLogin,
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.chatHistoryList,
   IPC_CHANNELS.chatHistoryGet,
@@ -34,6 +40,7 @@ describe("registerIpcHandlers", () => {
   beforeEach(() => {
     ipcMainMock.handle.mockClear();
     ipcMainMock.removeHandler.mockClear();
+    shellMock.openExternal.mockClear();
   });
 
   it("removes owned invoke handlers before registering them", () => {
@@ -158,6 +165,53 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
   });
 
+  it("reports OpenAI auth status", async () => {
+    const options = createOptions();
+
+    vi.mocked(options.openAiAuth.getStatus).mockResolvedValue({
+      state: "connected",
+      account: {
+        type: "openai",
+        email: "user@example.com",
+        planType: "pro"
+      }
+    });
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpenAiAuthStatus);
+
+    await expect(handler()).resolves.toEqual({
+      state: "connected",
+      account: {
+        type: "openai",
+        email: "user@example.com",
+        planType: "pro"
+      }
+    });
+  });
+
+  it("starts OpenAI login and opens the verification page", async () => {
+    const options = createOptions();
+
+    vi.mocked(options.openAiAuth.startLogin).mockResolvedValue({
+      state: "pending",
+      loginId: "login-id",
+      verificationUrl: "https://auth.openai.com/codex/device",
+      userCode: "ABCD-1234"
+    });
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsStartOpenAiLogin);
+
+    await expect(handler()).resolves.toEqual({
+      state: "pending",
+      loginId: "login-id",
+      verificationUrl: "https://auth.openai.com/codex/device",
+      userCode: "ABCD-1234"
+    });
+    expect(shellMock.openExternal).toHaveBeenCalledWith("https://auth.openai.com/codex/device");
+  });
+
   it("blocks continuing chats from the popover surface", async () => {
     const options = createOptions();
 
@@ -254,6 +308,15 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     } as never,
     api,
     localApiToken: "test-token",
+    openAiAuth: {
+      getStatus: vi.fn(async () => ({
+        state: "signed-out" as const
+      })),
+      startLogin: vi.fn(async () => ({
+        state: "unavailable" as const,
+        message: "not installed"
+      }))
+    },
     getSettings: vi.fn(async () => ({
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,

@@ -28,7 +28,40 @@ export const PermissionErrorSchema = z.object({
 
 export const ShakeSensitivitySchema = z.enum(["relaxed", "normal", "strict"]);
 export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
-export const OpenAiAuthModeSchema = z.preprocess(() => "api-key", z.literal("api-key"));
+export const OpenAiAuthModeSchema = z.preprocess(
+  (value) => {
+    if (value === "codex" || value === "chatgpt") {
+      return "openai-auth";
+    }
+
+    return value;
+  },
+  z.enum(["api-key", "openai-auth"])
+);
+
+export const OpenAiAuthStatusSchema = z.discriminatedUnion("state", [
+  z.object({
+    state: z.literal("connected"),
+    account: z.object({
+      type: z.literal("openai"),
+      email: z.string().optional(),
+      planType: z.string().optional()
+    })
+  }),
+  z.object({
+    state: z.literal("signed-out")
+  }),
+  z.object({
+    state: z.literal("pending"),
+    loginId: z.string().min(1),
+    verificationUrl: z.string().url(),
+    userCode: z.string().min(1)
+  }),
+  z.object({
+    state: z.literal("unavailable"),
+    message: z.string().min(1)
+  })
+]);
 
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),

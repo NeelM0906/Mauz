@@ -246,7 +246,10 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
     return false;
   }
 
-  return "openAiApiKey" in parsed || ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key");
+  return (
+    "openAiApiKey" in parsed ||
+    ("openAiAuthMode" in parsed && (parsed.openAiAuthMode === "codex" || parsed.openAiAuthMode === "chatgpt"))
+  );
 }
 
 function toPublicSettings(

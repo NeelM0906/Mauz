@@ -7,12 +7,17 @@ import {
   type RealtimeConnectResponse
 } from "@mauzai/shared";
 import { MissingOpenAIKeyError } from "../errors";
-import { createRealtimeAnswer } from "../openai/createRealtimeAnswer";
+import { createRealtimeAnswer, type CreateRealtimeAnswerOptions } from "../openai/createRealtimeAnswer";
+import type { OpenAiApiKeyProvider } from "./ask";
 
-export type RealtimeConnectHandler = (request: RealtimeConnectRequest) => Promise<RealtimeConnectResponse>;
+export type RealtimeConnectHandler = (
+  request: RealtimeConnectRequest,
+  options?: CreateRealtimeAnswerOptions
+) => Promise<RealtimeConnectResponse>;
 
 export type RegisterRealtimeRouteOptions = {
   realtimeConnectHandler?: RealtimeConnectHandler;
+  openAiApiKeyProvider?: OpenAiApiKeyProvider;
   authToken?: string;
 };
 
@@ -42,7 +47,12 @@ export async function registerRealtimeRoute(
     }
 
     try {
-      const response = RealtimeConnectResponseSchema.parse(await realtimeConnectHandler(parsed.data));
+      const apiKey = await options.openAiApiKeyProvider?.();
+      const response = RealtimeConnectResponseSchema.parse(
+        apiKey === undefined
+          ? await realtimeConnectHandler(parsed.data)
+          : await realtimeConnectHandler(parsed.data, { apiKey })
+      );
       return reply.send(response);
     } catch (error) {
       if (error instanceof MissingOpenAIKeyError) {
