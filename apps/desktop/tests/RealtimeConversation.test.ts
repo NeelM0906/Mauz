@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MauzDesktopContext } from "@mauzai/shared";
 import {
-  canSendScreenFrame,
+  getTranscriptCueForRealtimeEvent,
   getVoiceStateForRealtimeEvent,
   parseRealtimeEvent,
-  sendScreenFrame,
   setMicrophoneMuted
 } from "../src/renderer/src/lib/realtimeConversation";
 
@@ -79,13 +77,61 @@ describe("Realtime voice event mapping", () => {
 
   it("parses Realtime event JSON safely", () => {
     expect(parseRealtimeEvent(JSON.stringify({ type: "response.created" }))).toEqual({
-      type: "response.created"
+      type: "response.created",
+      contentIndex: undefined,
+      delta: undefined,
+      eventId: undefined,
+      itemId: undefined,
+      outputIndex: undefined,
+      responseId: undefined,
+      transcript: undefined
     });
     expect(parseRealtimeEvent("{bad json")).toBeNull();
   });
+
+  it("extracts user and assistant transcript cues from Realtime events", () => {
+    expect(
+      getTranscriptCueForRealtimeEvent({
+        type: "conversation.item.input_audio_transcription.delta",
+        itemId: "user-item",
+        delta: "hello"
+      })
+    ).toEqual({
+      role: "user",
+      id: "user-item",
+      text: "hello",
+      kind: "delta"
+    });
+
+    expect(
+      getTranscriptCueForRealtimeEvent({
+        type: "conversation.item.input_audio_transcription.completed",
+        itemId: "user-item",
+        transcript: "hello there"
+      })
+    ).toEqual({
+      role: "user",
+      id: "user-item",
+      text: "hello there",
+      kind: "final"
+    });
+
+    expect(
+      getTranscriptCueForRealtimeEvent({
+        type: "response.output_audio_transcript.delta",
+        responseId: "response-id",
+        delta: "sure"
+      })
+    ).toEqual({
+      role: "assistant",
+      id: "response-id",
+      text: "sure",
+      kind: "delta"
+    });
+  });
 });
 
-describe("Realtime mute and screen frame behavior", () => {
+describe("Realtime mute behavior", () => {
   it("mute disables audio tracks without stopping them", () => {
     const stop = vi.fn();
     const track = {
@@ -106,62 +152,4 @@ describe("Realtime mute and screen frame behavior", () => {
     expect(track.enabled).toBe(true);
     expect(stop).not.toHaveBeenCalled();
   });
-
-  it("screen frames update visual context without triggering response.create", () => {
-    const sentMessages: string[] = [];
-    const context = createContextWithScreenshot();
-
-    sendScreenFrame(
-      {
-        send: (message) => {
-          sentMessages.push(message);
-        }
-      },
-      context
-    );
-
-    expect(sentMessages).toHaveLength(1);
-    expect(JSON.parse(sentMessages[0] ?? "{}")).toMatchObject({
-      type: "conversation.item.create"
-    });
-    expect(sentMessages.join("\n")).not.toContain("response.create");
-  });
-
-  it("screen pause and mic mute are independent controls", () => {
-    expect(
-      canSendScreenFrame({
-        screenPaused: false,
-        dataChannelReady: true
-      })
-    ).toBe(true);
-    expect(
-      canSendScreenFrame({
-        screenPaused: true,
-        dataChannelReady: true
-      })
-    ).toBe(false);
-  });
 });
-
-function createContextWithScreenshot(): MauzDesktopContext {
-  return {
-    timestamp: "2026-05-14T20:00:00.000Z",
-    platform: "darwin",
-    cursor: {
-      x: 100,
-      y: 200
-    },
-    pointer: {
-      cursor: {
-        x: 100,
-        y: 200
-      },
-      screenshot: {
-        mimeType: "image/jpeg",
-        base64: "abc123",
-        width: 1280,
-        height: 720
-      }
-    }
-  };
-}

@@ -16,15 +16,14 @@ Use MauzAI when you want help understanding an interface, summarizing visible co
 
 - Ask about the area around your cursor.
 - Start a voice conversation with Mauz.
-- Share your screen explicitly when live visual context matters.
 - Save and revisit previous text conversations.
 - Tune mouse-shake activation so the assistant opens only when you mean it.
-- Keep control of when screenshots, microphone audio, and screen frames are shared.
+- Keep control of when screenshots and microphone audio are shared.
 
 ## How It Works
 
 1. Summon Mauz near your cursor with the keyboard shortcut or mouse shake.
-2. Choose Ask, Talk, or Show Mauz my screen.
+2. Choose Ask or Talk.
 3. Mauz uses the context you approved to answer, explain, summarize, or guide your next step.
 4. Close the popup when you are done and return to your work.
 
@@ -41,15 +40,14 @@ MauzAI is built around user-controlled context sharing.
 
 - Mouse shake only opens the menu.
 - Ask mode captures context after you choose Ask Mauz.
-- Voice starts only after you choose Talk to Mauz or Show Mauz my screen.
-- Screen sharing uses explicit screenshot frames while sharing is active.
+- Voice starts only after you choose Talk to Mauz.
 - Previous chats store the typed question, Mauz's text answer, generated title, and timestamps.
 - Cursor crops, screenshots, selected text, and microphone audio are not used until the relevant action is started.
 
 ## Current Status
 
-MauzAI is in macOS preview. The current product includes point-and-ask help, voice conversations, explicit screen sharing, chat history, native mouse-shake activation, and local settings.
-Text answers and Realtime voice use OpenAI API access through `OPENAI_API_KEY`. MauzAI does not store OpenAI keys in local settings.
+MauzAI is in macOS preview. The current product includes point-and-ask help, voice conversations, chat history, native mouse-shake activation, and local settings.
+Text answers and Realtime voice use OpenAI credentials from `OPENAI_API_KEY` or a locally encrypted saved API key.
 
 Packaging, signing, and a public distribution flow are still upcoming.
 
@@ -63,7 +61,7 @@ MauzAI is available under the [FirstPoint Labs Research Preview License](LICENSE
 - A smoother first-run onboarding flow.
 - Richer conversation history controls.
 - More precise context controls for shared windows and selected regions.
-- Product polish for long-running voice and screen-sharing sessions.
+- Product polish for long-running voice sessions.
 
 ## Brand
 

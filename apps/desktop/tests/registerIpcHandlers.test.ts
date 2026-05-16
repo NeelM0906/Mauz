@@ -20,7 +20,6 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
-  IPC_CHANNELS.menuStartScreenShare,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -28,8 +27,7 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.chatHistoryGet,
   IPC_CHANNELS.chatHistoryContinue,
   IPC_CHANNELS.realtimeCreateSession,
-  IPC_CHANNELS.realtimeConnect,
-  IPC_CHANNELS.realtimeCaptureFrame
+  IPC_CHANNELS.realtimeConnect
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -86,15 +84,66 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
   });
 
-  it("marks Talk mode as still in progress", async () => {
+  it("opens Talk mode with realtime context", async () => {
     const options = createOptions();
+    const context: MauzDesktopContext = {
+      timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
+      platform: "darwin",
+      cursor: {
+        x: 200,
+        y: 300
+      }
+    };
+
+    vi.mocked(options.contextCollector.collectForRealtime).mockResolvedValue(context);
     registerIpcHandlers(options);
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuStartTalk);
 
-    await expect(handler()).rejects.toThrow("Still working on this.");
-    expect(options.contextCollector.collectForRealtime).not.toHaveBeenCalled();
-    expect(options.popover.resizeForRealtime).not.toHaveBeenCalled();
+    await expect(handler()).resolves.toEqual(context);
+    expect(options.contextCollector.collectForRealtime).toHaveBeenCalledOnce();
+    expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
+  });
+
+  it("forwards Realtime connect requests to the local API", async () => {
+    const options = createOptions();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        answerSdp: "answer-sdp",
+        model: "test-realtime-model"
+      })
+    } as Response);
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.realtimeConnect);
+
+    await expect(
+      handler(undefined, {
+        offerSdp: "offer-sdp",
+        mode: "talk",
+        context: {
+          timestamp: "2026-05-14T12:00:00.000Z",
+          platform: "darwin",
+          cursor: {
+            x: 10,
+            y: 20
+          }
+        }
+      })
+    ).resolves.toEqual({
+      answerSdp: "answer-sdp",
+      model: "test-realtime-model"
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:47891/api/realtime/connect",
+      expect.objectContaining({
+        method: "POST"
+      })
+    );
+
+    fetchMock.mockRestore();
   });
 
   it("does not resize the popover when desktop opens settings", async () => {
@@ -161,8 +210,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   const contextCollector = {
     collectBasicContext: vi.fn(),
     collectForAsk: vi.fn(),
-    collectForRealtime: vi.fn(),
-    collectRealtimeFrame: vi.fn()
+    collectForRealtime: vi.fn()
   } as unknown as ContextCollector;
   const api: LocalApiHandle = {
     baseUrl: "http://127.0.0.1:47891",

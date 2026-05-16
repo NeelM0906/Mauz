@@ -53,10 +53,6 @@ export class ContextCollector {
     return this.collectWithPointerContext();
   }
 
-  async collectRealtimeFrame(): Promise<MauzDesktopContext> {
-    return this.collectWithPointerContext();
-  }
-
   private async collectWithPointerContext(): Promise<MauzDesktopContext> {
     const context = await this.collectAskBaseContext();
     const capture = async () => this.screenshotService.capturePointerContext(context.cursor);

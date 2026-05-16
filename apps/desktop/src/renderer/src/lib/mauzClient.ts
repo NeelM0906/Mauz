@@ -26,12 +26,7 @@ const browserPreviewBridge: MauzBridge = {
     showMenu: async () => {},
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
-    startTalk: async () => {
-      throw new Error("Still working on this.");
-    },
-    startScreenShare: async () => {
-      throw new Error("Still working on this.");
-    }
+    startTalk: async () => collectPreviewContext()
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
@@ -59,8 +54,7 @@ const browserPreviewBridge: MauzBridge = {
     },
     connect: async () => {
       throw new Error("Run the Electron app to talk to Mauz with Realtime.");
-    },
-    captureFrame: async () => collectPreviewContext()
+    }
   },
   settings: {
     open: async () => ({
@@ -139,9 +133,6 @@ export const mauzClient = {
   startTalk(): Promise<MauzDesktopContext> {
     return getBridge().menu.startTalk();
   },
-  startScreenShare(): Promise<MauzDesktopContext> {
-    return getBridge().menu.startScreenShare();
-  },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);
   },
@@ -159,9 +150,6 @@ export const mauzClient = {
   },
   connectRealtime(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse> {
     return getBridge().realtime.connect(payload);
-  },
-  captureRealtimeFrame(): Promise<MauzDesktopContext> {
-    return getBridge().realtime.captureFrame();
   },
   openSettings(): Promise<MauzSettings> {
     return getBridge().settings.open();

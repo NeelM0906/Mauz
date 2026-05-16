@@ -38,14 +38,9 @@ const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"]
 const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const PROVIDER_OPTIONS = [
   {
-    name: "OpenAI API",
+    name: "OpenAI login",
     status: "active",
-    description: "Uses the launch environment key or a locally encrypted saved key."
-  },
-  {
-    name: "ChatGPT account",
-    status: "still working",
-    description: "OpenAI API calls stay on the supported API-key auth path for now."
+    description: "Uses OpenAI credentials from the launch environment or an encrypted saved key."
   },
   {
     name: "z.ai",
