@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, Cpu, KeyRound, MousePointerClick, Save, Settings2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { MauzSettings, OpenAiAuthMode, RealtimeReasoningEffort, ShakeSensitivity } from "@mauzai/shared";
+import type { MauzSettings, RealtimeReasoningEffort, ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -28,19 +28,6 @@ const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const REALTIME_MODEL_OPTIONS = ["gpt-realtime-2", "gpt-realtime-mini"];
 const VOICE_OPTIONS = ["marin", "cedar", "alloy"];
 const REASONING_OPTIONS: RealtimeReasoningEffort[] = ["low", "medium", "high"];
-const AUTH_OPTIONS: Array<{
-  value: OpenAiAuthMode;
-  label: string;
-}> = [
-  {
-    value: "chatgpt",
-    label: "ChatGPT"
-  },
-  {
-    value: "api-key",
-    label: "API key"
-  }
-];
 
 type SettingsPanelProps = {
   chrome?: "popover" | "desktop";
@@ -49,7 +36,6 @@ type SettingsPanelProps = {
 export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): React.JSX.Element {
   const { settings, setSettings, setStatus, backToMenu } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
-  const [apiKeyInput, setApiKeyInput] = useState("");
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -110,43 +96,17 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         nativeShakeEnabled: draft.nativeShakeEnabled,
         devHotkeyEnabled: draft.devHotkeyEnabled,
         shakeSensitivity: draft.shakeSensitivity,
-        openAiAuthMode: draft.openAiAuthMode,
         askModel: draft.askModel,
         chatTitleModel: draft.chatTitleModel,
         realtimeModel: draft.realtimeModel,
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
-        includeFullScreenshot: draft.includeFullScreenshot,
-        ...(draft.openAiAuthMode === "api-key" && apiKeyInput.trim().length > 0
-          ? { openAiApiKey: apiKeyInput.trim() }
-          : {})
+        includeFullScreenshot: draft.includeFullScreenshot
       });
       setSettings(nextSettings);
-      setApiKeyInput("");
       setSettingsMessage("Settings saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update Mauz settings.";
-
-      setSettingsMessage(message);
-      setStatus(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleClearApiKey = async (): Promise<void> => {
-    setSaving(true);
-    setSettingsMessage(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({
-        openAiApiKey: null
-      });
-      setSettings(nextSettings);
-      setApiKeyInput("");
-      setSettingsMessage("API key cleared.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not clear the API key.";
 
       setSettingsMessage(message);
       setStatus(message);
@@ -174,39 +134,9 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             <KeyRound aria-hidden="true" size={15} />
             <span>OpenAI</span>
           </div>
-          <div className="segmented-control auth-control" role="group" aria-label="OpenAI access method">
-            {AUTH_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={draft.openAiAuthMode === option.value}
-                onClick={() => updateDraft("openAiAuthMode", option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          {draft.openAiAuthMode === "api-key" ? (
-            <>
-              <label className="settings-field">
-                <span>API key</span>
-                <input
-                  type="password"
-                  value={apiKeyInput}
-                  placeholder={draft.apiKeyConfigured ? "Saved" : "Paste key"}
-                  autoComplete="off"
-                  onChange={(event) => setApiKeyInput(event.target.value)}
-                />
-              </label>
-              <div className="settings-inline-actions">
-                <button type="button" className="secondary-button" onClick={() => void handleClearApiKey()}>
-                  Clear key
-                </button>
-              </div>
-            </>
-          ) : (
-            <p className="settings-message">Uses your signed-in ChatGPT plan through Codex.</p>
-          )}
+          <p className="settings-message">
+            {draft.apiKeyConfigured ? "API key configured at launch." : "OPENAI_API_KEY is not configured."}
+          </p>
         </div>
 
         <div className="settings-section">
@@ -330,7 +260,7 @@ function SettingsHeader({
         <BrandLogo className="panel-title-logo" />
         <div>
           <h1>Settings</h1>
-          <p>Models, key, and activation.</p>
+          <p>Models and activation.</p>
         </div>
       </div>
     </header>

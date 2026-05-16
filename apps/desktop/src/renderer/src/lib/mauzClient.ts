@@ -83,7 +83,7 @@ const browserPreviewBridge: MauzBridge = {
       realtimeVoice: payload.realtimeVoice ?? "marin",
       realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
       includeFullScreenshot: payload.includeFullScreenshot ?? false,
-      apiKeyConfigured: (payload.openAiApiKey?.trim().length ?? 0) > 0
+      apiKeyConfigured: false
     })
   },
   events: {

@@ -94,11 +94,11 @@ describe("createRealtimeAnswer", () => {
     expect(screenInstructions).toContain("Wait for the user to ask");
   });
 
-  it("requires API key auth for Realtime when ChatGPT auth is selected", async () => {
-    await expect(
-      createRealtimeAnswer(validRealtimeRequest, {
-        authMode: "chatgpt"
-      })
-    ).rejects.toThrow("Realtime voice requires API key authentication.");
+  it("requires an API key for Realtime", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+
+    await expect(createRealtimeAnswer(validRealtimeRequest)).rejects.toThrow(
+      "Set OPENAI_API_KEY before launching Mauz, then try again."
+    );
   });
 });

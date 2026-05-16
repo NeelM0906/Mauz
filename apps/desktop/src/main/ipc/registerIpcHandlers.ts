@@ -234,7 +234,6 @@ function toSettingsUpdate(parsedUpdate: {
   realtimeVoice?: string | undefined;
   realtimeReasoningEffort?: MauzSettings["realtimeReasoningEffort"] | undefined;
   includeFullScreenshot?: boolean | undefined;
-  openAiApiKey?: string | null | undefined;
 }): MauzSettingsUpdate {
   const update: MauzSettingsUpdate = {};
 
@@ -276,10 +275,6 @@ function toSettingsUpdate(parsedUpdate: {
 
   if (parsedUpdate.includeFullScreenshot !== undefined) {
     update.includeFullScreenshot = parsedUpdate.includeFullScreenshot;
-  }
-
-  if ("openAiApiKey" in parsedUpdate) {
-    update.openAiApiKey = parsedUpdate.openAiApiKey;
   }
 
   return update;

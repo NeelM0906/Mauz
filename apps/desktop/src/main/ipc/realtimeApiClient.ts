@@ -39,7 +39,7 @@ export function getFriendlyRealtimeApiError(status: number, body: unknown): stri
   }
 
   if (status === 503 && rawMessage.includes("OPENAI_API_KEY")) {
-    return "Configure OpenAI API key access in Mauz settings, then try again.";
+    return "Set OPENAI_API_KEY before launching Mauz, then try again.";
   }
 
   if (rawMessage.length > 0) {

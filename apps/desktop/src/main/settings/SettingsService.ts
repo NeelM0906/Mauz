@@ -24,11 +24,8 @@ const DEFAULT_CHAT_TITLE_MODEL = "gpt-5.4-nano";
 const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
 const DEFAULT_REALTIME_REASONING_EFFORT = "low";
-const DEFAULT_OPENAI_AUTH_MODE = "api-key";
 
-type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured"> & {
-  openAiApiKey?: string | undefined;
-};
+type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured">;
 
 export type MauzRuntimeSettings = StoredMauzSettings & {
   openAiApiKey?: string | undefined;
@@ -61,22 +58,16 @@ export class SettingsService {
 
   async getRuntime(): Promise<MauzRuntimeSettings> {
     const stored = await this.getStored();
-    const storedApiKey = stored.openAiApiKey?.trim();
 
     return {
       ...stored,
-      ...(storedApiKey
-        ? { openAiApiKey: storedApiKey }
-        : this.environmentApiKey
-          ? { openAiApiKey: this.environmentApiKey }
-          : {})
+      ...(this.environmentApiKey ? { openAiApiKey: this.environmentApiKey } : {})
     };
   }
 
   async update(update: MauzSettingsUpdate): Promise<MauzSettings> {
     const parsedUpdate = MauzSettingsUpdateSchema.parse(update);
     const currentSettings = await this.getStored();
-    const { openAiApiKey } = parsedUpdate;
     const nextSettings: StoredMauzSettings = { ...currentSettings };
 
     applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
@@ -89,16 +80,6 @@ export class SettingsService {
     applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
     applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
     applyDefinedSetting(nextSettings, "includeFullScreenshot", parsedUpdate.includeFullScreenshot);
-
-    if ("openAiApiKey" in parsedUpdate) {
-      const trimmedApiKey = openAiApiKey?.trim() ?? "";
-
-      if (trimmedApiKey.length > 0) {
-        nextSettings.openAiApiKey = trimmedApiKey;
-      } else {
-        delete nextSettings.openAiApiKey;
-      }
-    }
 
     await this.ensureDirectory(dirname(this.settingsPath));
     await this.writeTextFile(this.settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`);
@@ -114,9 +95,14 @@ export class SettingsService {
 
     try {
       const rawSettings = await this.readTextFile(this.settingsPath);
-      const parsedSettings = parseStoredSettings(JSON.parse(rawSettings));
+      const parsed = JSON.parse(rawSettings) as unknown;
+      const parsedSettings = parseStoredSettings(parsed);
 
       if (parsedSettings !== null) {
+        if (shouldSanitizeStoredSettings(parsed)) {
+          await this.sanitizeStoredSettings(parsedSettings);
+        }
+
         this.cachedSettings = parsedSettings;
         return parsedSettings;
       }
@@ -126,6 +112,15 @@ export class SettingsService {
 
     this.cachedSettings = this.defaults;
     return this.defaults;
+  }
+
+  private async sanitizeStoredSettings(settings: StoredMauzSettings): Promise<void> {
+    try {
+      await this.ensureDirectory(dirname(this.settingsPath));
+      await this.writeTextFile(this.settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+    } catch {
+      // Sanitization is best effort; startup should still continue with in-memory safe settings.
+    }
   }
 }
 
@@ -144,10 +139,7 @@ function getDefaultSettings(): StoredMauzSettings {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, false),
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
-    openAiAuthMode:
-      process.env.OPENAI_AUTH_MODE === "chatgpt" || process.env.OPENAI_AUTH_MODE === "codex"
-        ? "chatgpt"
-        : DEFAULT_OPENAI_AUTH_MODE,
+    openAiAuthMode: "api-key",
     askModel: process.env.OPENAI_ASK_MODEL?.trim() || DEFAULT_ASK_MODEL,
     chatTitleModel: process.env.OPENAI_CHAT_TITLE_MODEL?.trim() || DEFAULT_CHAT_TITLE_MODEL,
     realtimeModel: process.env.OPENAI_REALTIME_MODEL?.trim() || DEFAULT_REALTIME_MODEL,
@@ -177,9 +169,6 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     return null;
   }
 
-  const rawApiKey =
-    "openAiApiKey" in parsed && typeof parsed.openAiApiKey === "string" ? parsed.openAiApiKey.trim() : "";
-
   return {
     nativeShakeEnabled: publicSettings.data.nativeShakeEnabled,
     devHotkeyEnabled: publicSettings.data.devHotkeyEnabled,
@@ -190,9 +179,16 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeModel: publicSettings.data.realtimeModel,
     realtimeVoice: publicSettings.data.realtimeVoice,
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
-    includeFullScreenshot: publicSettings.data.includeFullScreenshot,
-    ...(rawApiKey.length > 0 ? { openAiApiKey: rawApiKey } : {})
+    includeFullScreenshot: publicSettings.data.includeFullScreenshot
   };
+}
+
+function shouldSanitizeStoredSettings(parsed: unknown): boolean {
+  if (typeof parsed !== "object" || parsed === null) {
+    return false;
+  }
+
+  return "openAiApiKey" in parsed || ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key");
 }
 
 function toPublicSettings(settings: StoredMauzSettings, environmentApiKey: string | undefined): MauzSettings {
@@ -207,7 +203,7 @@ function toPublicSettings(settings: StoredMauzSettings, environmentApiKey: strin
     realtimeVoice: settings.realtimeVoice,
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
     includeFullScreenshot: settings.includeFullScreenshot,
-    apiKeyConfigured: (settings.openAiApiKey?.trim().length ?? 0) > 0 || environmentApiKey !== undefined
+    apiKeyConfigured: environmentApiKey !== undefined
   };
 }
 

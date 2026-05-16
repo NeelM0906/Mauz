@@ -239,7 +239,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeVoice: update.realtimeVoice ?? "marin",
       realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
       includeFullScreenshot: update.includeFullScreenshot ?? false,
-      apiKeyConfigured: (update.openAiApiKey?.trim().length ?? 0) > 0
+      apiKeyConfigured: false
     }))
   };
 }

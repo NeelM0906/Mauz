@@ -131,9 +131,7 @@ function createInputProviders(settings: MauzSettings): InputProvider[] {
 }
 
 function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
-  process.env.OPENAI_AUTH_MODE = settings.openAiAuthMode;
-
-  if (settings.openAiAuthMode === "api-key" && settings.openAiApiKey?.trim()) {
+  if (settings.openAiApiKey?.trim()) {
     process.env.OPENAI_API_KEY = settings.openAiApiKey.trim();
   } else {
     delete process.env.OPENAI_API_KEY;

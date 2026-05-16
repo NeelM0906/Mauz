@@ -12,8 +12,8 @@ vi.mock("electron", () => ({
 import { SettingsService } from "../src/main/settings/SettingsService";
 
 describe("SettingsService", () => {
-  it("clears a saved API key without treating the runtime process env as configured", async () => {
-    const service = createSettingsService({
+  it("removes legacy saved API keys and only uses the launch environment key", async () => {
+    const { service, writes } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
         openAiApiKey: "sk-saved"
@@ -21,20 +21,14 @@ describe("SettingsService", () => {
     });
 
     await expect(service.get()).resolves.toMatchObject({
-      apiKeyConfigured: true
-    });
-    await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiApiKey: "sk-saved"
-    });
-
-    await expect(service.update({ openAiApiKey: null })).resolves.toMatchObject({
       apiKeyConfigured: false
     });
     await expect(service.getRuntime()).resolves.not.toHaveProperty("openAiApiKey");
+    expect(writes.at(-1)).not.toContain("openAiApiKey");
   });
 
-  it("falls back to the startup environment API key after clearing a saved key", async () => {
-    const service = createSettingsService({
+  it("uses the startup environment API key at runtime without persisting it", async () => {
+    const { service, writes } = createSettingsService({
       environmentApiKey: "sk-env",
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
@@ -42,38 +36,50 @@ describe("SettingsService", () => {
       })
     });
 
-    await expect(service.update({ openAiApiKey: null })).resolves.toMatchObject({
+    await expect(service.update({ askModel: "gpt-5.4" })).resolves.toMatchObject({
       apiKeyConfigured: true
     });
     await expect(service.getRuntime()).resolves.toMatchObject({
       openAiApiKey: "sk-env"
     });
+    expect(writes.at(-1)).not.toContain("openAiApiKey");
   });
 
-  it("persists the selected OpenAI auth mode", async () => {
-    const service = createSettingsService({
+  it("keeps OpenAI auth mode on the API key path", async () => {
+    const { service } = createSettingsService({
       settingsJson: JSON.stringify(DEFAULT_SETTINGS)
     });
 
-    await expect(service.update({ openAiAuthMode: "chatgpt" })).resolves.toMatchObject({
-      openAiAuthMode: "chatgpt"
+    await expect(service.update({ openAiAuthMode: "api-key" })).resolves.toMatchObject({
+      openAiAuthMode: "api-key"
     });
     await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiAuthMode: "chatgpt"
+      openAiAuthMode: "api-key"
     });
   });
 
-  it("migrates the old Codex auth mode setting to ChatGPT", async () => {
-    const service = createSettingsService({
+  it("migrates old Codex and ChatGPT auth mode settings to API key", async () => {
+    const codexSettings = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
         openAiAuthMode: "codex"
       })
     });
-
-    await expect(service.get()).resolves.toMatchObject({
-      openAiAuthMode: "chatgpt"
+    const chatGptSettings = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        openAiAuthMode: "chatgpt"
+      })
     });
+
+    await expect(codexSettings.service.get()).resolves.toMatchObject({
+      openAiAuthMode: "api-key"
+    });
+    await expect(chatGptSettings.service.get()).resolves.toMatchObject({
+      openAiAuthMode: "api-key"
+    });
+    expect(codexSettings.writes.at(-1)).toContain('"openAiAuthMode": "api-key"');
+    expect(chatGptSettings.writes.at(-1)).toContain('"openAiAuthMode": "api-key"');
   });
 });
 
@@ -83,10 +89,10 @@ function createSettingsService({
 }: {
   environmentApiKey?: string | null | undefined;
   settingsJson: string;
-}): SettingsService {
+}): { service: SettingsService; writes: string[] } {
   const writes: string[] = [];
 
-  return new SettingsService({
+  const service = new SettingsService({
     settingsPath: join(tmpdir(), `mauz-settings-${randomUUID()}.json`),
     environmentApiKey,
     readTextFile: async () => writes.at(-1) ?? settingsJson,
@@ -95,6 +101,8 @@ function createSettingsService({
     },
     ensureDirectory: async () => {}
   });
+
+  return { service, writes };
 }
 
 const DEFAULT_SETTINGS = {

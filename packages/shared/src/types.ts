@@ -178,7 +178,7 @@ export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
 export type RealtimeReasoningEffort = "low" | "medium" | "high";
 
-export type OpenAiAuthMode = "api-key" | "chatgpt";
+export type OpenAiAuthMode = "api-key";
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
@@ -194,9 +194,7 @@ export type MauzSettings = {
   apiKeyConfigured: boolean;
 };
 
-export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">> & {
-  openAiApiKey?: string | null | undefined;
-};
+export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">>;
 
 export type MouseMoveSample = {
   x: number;

@@ -52,10 +52,7 @@ export async function registerAskRoute(
       }
 
       return reply.status(502).send({
-        error:
-          error instanceof Error && error.message.startsWith("ChatGPT auth request failed:")
-            ? error.message
-            : "Ask Mauz failed while contacting the model."
+        error: "Ask Mauz failed while contacting the model."
       });
     }
   });
