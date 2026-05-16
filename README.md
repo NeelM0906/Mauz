@@ -2,17 +2,22 @@
   <img src="apps/desktop/src/renderer/src/assets/mauzai-logo.png" alt="MauzAI" width="720" />
 </p>
 
-# MauzAI
+# Mauz
 
-MauzAI is a macOS desktop assistant that appears where you are working. Shake your mouse or use the shortcut, choose what context to share, and ask about the screen in front of you without switching apps.
+Mauz is a simple application that lets the user invoke an AI interaction through mouse gestures.
 
-## Why MauzAI
+This is a research preview experimenting with ways to make AI feel more accessible, simple, and customizable on the desktop. The current experiment is intentionally small: gesture in, share the context you choose, interact with AI, and return to what you were doing.
 
-Most assistants wait in a separate tab. MauzAI lives on the desktop, close to the thing you are looking at, so the conversation starts with the right visual context.
+Mauz is not a finished product. It is a working preview for trying out interaction patterns and for inviting others to build on the idea.
 
-Use MauzAI when you want help understanding an interface, summarizing visible content, explaining an error, deciding what to do next, or talking through something on your screen.
+## What It Does
 
-## What You Can Do
+- Opens an AI interaction from a mouse gesture or shortcut.
+- Lets the user choose when to share screen context.
+- Supports text interaction with Mauz.
+- Supports voice interaction with Mauz.
+- Supports explicit screen sharing when live visual context matters.
+- Keeps the interaction lightweight and close to the user's current task.
 
 - Ask about the area around your cursor.
 - Start a voice conversation with Mauz.
@@ -20,23 +25,27 @@ Use MauzAI when you want help understanding an interface, summarizing visible co
 - Tune mouse-shake activation so the assistant opens only when you mean it.
 - Keep control of when screenshots and microphone audio are shared.
 
-## How It Works
+We hope people build integrations and customize Mauz to their own liking.
 
 1. Summon Mauz near your cursor with the keyboard shortcut or mouse shake.
 2. Choose Ask or Talk.
 3. Mauz uses the context you approved to answer, explain, summarize, or guide your next step.
 4. Close the popup when you are done and return to your work.
 
-## Product Principles
+We will also work on supporting lightweight local models, so Mauz can experiment with simpler, lower-latency, and more private AI interactions where that makes sense.
 
-- Context should be intentional. Mauz does not capture your screen until you choose an action.
-- Desktop help should be fast. The assistant opens near your cursor instead of pulling you into another app.
-- Privacy controls should be visible. Screen sharing, microphone access, and history are all explicit user actions.
-- Answers should be useful in place. Mauz is designed for short, practical help while you keep working.
+## Current Preview
 
-## Privacy
+The current macOS preview includes:
 
-MauzAI is built around user-controlled context sharing.
+- Mouse-gesture activation.
+- Keyboard shortcut activation.
+- User-approved screen context.
+- Explicit screen sharing.
+- Text interaction.
+- Voice interaction.
+- Local settings.
+- Conversation history.
 
 - Mouse shake only opens the menu.
 - Ask mode captures context after you choose Ask Mauz.
@@ -49,13 +58,18 @@ MauzAI is built around user-controlled context sharing.
 MauzAI is in macOS preview. The current product includes point-and-ask help, voice conversations, chat history, native mouse-shake activation, and local settings.
 Text answers and Realtime voice use OpenAI credentials from `OPENAI_API_KEY` or a locally encrypted saved API key.
 
-Packaging, signing, and a public distribution flow are still upcoming.
+## Context Sharing
 
-## License
+Mauz is built around user-controlled context sharing.
 
-MauzAI is available under the [FirstPoint Labs Research Preview License](LICENSE.md). It may be used, modified, and productionized with required attribution to FirstPoint Labs and relevant previous authors, and may never be used for privacy invasion or surveillance.
+- Mouse gestures only open the interaction surface.
+- Screen context is captured after the user chooses to share it.
+- Voice starts only after the user chooses to start talking or share the screen.
+- Screen sharing uses explicit screenshot frames while sharing is active.
+- Previous chats store the typed question, Mauz's text answer, generated title, and timestamps.
+- Cursor crops, screenshots, selected text, microphone audio, and screen frames are not used until the relevant action is started.
 
-## Roadmap
+## Future Work
 
 - Signed macOS builds.
 - A smoother first-run onboarding flow.
@@ -63,6 +77,6 @@ MauzAI is available under the [FirstPoint Labs Research Preview License](LICENSE
 - More precise context controls for shared windows and selected regions.
 - Product polish for long-running voice sessions.
 
-## Brand
+## License
 
-The MauzAI identity pairs a fast mouse mark with an electric bolt to match the product goal: quick desktop help the moment you need it.
+MauzAI is available under the [FirstPoint Labs Research Preview License](LICENSE.md). It may be used, modified, and productionized with required attribution to FirstPoint Labs and relevant previous authors, and may never be used for privacy invasion or surveillance.
