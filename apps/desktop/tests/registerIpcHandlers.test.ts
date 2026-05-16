@@ -105,6 +105,34 @@ describe("registerIpcHandlers", () => {
     await expect(handler()).resolves.toEqual(context);
     expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
   });
+
+  it("does not resize the popover when desktop opens settings", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await handler(createInvokeEvent("desktop"));
+
+    expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
+  });
+
+  it("blocks continuing chats from the popover surface", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryContinue);
+
+    await expect(
+      handler(createInvokeEvent("popover"), {
+        id: "conversation-id",
+        question: "Can you expand on this?"
+      })
+    ).rejects.toThrow("Continue chats from the Mauz desktop app.");
+    expect(options.chatHistory.get).not.toHaveBeenCalled();
+  });
 });
 
 function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
@@ -115,6 +143,19 @@ function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<
   }
 
   return call[1] as (...args: unknown[]) => Promise<unknown>;
+}
+
+function createInvokeEvent(surface: "desktop" | "popover"): unknown {
+  const url = `file:///renderer/index.html?surface=${surface}`;
+
+  return {
+    senderFrame: {
+      url
+    },
+    sender: {
+      getURL: () => url
+    }
+  };
 }
 
 function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
@@ -178,6 +219,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
       shakeSensitivity: "normal" as const,
+      openAiAuthMode: "api-key" as const,
       askModel: "gpt-5.4-mini",
       chatTitleModel: "gpt-5.4-nano",
       realtimeModel: "gpt-realtime-2",
@@ -190,13 +232,14 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
       devHotkeyEnabled: update.devHotkeyEnabled ?? true,
       shakeSensitivity: update.shakeSensitivity ?? ("normal" as const),
+      openAiAuthMode: update.openAiAuthMode ?? ("api-key" as const),
       askModel: update.askModel ?? "gpt-5.4-mini",
       chatTitleModel: update.chatTitleModel ?? "gpt-5.4-nano",
       realtimeModel: update.realtimeModel ?? "gpt-realtime-2",
       realtimeVoice: update.realtimeVoice ?? "marin",
       realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
       includeFullScreenshot: update.includeFullScreenshot ?? false,
-      apiKeyConfigured: (update.openAiApiKey?.trim().length ?? 0) > 0
+      apiKeyConfigured: false
     }))
   };
 }

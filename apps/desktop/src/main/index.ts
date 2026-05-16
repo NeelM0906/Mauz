@@ -18,10 +18,12 @@ import {
   type LocalApiHandle
 } from "./server/launchLocalApi";
 import { SettingsService, type MauzRuntimeSettings } from "./settings/SettingsService";
+import { DesktopWindowController } from "./windows/DesktopWindowController";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+let desktopWindow: DesktopWindowController | null = null;
 let popover: PopoverWindowController | null = null;
 let apiHandle: LocalApiHandle | null = null;
 let contextCollector: ContextCollector | null = null;
@@ -33,6 +35,8 @@ let shutdownPromise: Promise<void> | null = null;
 let shutdownComplete = false;
 const shownPermissionMessages = new Set<string>();
 
+app.commandLine.appendSwitch("use-mock-keychain");
+
 type QuitEvent = {
   preventDefault(): void;
 };
@@ -41,12 +45,23 @@ async function bootstrap(): Promise<void> {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const preloadPath = join(__dirname, "../preload/index.mjs");
   const rendererFile = join(__dirname, "../renderer/index.html");
+  const appIconPath = getAppIconPath();
   settingsService = new SettingsService();
   applyRuntimeEnvironment(await settingsService.getRuntime());
+
+  configureAppIdentity(appIconPath);
+
+  desktopWindow = new DesktopWindowController({
+    preloadPath,
+    rendererFile,
+    iconPath: appIconPath,
+    ...(rendererUrl === undefined ? {} : { rendererUrl })
+  });
 
   popover = new PopoverWindowController({
     preloadPath,
     rendererFile,
+    iconPath: appIconPath,
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
@@ -81,6 +96,7 @@ async function bootstrap(): Promise<void> {
     updateSettings: applySettingsUpdate
   });
   startInputProviders(initialSettings);
+  await desktopWindow.show();
 }
 
 async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSettings> {
@@ -129,12 +145,36 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   process.env.OPENAI_INCLUDE_FULL_SCREENSHOT = settings.includeFullScreenshot ? "true" : "false";
 }
 
+function configureAppIdentity(iconPath: string): void {
+  app.setName("MauzAI");
+  app.setAppUserModelId("ai.mauz.desktop");
+  app.setAboutPanelOptions({
+    applicationName: "MauzAI",
+    applicationVersion: app.getVersion(),
+    iconPath
+  });
+}
+
+function getAppIconPath(): string {
+  const candidates = [
+    resolve(process.resourcesPath, "mauzai.icns"),
+    resolve(process.cwd(), "build/mauzai.icns"),
+    resolve(process.cwd(), "apps/desktop/build/mauzai.icns"),
+    resolve(__dirname, "../../build/mauzai.icns"),
+    resolve(__dirname, "../../../../apps/desktop/build/mauzai.icns")
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
+}
+
 function getNativeInputAgentPath(): string {
   if (process.env.MAUZ_INPUT_AGENT_PATH !== undefined && process.env.MAUZ_INPUT_AGENT_PATH.length > 0) {
     return process.env.MAUZ_INPUT_AGENT_PATH;
   }
 
   const candidates = [
+    resolve(app.getAppPath(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
+    resolve(app.getAppPath(), "native/macos/MauzInputAgent/MauzInputAgent"),
     resolve(
       app.getAppPath(),
       "../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
@@ -234,15 +274,18 @@ async function shutdownResources(): Promise<void> {
   }
 
   const currentPopover = popover;
+  const currentDesktopWindow = desktopWindow;
+  desktopWindow = null;
   popover = null;
   contextCollector = null;
   chatHistoryService = null;
   settingsService = null;
 
   try {
+    currentDesktopWindow?.destroy();
     currentPopover?.destroy();
   } catch (error: unknown) {
-    reportShutdownError("destroy the popover", error);
+    reportShutdownError("destroy application windows", error);
   }
 
   const currentApiHandle = apiHandle;
@@ -302,16 +345,16 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    void popover?.showAtLastAnchor();
+    void desktopWindow?.show();
   });
 
   void app.whenReady().then(startBootstrap);
 
   app.on("activate", () => {
-    if (popover === null) {
+    if (desktopWindow === null || popover === null) {
       startBootstrap();
     } else {
-      void popover.showAtLastAnchor();
+      void desktopWindow.show();
     }
   });
 

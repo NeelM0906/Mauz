@@ -141,7 +141,7 @@ function formatBounds(bounds: Bounds | undefined): string | undefined {
 
 function getRealtimeErrorMessage(status: number, body: string): string {
   if (status === 401) {
-    return "OpenAI rejected the Realtime request. Check OPENAI_API_KEY and restart Mauz.";
+    return "OpenAI rejected the Realtime request. Check OPENAI_API_KEY before launching Mauz.";
   }
 
   if (body.trim().length > 0) {

@@ -178,10 +178,13 @@ export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
 export type RealtimeReasoningEffort = "low" | "medium" | "high";
 
+export type OpenAiAuthMode = "api-key";
+
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
   devHotkeyEnabled: boolean;
   shakeSensitivity: ShakeSensitivity;
+  openAiAuthMode: OpenAiAuthMode;
   askModel: string;
   chatTitleModel: string;
   realtimeModel: string;
@@ -191,9 +194,7 @@ export type MauzSettings = {
   apiKeyConfigured: boolean;
 };
 
-export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">> & {
-  openAiApiKey?: string | null | undefined;
-};
+export type MauzSettingsUpdate = Partial<Omit<MauzSettings, "apiKeyConfigured">>;
 
 export type MouseMoveSample = {
   x: number;

@@ -23,16 +23,19 @@ const SENSITIVITY_OPTIONS: Array<{
   }
 ];
 
-const ASK_MODEL_OPTIONS = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
-const TITLE_MODEL_OPTIONS = ["gpt-5.4-nano", "gpt-5.4-mini"];
+const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
+const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const REALTIME_MODEL_OPTIONS = ["gpt-realtime-2", "gpt-realtime-mini"];
 const VOICE_OPTIONS = ["marin", "cedar", "alloy"];
 const REASONING_OPTIONS: RealtimeReasoningEffort[] = ["low", "medium", "high"];
 
-export function SettingsPanel(): React.JSX.Element {
+type SettingsPanelProps = {
+  chrome?: "popover" | "desktop";
+};
+
+export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): React.JSX.Element {
   const { settings, setSettings, setStatus, backToMenu } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
-  const [apiKeyInput, setApiKeyInput] = useState("");
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -40,7 +43,38 @@ export function SettingsPanel(): React.JSX.Element {
     setDraft(settings);
   }, [settings]);
 
+  useEffect(() => {
+    let disposed = false;
+
+    const loadSettings = async (): Promise<void> => {
+      try {
+        const nextSettings = await mauzClient.openSettings();
+
+        if (!disposed) {
+          setSettings(nextSettings);
+          setDraft(nextSettings);
+        }
+      } catch (error) {
+        if (!disposed) {
+          setSettingsMessage(error instanceof Error ? error.message : "Could not load Mauz settings.");
+        }
+      }
+    };
+
+    if (settings === null) {
+      void loadSettings();
+    }
+
+    return () => {
+      disposed = true;
+    };
+  }, [setSettings, settings]);
+
   const handleBack = async (): Promise<void> => {
+    if (chrome === "desktop") {
+      return;
+    }
+
     await mauzClient.showMenu();
     backToMenu();
   };
@@ -67,11 +101,9 @@ export function SettingsPanel(): React.JSX.Element {
         realtimeModel: draft.realtimeModel,
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
-        includeFullScreenshot: draft.includeFullScreenshot,
-        ...(apiKeyInput.trim().length > 0 ? { openAiApiKey: apiKeyInput.trim() } : {})
+        includeFullScreenshot: draft.includeFullScreenshot
       });
       setSettings(nextSettings);
-      setApiKeyInput("");
       setSettingsMessage("Settings saved.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update Mauz settings.";
@@ -83,39 +115,18 @@ export function SettingsPanel(): React.JSX.Element {
     }
   };
 
-  const handleClearApiKey = async (): Promise<void> => {
-    setSaving(true);
-    setSettingsMessage(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({
-        openAiApiKey: null
-      });
-      setSettings(nextSettings);
-      setApiKeyInput("");
-      setSettingsMessage("API key cleared.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not clear the API key.";
-
-      setSettingsMessage(message);
-      setStatus(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (draft === null) {
     return (
-      <section className="settings-panel" aria-label="Mauz settings">
-        <SettingsHeader onBack={handleBack} />
+      <section className="settings-panel" data-chrome={chrome} aria-label="Mauz settings">
+        <SettingsHeader chrome={chrome} onBack={handleBack} />
         <p className="settings-message">Loading settings...</p>
       </section>
     );
   }
 
   return (
-    <section className="settings-panel" aria-label="Mauz settings">
-      <SettingsHeader onBack={handleBack} />
+    <section className="settings-panel" data-chrome={chrome} aria-label="Mauz settings">
+      <SettingsHeader chrome={chrome} onBack={handleBack} />
 
       <div className="settings-content">
         <div className="settings-section">
@@ -123,21 +134,9 @@ export function SettingsPanel(): React.JSX.Element {
             <KeyRound aria-hidden="true" size={15} />
             <span>OpenAI</span>
           </div>
-          <label className="settings-field">
-            <span>API key</span>
-            <input
-              type="password"
-              value={apiKeyInput}
-              placeholder={draft.apiKeyConfigured ? "Saved" : "Paste key"}
-              autoComplete="off"
-              onChange={(event) => setApiKeyInput(event.target.value)}
-            />
-          </label>
-          <div className="settings-inline-actions">
-            <button type="button" className="secondary-button" onClick={() => void handleClearApiKey()}>
-              Clear key
-            </button>
-          </div>
+          <p className="settings-message">
+            {draft.apiKeyConfigured ? "API key configured at launch." : "OPENAI_API_KEY is not configured."}
+          </p>
         </div>
 
         <div className="settings-section">
@@ -238,22 +237,30 @@ export function SettingsPanel(): React.JSX.Element {
   );
 }
 
-function SettingsHeader({ onBack }: { onBack(): Promise<void> }): React.JSX.Element {
+function SettingsHeader({
+  chrome,
+  onBack
+}: {
+  chrome: "popover" | "desktop";
+  onBack(): Promise<void>;
+}): React.JSX.Element {
   return (
     <header className="settings-header">
-      <button
-        className="icon-button"
-        type="button"
-        aria-label="Back to Mauz menu"
-        onClick={() => void onBack()}
-      >
-        <ArrowLeft aria-hidden="true" size={16} />
-      </button>
+      {chrome === "popover" ? (
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Back to Mauz menu"
+          onClick={() => void onBack()}
+        >
+          <ArrowLeft aria-hidden="true" size={16} />
+        </button>
+      ) : null}
       <div className="panel-title">
         <BrandLogo className="panel-title-logo" />
         <div>
           <h1>Settings</h1>
-          <p>Models, key, and activation.</p>
+          <p>Models and activation.</p>
         </div>
       </div>
     </header>

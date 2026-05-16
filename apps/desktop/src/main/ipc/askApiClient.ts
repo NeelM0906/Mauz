@@ -46,7 +46,7 @@ export function getFriendlyAskApiError(status: number, body: unknown): string {
   }
 
   if (status === 503 && rawMessage.includes("OPENAI_API_KEY")) {
-    return "Add OPENAI_API_KEY to your .env file, then restart Mauz.";
+    return "Set OPENAI_API_KEY before launching Mauz, then try again.";
   }
 
   if (rawMessage.length > 0) {

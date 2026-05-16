@@ -80,6 +80,7 @@ describe("PopoverWindowController", () => {
   it("hides the target cue before screenshot capture", async () => {
     const controller = new PopoverWindowController({
       preloadPath: "/tmp/preload.js",
+      iconPath: "/tmp/mauzai.icns",
       rendererFile: "/tmp/index.html"
     });
 

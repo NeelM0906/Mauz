@@ -39,7 +39,7 @@ export function getFriendlyChatTitleApiError(status: number, body: unknown): str
   }
 
   if (status === 503 && rawMessage.includes("OPENAI_API_KEY")) {
-    return "OPENAI_API_KEY is missing for title generation.";
+    return "Set OPENAI_API_KEY before launching Mauz, then try again.";
   }
 
   if (rawMessage.length > 0) {

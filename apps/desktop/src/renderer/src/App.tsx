@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { AskPanel } from "./components/AskPanel";
 import { ChatHistoryPanel } from "./components/ChatHistoryPanel";
+import { DesktopApp } from "./components/DesktopApp";
 import { MauzMenu } from "./components/MauzMenu";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TalkPanel } from "./components/TalkPanel";
@@ -10,20 +11,29 @@ import { useMauzStore } from "./state/useMauzStore";
 import "./styles.css";
 
 function App(): React.JSX.Element {
+  const surface = getRendererSurface();
   const mode = useMauzStore((state) => state.mode);
   const reset = useMauzStore((state) => state.reset);
 
   React.useEffect(() => {
+    if (surface === "desktop") {
+      return;
+    }
+
     return mauzClient.onActivation(() => {
       reset();
     });
-  }, [reset]);
+  }, [reset, surface]);
 
   React.useEffect(() => {
     return mauzClient.onPermissionError((error) => {
       useMauzStore.getState().setStatus(error.message);
     });
   }, []);
+
+  if (surface === "desktop") {
+    return <DesktopApp />;
+  }
 
   if (mode === "ask") {
     return <AskPanel />;
@@ -34,7 +44,7 @@ function App(): React.JSX.Element {
   }
 
   if (mode === "history") {
-    return <ChatHistoryPanel />;
+    return <ChatHistoryPanel allowContinue={false} />;
   }
 
   if (mode === "talk" || mode === "screen") {
@@ -42,6 +52,12 @@ function App(): React.JSX.Element {
   }
 
   return <MauzMenu />;
+}
+
+function getRendererSurface(): "desktop" | "popover" {
+  const surface = new URLSearchParams(window.location.search).get("surface");
+
+  return surface === "desktop" ? "desktop" : "popover";
 }
 
 const rootElement = document.getElementById("root");

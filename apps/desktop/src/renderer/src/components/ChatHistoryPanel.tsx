@@ -6,7 +6,15 @@ import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 import { FormattedAnswer } from "./FormattedAnswer";
 
-export function ChatHistoryPanel(): React.JSX.Element {
+type ChatHistoryPanelProps = {
+  allowContinue?: boolean;
+  chrome?: "popover" | "desktop";
+};
+
+export function ChatHistoryPanel({
+  allowContinue = false,
+  chrome = "popover"
+}: ChatHistoryPanelProps = {}): React.JSX.Element {
   const {
     chatHistory,
     selectedConversation,
@@ -61,6 +69,10 @@ export function ChatHistoryPanel(): React.JSX.Element {
       return;
     }
 
+    if (chrome === "desktop") {
+      return;
+    }
+
     await mauzClient.showMenu();
     backToMenu();
   };
@@ -112,11 +124,15 @@ export function ChatHistoryPanel(): React.JSX.Element {
   };
 
   return (
-    <section className="history-panel" aria-label="Previous Mauz chats">
+    <section className="history-panel" data-chrome={chrome} aria-label="Previous Mauz chats">
       <header className="history-header">
-        <button className="icon-button" type="button" aria-label="Back" onClick={() => void handleBack()}>
-          <ArrowLeft aria-hidden="true" size={16} />
-        </button>
+        {chrome === "popover" || selectedConversation !== null ? (
+          <button className="icon-button" type="button" aria-label="Back" onClick={() => void handleBack()}>
+            <ArrowLeft aria-hidden="true" size={16} />
+          </button>
+        ) : (
+          <span aria-hidden="true" />
+        )}
         <div className="panel-title">
           <BrandLogo className="panel-title-logo" />
           <div>
@@ -128,14 +144,18 @@ export function ChatHistoryPanel(): React.JSX.Element {
             </p>
           </div>
         </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauzClient.close()}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
+        {chrome === "popover" ? (
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close Mauz"
+            onClick={() => void mauzClient.close()}
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        ) : (
+          <span aria-hidden="true" />
+        )}
       </header>
 
       {historyError !== null ? <p className="history-error">{historyError}</p> : null}
@@ -154,23 +174,25 @@ export function ChatHistoryPanel(): React.JSX.Element {
       {selectedConversation !== null ? (
         <>
           <ConversationView conversation={selectedConversation} />
-          <form className="history-follow-up" onSubmit={(event) => void handleContinueConversation(event)}>
-            <textarea
-              value={followUpQuestion}
-              onChange={(event) => setFollowUpQuestion(event.target.value)}
-              placeholder="Ask a follow-up"
-              aria-label="Continue this Mauz chat"
-              disabled={continuing}
-            />
-            <button type="submit" className="submit-button" disabled={continuing}>
-              {continuing ? (
-                <LoaderCircle aria-hidden="true" className="spin" size={15} />
-              ) : (
-                <Send aria-hidden="true" size={15} />
-              )}
-              <span>{continuing ? "Asking" : "Continue"}</span>
-            </button>
-          </form>
+          {allowContinue ? (
+            <form className="history-follow-up" onSubmit={(event) => void handleContinueConversation(event)}>
+              <textarea
+                value={followUpQuestion}
+                onChange={(event) => setFollowUpQuestion(event.target.value)}
+                placeholder="Ask a follow-up"
+                aria-label="Continue this Mauz chat"
+                disabled={continuing}
+              />
+              <button type="submit" className="submit-button" disabled={continuing}>
+                {continuing ? (
+                  <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                ) : (
+                  <Send aria-hidden="true" size={15} />
+                )}
+                <span>{continuing ? "Asking" : "Continue"}</span>
+              </button>
+            </form>
+          ) : null}
         </>
       ) : null}
     </section>

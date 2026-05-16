@@ -27,6 +27,21 @@ function verticalShake(
   }));
 }
 
+function horizontalShake(
+  startTs = 1_000,
+  options: { buttons?: number; yDrift?: number } = {}
+): MouseMoveSample[] {
+  const xValues = [100, 225, 95, 222, 90, 218, 85];
+  const yDrift = options.yDrift ?? 24;
+
+  return xValues.map((x, index) => ({
+    x,
+    y: 300 + Math.round((index / (xValues.length - 1)) * yDrift),
+    ts: startTs + index * 110,
+    ...(options.buttons === undefined ? {} : { buttons: options.buttons })
+  }));
+}
+
 describe("ShakeDetector", () => {
   it("does not activate on normal mouse movement", () => {
     const detector = new ShakeDetector();
@@ -43,6 +58,12 @@ describe("ShakeDetector", () => {
     const detector = new ShakeDetector();
 
     expect(feed(detector, verticalShake())).toBe(true);
+  });
+
+  it("activates on rapid side-to-side movement", () => {
+    const detector = new ShakeDetector();
+
+    expect(feed(detector, horizontalShake())).toBe(true);
   });
 
   it("does not activate during cooldown", () => {

@@ -98,28 +98,44 @@ export class ShakeDetector {
       return { activated: false, reason: "insufficient-samples" };
     }
 
+    const verticalResult = this.evaluateAxis("y", "x");
+    const horizontalResult = this.evaluateAxis("x", "y");
+
+    if (verticalResult.activated || horizontalResult.activated) {
+      return { activated: true };
+    }
+
+    return verticalResult.primaryAmplitude >= horizontalResult.primaryAmplitude
+      ? verticalResult
+      : horizontalResult;
+  }
+
+  private evaluateAxis(
+    primaryAxis: "x" | "y",
+    crossAxis: "x" | "y"
+  ): ShakeDetectorResult & { primaryAmplitude: number } {
     const first = this.samples[0]!;
-    let minX = first.x;
-    let maxX = first.x;
-    let minY = first.y;
-    let maxY = first.y;
-    let verticalTravel = 0;
+    let minPrimary = first[primaryAxis];
+    let maxPrimary = first[primaryAxis];
+    let minCross = first[crossAxis];
+    let maxCross = first[crossAxis];
+    let primaryTravel = 0;
     let reversals = 0;
     let lastDirection = 0;
 
     for (let i = 1; i < this.samples.length; i += 1) {
       const previous = this.samples[i - 1]!;
       const current = this.samples[i]!;
-      const dy = current.y - previous.y;
+      const primaryDelta = current[primaryAxis] - previous[primaryAxis];
 
-      minX = Math.min(minX, current.x);
-      maxX = Math.max(maxX, current.x);
-      minY = Math.min(minY, current.y);
-      maxY = Math.max(maxY, current.y);
-      verticalTravel += Math.abs(dy);
+      minPrimary = Math.min(minPrimary, current[primaryAxis]);
+      maxPrimary = Math.max(maxPrimary, current[primaryAxis]);
+      minCross = Math.min(minCross, current[crossAxis]);
+      maxCross = Math.max(maxCross, current[crossAxis]);
+      primaryTravel += Math.abs(primaryDelta);
 
-      if (Math.abs(dy) >= this.config.minDirectionDeltaPx) {
-        const direction = Math.sign(dy);
+      if (Math.abs(primaryDelta) >= this.config.minDirectionDeltaPx) {
+        const direction = Math.sign(primaryDelta);
 
         if (lastDirection !== 0 && direction !== lastDirection) {
           reversals += 1;
@@ -129,26 +145,26 @@ export class ShakeDetector {
       }
     }
 
-    const verticalAmplitude = maxY - minY;
-    const horizontalRange = maxX - minX;
-    const horizontalToVerticalRatio = horizontalRange / Math.max(verticalAmplitude, 1);
+    const primaryAmplitude = maxPrimary - minPrimary;
+    const crossAmplitude = maxCross - minCross;
+    const crossToPrimaryRatio = crossAmplitude / Math.max(primaryAmplitude, 1);
 
-    if (verticalAmplitude < this.config.minAmplitudePx) {
-      return { activated: false, reason: "amplitude" };
+    if (primaryAmplitude < this.config.minAmplitudePx) {
+      return { activated: false, reason: "amplitude", primaryAmplitude };
     }
 
-    if (verticalTravel < this.config.minVerticalTravelPx) {
-      return { activated: false, reason: "travel" };
+    if (primaryTravel < this.config.minVerticalTravelPx) {
+      return { activated: false, reason: "travel", primaryAmplitude };
     }
 
     if (reversals < this.config.minReversals) {
-      return { activated: false, reason: "reversals" };
+      return { activated: false, reason: "reversals", primaryAmplitude };
     }
 
-    if (horizontalToVerticalRatio > this.config.maxHorizontalToVerticalRatio) {
-      return { activated: false, reason: "horizontal-drift" };
+    if (crossToPrimaryRatio > this.config.maxHorizontalToVerticalRatio) {
+      return { activated: false, reason: "cross-axis-drift", primaryAmplitude };
     }
 
-    return { activated: true };
+    return { activated: true, primaryAmplitude };
   }
 }

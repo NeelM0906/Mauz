@@ -68,7 +68,7 @@ describe("submitAskToLocalApi", () => {
         validRequest,
         fetchImpl
       )
-    ).rejects.toThrow("Add OPENAI_API_KEY to your .env file, then restart Mauz.");
+    ).rejects.toThrow("Set OPENAI_API_KEY before launching Mauz, then try again.");
   });
 });
 

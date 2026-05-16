@@ -63,6 +63,7 @@ const browserPreviewBridge: MauzBridge = {
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
       shakeSensitivity: "normal",
+      openAiAuthMode: "api-key",
       askModel: "gpt-5.4-mini",
       chatTitleModel: "gpt-5.4-nano",
       realtimeModel: "gpt-realtime-2",
@@ -75,13 +76,14 @@ const browserPreviewBridge: MauzBridge = {
       nativeShakeEnabled: payload.nativeShakeEnabled ?? false,
       devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
       shakeSensitivity: payload.shakeSensitivity ?? "normal",
+      openAiAuthMode: payload.openAiAuthMode ?? "api-key",
       askModel: payload.askModel ?? "gpt-5.4-mini",
       chatTitleModel: payload.chatTitleModel ?? "gpt-5.4-nano",
       realtimeModel: payload.realtimeModel ?? "gpt-realtime-2",
       realtimeVoice: payload.realtimeVoice ?? "marin",
       realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
       includeFullScreenshot: payload.includeFullScreenshot ?? false,
-      apiKeyConfigured: (payload.openAiApiKey?.trim().length ?? 0) > 0
+      apiKeyConfigured: false
     })
   },
   events: {
