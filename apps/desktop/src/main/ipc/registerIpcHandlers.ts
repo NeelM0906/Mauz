@@ -14,6 +14,7 @@ import type { PopoverWindowController } from "../windows/PopoverWindowController
 import type { ContextCollector } from "../context/ContextCollector";
 import { submitAskToLocalApi } from "./askApiClient";
 import { generateChatTitleFromLocalApi } from "./chatTitleApiClient";
+import { connectRealtimeToLocalApi } from "./realtimeApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
@@ -30,7 +31,6 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
-  IPC_CHANNELS.menuStartScreenShare,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -38,8 +38,7 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.chatHistoryGet,
   IPC_CHANNELS.chatHistoryContinue,
   IPC_CHANNELS.realtimeCreateSession,
-  IPC_CHANNELS.realtimeConnect,
-  IPC_CHANNELS.realtimeCaptureFrame
+  IPC_CHANNELS.realtimeConnect
 ] as const;
 const FEATURE_UNAVAILABLE_MESSAGE = "Still working on this.";
 
@@ -70,10 +69,9 @@ export function registerIpcHandlers({
     return context;
   });
   ipcMain.handle(IPC_CHANNELS.menuStartTalk, async () => {
-    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
-  });
-  ipcMain.handle(IPC_CHANNELS.menuStartScreenShare, async () => {
-    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
+    const context = await contextCollector.collectForRealtime();
+    popover.resizeForRealtime();
+    return context;
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event) => {
@@ -164,14 +162,8 @@ export function registerIpcHandlers({
     throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
   });
 
-  ipcMain.handle(IPC_CHANNELS.realtimeConnect, () => {
-    void api;
-    void localApiToken;
-    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.realtimeCaptureFrame, () => {
-    throw new Error(FEATURE_UNAVAILABLE_MESSAGE);
+  ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (_event, payload: unknown) => {
+    return connectRealtimeToLocalApi(api, localApiToken, payload);
   });
 }
 

@@ -214,7 +214,7 @@ describe("Ask Mauz API", () => {
     });
   });
 
-  it("marks Realtime connect requests as still in progress after auth and validation", async () => {
+  it("accepts Realtime connect requests with the configured local token", async () => {
     const realtimeConnectHandler = vi.fn(async (request) => ({
       answerSdp: `answer:${request.mode}`,
       model: "test-realtime-model"
@@ -236,11 +236,12 @@ describe("Ask Mauz API", () => {
 
     await app.close();
 
-    expect(response.statusCode).toBe(501);
+    expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      error: "Still working on this."
+      answerSdp: "answer:talk",
+      model: "test-realtime-model"
     });
-    expect(realtimeConnectHandler).not.toHaveBeenCalled();
+    expect(realtimeConnectHandler).toHaveBeenCalledWith(validRealtimeRequest);
   });
 
   it("rejects chat title requests without the configured local token", async () => {

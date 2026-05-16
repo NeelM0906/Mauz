@@ -6,7 +6,7 @@ import type {
   MauzSettings
 } from "@mauzai/shared";
 
-type MauzMode = "menu" | "ask" | "talk" | "screen" | "settings" | "history";
+type MauzMode = "menu" | "ask" | "talk" | "settings" | "history";
 
 type MauzStore = {
   mode: MauzMode;

@@ -156,7 +156,7 @@ export type RealtimeSessionResponse = {
   session?: unknown | undefined;
 };
 
-export type RealtimeMode = "talk" | "screen";
+export type RealtimeMode = "talk";
 
 export type RealtimeConnectRequest = {
   offerSdp: string;
@@ -212,7 +212,6 @@ export type MauzBridge = {
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
-    startScreenShare(): Promise<MauzDesktopContext>;
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;
@@ -225,7 +224,6 @@ export type MauzBridge = {
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;
     connect(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse>;
-    captureFrame(): Promise<MauzDesktopContext>;
   };
   settings: {
     open(): Promise<MauzSettings>;

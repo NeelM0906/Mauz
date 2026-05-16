@@ -9,6 +9,7 @@ import { MissingOpenAIKeyError } from "../errors";
 const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
 const DEFAULT_REALTIME_REASONING_EFFORT = "low";
+const DEFAULT_REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 const REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
@@ -17,6 +18,7 @@ export type CreateRealtimeAnswerOptions = {
   apiKey?: string;
   model?: string;
   voice?: string;
+  transcriptionModel?: string;
   fetchImpl?: FetchLike;
 };
 
@@ -39,7 +41,11 @@ export async function createRealtimeAnswer(
       buildRealtimeSessionConfig(request, {
         model,
         voice: options.voice ?? process.env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE,
-        reasoningEffort: process.env.OPENAI_REALTIME_REASONING_EFFORT ?? DEFAULT_REALTIME_REASONING_EFFORT
+        reasoningEffort: process.env.OPENAI_REALTIME_REASONING_EFFORT ?? DEFAULT_REALTIME_REASONING_EFFORT,
+        transcriptionModel:
+          options.transcriptionModel ??
+          process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ??
+          DEFAULT_REALTIME_TRANSCRIPTION_MODEL
       })
     )
   );
@@ -67,6 +73,7 @@ export type RealtimeSessionConfigOptions = {
   model: string;
   voice: string;
   reasoningEffort: string;
+  transcriptionModel: string;
 };
 
 export function buildRealtimeSessionConfig(
@@ -83,6 +90,9 @@ export function buildRealtimeSessionConfig(
     },
     audio: {
       input: {
+        transcription: {
+          model: options.transcriptionModel
+        },
         turn_detection: {
           type: "semantic_vad",
           eagerness: "auto",
@@ -97,15 +107,13 @@ export function buildRealtimeSessionConfig(
   };
 }
 
-export function buildRealtimeInstructions({ mode, context }: RealtimeConnectRequest): string {
+export function buildRealtimeInstructions({ context }: RealtimeConnectRequest): string {
   return [
     "You are Mauz, a concise desktop assistant summoned at the user's cursor.",
     "The user may speak while looking at their desktop. Use the provided pointer context to resolve vague references like this, that, and here.",
     "Resolve references in this order: selected text, cursor crop, active window metadata, full screenshot, cursor position.",
     "Answer directly unless the pointed target is genuinely ambiguous. If it is ambiguous, ask one short follow-up.",
-    mode === "screen"
-      ? "The user is in explicit screen-sharing voice mode. Voice is the primary interaction channel. You may receive periodic screenshots as updated visual context. Use the newest screen frame as the current visual context when answering. Do not narrate every screen change or respond merely because a new frame arrived. Wait for the user to ask, unless they explicitly requested proactive guidance."
-      : "The user explicitly enabled voice chat. Use the initial screenshot context only unless they share more context.",
+    "The user explicitly enabled voice chat. Use the initial screenshot context only unless they share more context.",
     "",
     "Initial desktop context:",
     formatRealtimeContext(context)

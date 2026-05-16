@@ -27,7 +27,7 @@ body {
   width: 100vw;
   height: 100vh;
   min-width: 280px;
-  min-height: 218px;
+  min-height: 248px;
   overflow: hidden;
   background: transparent;
 }
@@ -182,7 +182,7 @@ button {
 
 .mauz-panel {
   width: 280px;
-  height: 218px;
+  height: 248px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -893,7 +893,7 @@ button {
 
 .realtime-panel {
   width: 380px;
-  height: 440px;
+  height: 480px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -999,6 +999,99 @@ button {
   letter-spacing: 0;
 }
 
+.transcript-stream {
+  min-height: 126px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 10px;
+  overflow: hidden;
+  border: 1px solid rgb(23 23 23 / 10%);
+  border-radius: 8px;
+  background: #fbfaf6;
+}
+
+.transcript-placeholder {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  gap: 5px;
+  height: 100%;
+}
+
+.transcript-placeholder span {
+  width: 6px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgb(22 122 107 / 28%);
+  animation: transcript-pulse 900ms ease-in-out infinite;
+}
+
+.transcript-placeholder span:nth-child(2) {
+  height: 22px;
+  animation-delay: 120ms;
+}
+
+.transcript-placeholder span:nth-child(3) {
+  height: 17px;
+  animation-delay: 240ms;
+}
+
+.transcript-placeholder[data-state="muted"] span,
+.transcript-placeholder[data-state="stopped"] span,
+.transcript-placeholder[data-state="error"] span {
+  animation: none;
+  background: rgb(23 23 23 / 18%);
+}
+
+.transcript-cue {
+  display: grid;
+  gap: 3px;
+  max-width: 86%;
+  padding: 7px 9px;
+  border: 1px solid rgb(23 23 23 / 9%);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #232826;
+  animation: transcript-rise 180ms ease-out;
+}
+
+.transcript-cue[data-role="assistant"] {
+  align-self: flex-start;
+  border-color: rgb(103 76 172 / 15%);
+  background: rgb(103 76 172 / 7%);
+}
+
+.transcript-cue[data-role="user"] {
+  align-self: flex-end;
+  border-color: rgb(46 98 176 / 15%);
+  background: rgb(46 98 176 / 7%);
+}
+
+.transcript-cue[data-state="partial"] {
+  opacity: 0.82;
+}
+
+.transcript-cue span {
+  color: #626a66;
+  font-size: 9px;
+  font-weight: 740;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.transcript-cue p {
+  margin: 0;
+  color: #202523;
+  font-size: 11px;
+  font-weight: 590;
+  line-height: 1.28;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
 .realtime-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
@@ -1046,6 +1139,31 @@ button {
   font-weight: 520;
   line-height: 1.35;
   letter-spacing: 0;
+}
+
+@keyframes transcript-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.58);
+    opacity: 0.58;
+  }
+
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes transcript-rise {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .settings-header {

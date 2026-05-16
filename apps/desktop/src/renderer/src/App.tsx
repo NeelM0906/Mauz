@@ -47,8 +47,8 @@ function App(): React.JSX.Element {
     return <ChatHistoryPanel allowContinue={false} />;
   }
 
-  if (mode === "talk" || mode === "screen") {
-    return <TalkPanel mode={mode} />;
+  if (mode === "talk") {
+    return <TalkPanel />;
   }
 
   return <MauzMenu />;
