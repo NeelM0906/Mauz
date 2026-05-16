@@ -8,9 +8,14 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
+    "lint": "prettier --check .",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build"
+    "format:check": "pnpm lint",
+    "env:check": "node scripts/check-env.mjs",
+    "security:secrets": "node scripts/check-secrets.mjs",
+    "security:audit": "pnpm audit --audit-level moderate",
+    "smoke": "pnpm build",
+    "check": "pnpm lint && pnpm env:check && pnpm security:secrets && pnpm typecheck && pnpm test && pnpm smoke"
   },
   "devDependencies": {
     "prettier": "^3.8.3",
