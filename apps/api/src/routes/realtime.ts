@@ -6,7 +6,7 @@ import {
   type RealtimeConnectRequest,
   type RealtimeConnectResponse
 } from "@mauzai/shared";
-import { MissingOpenAIKeyError } from "../errors";
+import { MissingOpenAIKeyError, OpenAIRealtimeConnectionError } from "../errors";
 import { createRealtimeAnswer } from "../openai/createRealtimeAnswer";
 
 export type RealtimeConnectHandler = (request: RealtimeConnectRequest) => Promise<RealtimeConnectResponse>;
@@ -43,11 +43,20 @@ export async function registerRealtimeRoute(
 
     try {
       const response = RealtimeConnectResponseSchema.parse(await realtimeConnectHandler(parsed.data));
-      return reply.send(response);
+      return reply.status(201).send(response);
     } catch (error) {
       if (error instanceof MissingOpenAIKeyError) {
         return reply.status(503).send({
           error: error.message
+        });
+      }
+
+      if (error instanceof OpenAIRealtimeConnectionError) {
+        return reply.status(toLocalRealtimeStatus(error)).send({
+          error: error.message,
+          ...(error.code === undefined ? {} : { code: error.code }),
+          ...(error.type === undefined ? {} : { type: error.type }),
+          ...(error.param === undefined ? {} : { param: error.param })
         });
       }
 
@@ -56,4 +65,16 @@ export async function registerRealtimeRoute(
       });
     }
   });
+}
+
+function toLocalRealtimeStatus(error: OpenAIRealtimeConnectionError): number {
+  if (error.status === 401) {
+    return 503;
+  }
+
+  if (error.status === 429) {
+    return 429;
+  }
+
+  return 502;
 }

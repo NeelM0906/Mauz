@@ -72,6 +72,25 @@ describe("connectRealtimeToLocalApi", () => {
       )
     ).rejects.toThrow("Set OPENAI_API_KEY before launching Mauz, then try again.");
   });
+
+  it("maps local Realtime API transport failures to a restartable message", async () => {
+    const fetchImpl: FetchLike = async () => {
+      throw new TypeError("fetch failed");
+    };
+
+    await expect(
+      connectRealtimeToLocalApi(
+        {
+          baseUrl: "http://127.0.0.1:47891",
+          port: 47891,
+          stop: async () => {}
+        },
+        "test-token",
+        validRequest,
+        fetchImpl
+      )
+    ).rejects.toThrow("Mauz local Realtime API is unreachable. Restart Mauz and try again.");
+  });
 });
 
 describe("getFriendlyRealtimeApiError", () => {

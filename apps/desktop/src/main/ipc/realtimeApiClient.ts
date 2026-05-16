@@ -14,15 +14,23 @@ export async function connectRealtimeToLocalApi(
   fetchImpl: FetchLike = fetch
 ): Promise<RealtimeConnectResponse> {
   const request = RealtimeConnectRequestSchema.parse(payload);
-  const response = await fetchImpl(`${api.baseUrl}/api/realtime/connect`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      [LOCAL_API_TOKEN_HEADER]: localApiToken
-    },
-    body: JSON.stringify(request)
-  });
-  const body = await response.json();
+  let response: Awaited<ReturnType<FetchLike>>;
+
+  try {
+    response = await fetchImpl(`${api.baseUrl}/api/realtime/connect`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        [LOCAL_API_TOKEN_HEADER]: localApiToken
+      },
+      body: JSON.stringify(request)
+    });
+  } catch (error) {
+    void error;
+    throw new Error("Mauz local Realtime API is unreachable. Restart Mauz and try again.");
+  }
+
+  const body = await readJsonBody(response);
 
   if (!response.ok) {
     throw new Error(getFriendlyRealtimeApiError(response.status, body));
@@ -55,4 +63,12 @@ function getErrorMessage(body: unknown): string {
   }
 
   return body.error;
+}
+
+async function readJsonBody(response: Awaited<ReturnType<FetchLike>>): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
 }

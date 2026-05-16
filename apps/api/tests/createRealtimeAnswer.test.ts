@@ -111,4 +111,42 @@ describe("createRealtimeAnswer", () => {
       "Set OPENAI_API_KEY before launching Mauz, then try again."
     );
   });
+
+  it("surfaces OpenAI Realtime validation errors with a safe action message", async () => {
+    await expect(
+      createRealtimeAnswer(validRealtimeRequest, {
+        apiKey: "test-api-key",
+        model: "bad-realtime-model",
+        fetchImpl: async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                message: "The model bad-realtime-model does not exist or you do not have access.",
+                type: "invalid_request_error",
+                code: "model_not_found",
+                param: "model"
+              }
+            }),
+            {
+              status: 404
+            }
+          )
+      })
+    ).rejects.toThrow(
+      "OpenAI could not find or access Realtime model bad-realtime-model. Set OPENAI_REALTIME_MODEL to an available Realtime model."
+    );
+  });
+
+  it("classifies transport failures before an OpenAI response exists", async () => {
+    await expect(
+      createRealtimeAnswer(validRealtimeRequest, {
+        apiKey: "test-api-key",
+        fetchImpl: async () => {
+          throw new TypeError("fetch failed");
+        }
+      })
+    ).rejects.toThrow(
+      "OpenAI Realtime network request failed. Check internet access and api.openai.com reachability."
+    );
+  });
 });

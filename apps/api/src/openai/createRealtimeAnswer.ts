@@ -4,7 +4,7 @@ import type {
   RealtimeConnectRequest,
   RealtimeConnectResponse
 } from "@mauzai/shared";
-import { MissingOpenAIKeyError } from "../errors";
+import { MissingOpenAIKeyError, OpenAIRealtimeConnectionError } from "../errors";
 
 const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
@@ -50,17 +50,29 @@ export async function createRealtimeAnswer(
     )
   );
 
-  const response = await (options.fetchImpl ?? fetch)(REALTIME_CALLS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: formData
-  });
+  let response: Response;
+
+  try {
+    response = await (options.fetchImpl ?? fetch)(REALTIME_CALLS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: formData
+    });
+  } catch (error) {
+    throw new OpenAIRealtimeConnectionError(
+      "OpenAI Realtime network request failed. Check internet access and api.openai.com reachability.",
+      {
+        cause: error
+      }
+    );
+  }
+
   const answerSdp = await response.text();
 
   if (!response.ok) {
-    throw new Error(getRealtimeErrorMessage(response.status, answerSdp));
+    throw toRealtimeConnectionError(response.status, answerSdp, model);
   }
 
   return {
@@ -147,14 +159,101 @@ function formatBounds(bounds: Bounds | undefined): string | undefined {
   return `${Math.round(bounds.width)}x${Math.round(bounds.height)} at ${Math.round(bounds.x)},${Math.round(bounds.y)}`;
 }
 
-function getRealtimeErrorMessage(status: number, body: string): string {
+function toRealtimeConnectionError(
+  status: number,
+  body: string,
+  model: string
+): OpenAIRealtimeConnectionError {
+  const apiError = parseOpenAIError(body);
+
+  return new OpenAIRealtimeConnectionError(getRealtimeErrorMessage(status, apiError, model), {
+    status,
+    code: apiError?.code,
+    type: apiError?.type,
+    param: apiError?.param
+  });
+}
+
+type ParsedOpenAIError = {
+  message?: string | undefined;
+  type?: string | undefined;
+  code?: string | undefined;
+  param?: string | undefined;
+};
+
+function parseOpenAIError(body: string): ParsedOpenAIError | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+
+    if (typeof parsed !== "object" || parsed === null || !("error" in parsed)) {
+      return null;
+    }
+
+    const error = (parsed as { error?: unknown }).error;
+
+    if (typeof error !== "object" || error === null) {
+      return null;
+    }
+
+    return {
+      message: getStringField(error, "message"),
+      type: getStringField(error, "type"),
+      code: getStringField(error, "code"),
+      param: getStringField(error, "param")
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getStringField(value: object, field: string): string | undefined {
+  if (!(field in value)) {
+    return undefined;
+  }
+
+  const fieldValue = (value as Record<string, unknown>)[field];
+
+  return typeof fieldValue === "string" && fieldValue.trim().length > 0 ? fieldValue.trim() : undefined;
+}
+
+function getRealtimeErrorMessage(status: number, apiError: ParsedOpenAIError | null, model: string): string {
   if (status === 401) {
-    return "OpenAI rejected the Realtime request. Check OPENAI_API_KEY before launching Mauz.";
+    return "OpenAI rejected the Realtime request. Check the configured OPENAI_API_KEY, then restart Mauz.";
   }
 
-  if (body.trim().length > 0) {
-    return "OpenAI Realtime connection failed.";
+  if (status === 403) {
+    return `OpenAI Realtime is not enabled for this key or project with model ${model}. Check project access and model permissions.`;
   }
 
-  return "OpenAI Realtime connection failed.";
+  if (apiError?.code === "model_not_found" || status === 404) {
+    return `OpenAI could not find or access Realtime model ${model}. Set OPENAI_REALTIME_MODEL to an available Realtime model.`;
+  }
+
+  if (status === 429 && apiError?.code === "insufficient_quota") {
+    return "OpenAI API quota or billing limit was reached. Check API billing and usage limits.";
+  }
+
+  if (status === 429) {
+    return "OpenAI Realtime rate limit was reached. Try again shortly.";
+  }
+
+  if (apiError?.code === "invalid_offer") {
+    return "Mauz created an invalid Realtime offer. Restart Mauz and try again.";
+  }
+
+  if (status === 400 && apiError?.message !== undefined) {
+    return `OpenAI rejected the Realtime session: ${truncateErrorMessage(apiError.message)}`;
+  }
+
+  if (status >= 500) {
+    return "OpenAI Realtime service returned a server error. Try again shortly.";
+  }
+
+  return "OpenAI Realtime connection failed while contacting the model.";
+}
+
+function truncateErrorMessage(message: string): string {
+  const normalized = message.replace(/\s+/g, " ").trim();
+
+  return normalized.length <= 220 ? normalized : `${normalized.slice(0, 217)}...`;
 }
