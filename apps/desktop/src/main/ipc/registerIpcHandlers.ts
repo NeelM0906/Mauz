@@ -1,11 +1,10 @@
-import { ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   AskMauzRequestSchema,
   ChatHistoryContinueRequestSchema,
   ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
   MauzSettingsUpdateSchema,
-  type OpenAiAuthStatus,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
@@ -24,10 +23,6 @@ type RegisterIpcHandlersOptions = {
   api: LocalApiHandle;
   localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
-  openAiAuth: {
-    getStatus(): Promise<OpenAiAuthStatus>;
-    startLogin(): Promise<OpenAiAuthStatus>;
-  };
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
 };
 
@@ -38,8 +33,6 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuStartTalk,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
-  IPC_CHANNELS.settingsOpenAiAuthStatus,
-  IPC_CHANNELS.settingsStartOpenAiLogin,
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.chatHistoryList,
   IPC_CHANNELS.chatHistoryGet,
@@ -56,7 +49,6 @@ export function registerIpcHandlers({
   api,
   localApiToken,
   getSettings,
-  openAiAuth,
   updateSettings
 }: RegisterIpcHandlersOptions): void {
   for (const channel of HANDLED_IPC_CHANNELS) {
@@ -98,20 +90,6 @@ export function registerIpcHandlers({
     }
 
     return updateSettings(toSettingsUpdate(parsedPayload.data));
-  });
-
-  ipcMain.handle(IPC_CHANNELS.settingsOpenAiAuthStatus, async () => {
-    return openAiAuth.getStatus();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.settingsStartOpenAiLogin, async () => {
-    const status = await openAiAuth.startLogin();
-
-    if (status.state === "pending") {
-      await shell.openExternal(status.verificationUrl);
-    }
-
-    return status;
   });
 
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (_event, payload: unknown) => {

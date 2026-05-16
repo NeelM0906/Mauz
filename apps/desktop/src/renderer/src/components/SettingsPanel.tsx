@@ -2,11 +2,8 @@ import {
   ArrowLeft,
   Check,
   Cpu,
-  ExternalLink,
   KeyRound,
-  LoaderCircle,
   Lock,
-  LogIn,
   MousePointerClick,
   Save,
   Settings2,
@@ -14,13 +11,7 @@ import {
   Zap
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type {
-  MauzSettings,
-  MauzSettingsUpdate,
-  OpenAiAuthMode,
-  OpenAiAuthStatus,
-  ShakeSensitivity
-} from "@mauzai/shared";
+import type { MauzSettings, MauzSettingsUpdate, ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -46,6 +37,11 @@ const SENSITIVITY_OPTIONS: Array<{
 const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
 const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const PROVIDER_OPTIONS = [
+  {
+    name: "OpenAI login",
+    status: "active",
+    description: "Uses OpenAI credentials from the launch environment or an encrypted saved key."
+  },
   {
     name: "z.ai",
     status: "coming soon",
@@ -74,10 +70,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [authBusy, setAuthBusy] = useState(false);
-  const [openAiAuthStatus, setOpenAiAuthStatus] = useState<OpenAiAuthStatus>({
-    state: "signed-out"
-  });
 
   useEffect(() => {
     setDraft(settings);
@@ -114,62 +106,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
     };
   }, [setSettings, settings]);
 
-  useEffect(() => {
-    let disposed = false;
-
-    const loadOpenAiAuthStatus = async (): Promise<void> => {
-      try {
-        const status = await mauzClient.getOpenAiAuthStatus();
-
-        if (!disposed) {
-          setOpenAiAuthStatus(status);
-        }
-      } catch (error) {
-        if (!disposed) {
-          setOpenAiAuthStatus({
-            state: "unavailable",
-            message: error instanceof Error ? error.message : "Could not read OpenAI login status."
-          });
-        }
-      }
-    };
-
-    void loadOpenAiAuthStatus();
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (openAiAuthStatus.state !== "pending") {
-      return;
-    }
-
-    let disposed = false;
-    const interval = window.setInterval(() => {
-      void mauzClient
-        .getOpenAiAuthStatus()
-        .then((status) => {
-          if (disposed) {
-            return;
-          }
-
-          setOpenAiAuthStatus(status);
-
-          if (status.state === "connected") {
-            setSettingsMessage("OpenAI login connected.");
-          }
-        })
-        .catch(() => {});
-    }, 2_000);
-
-    return () => {
-      disposed = true;
-      window.clearInterval(interval);
-    };
-  }, [openAiAuthStatus.state]);
-
   const handleBack = async (): Promise<void> => {
     if (chrome === "desktop") {
       return;
@@ -181,73 +117,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
 
   const updateDraft = <Key extends keyof MauzSettings>(key: Key, value: MauzSettings[Key]): void => {
     setDraft((current) => (current === null ? current : { ...current, [key]: value }));
-  };
-
-  const applyAuthMode = async (openAiAuthMode: OpenAiAuthMode, message: string): Promise<void> => {
-    setAuthBusy(true);
-    setSettingsMessage(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({ openAiAuthMode });
-      setSettings(nextSettings);
-      setDraft((current) =>
-        current === null
-          ? nextSettings
-          : {
-              ...current,
-              openAiAuthMode: nextSettings.openAiAuthMode,
-              apiKeyConfigured: nextSettings.apiKeyConfigured
-            }
-      );
-      setSettingsMessage(message);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Could not update OpenAI login.";
-
-      setSettingsMessage(errorMessage);
-      setStatus(errorMessage);
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const handleStartOpenAiLogin = async (): Promise<void> => {
-    setAuthBusy(true);
-    setSettingsMessage(null);
-
-    try {
-      const status = await mauzClient.startOpenAiLogin();
-      setOpenAiAuthStatus(status);
-
-      if (status.state === "unavailable") {
-        setSettingsMessage(status.message);
-        setStatus(status.message);
-        return;
-      }
-
-      const nextSettings = await mauzClient.updateSettings({ openAiAuthMode: "openai-auth" });
-      setSettings(nextSettings);
-      setDraft((current) =>
-        current === null
-          ? nextSettings
-          : {
-              ...current,
-              openAiAuthMode: nextSettings.openAiAuthMode,
-              apiKeyConfigured: nextSettings.apiKeyConfigured
-            }
-      );
-      setSettingsMessage(
-        status.state === "pending"
-          ? `Enter ${status.userCode} to finish OpenAI login.`
-          : "OpenAI login connected."
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not start OpenAI login.";
-
-      setSettingsMessage(message);
-      setStatus(message);
-    } finally {
-      setAuthBusy(false);
-    }
   };
 
   const handleSave = async (): Promise<void> => {
@@ -315,108 +184,32 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             <span>Login</span>
           </div>
           <div className="auth-provider-list" aria-label="Model provider login options">
-            <button
-              className="auth-provider-card"
-              data-status={draft.openAiAuthMode === "api-key" ? "active" : "available"}
-              type="button"
-              aria-pressed={draft.openAiAuthMode === "api-key"}
-              disabled={authBusy}
-              onClick={() => void applyAuthMode("api-key", "OpenAI API selected.")}
-            >
-              <div>
-                <strong>OpenAI API</strong>
-                <span>Uses the launch environment key or a locally encrypted saved key.</span>
-              </div>
-              <span className="provider-status">
-                {authBusy && draft.openAiAuthMode === "api-key" ? (
-                  <>
-                    <LoaderCircle className="spin" aria-hidden="true" size={12} />
-                    Checking
-                  </>
-                ) : draft.openAiAuthMode === "api-key" ? (
-                  draft.apiKeyConfigured ? (
-                    <>
-                      <Check aria-hidden="true" size={12} />
-                      Connected
-                    </>
-                  ) : (
-                    <>
-                      <Lock aria-hidden="true" size={12} />
-                      Missing key
-                    </>
-                  )
-                ) : (
-                  "Use"
-                )}
-              </span>
-            </button>
-            <button
-              className="auth-provider-card"
-              data-status={draft.openAiAuthMode === "openai-auth" ? "active" : openAiAuthStatus.state}
-              type="button"
-              aria-pressed={draft.openAiAuthMode === "openai-auth"}
-              disabled={authBusy}
-              onClick={() =>
-                openAiAuthStatus.state === "connected"
-                  ? void applyAuthMode("openai-auth", "OpenAI login selected.")
-                  : void handleStartOpenAiLogin()
-              }
-            >
-              <div>
-                <strong>OpenAI login</strong>
-                <span>Uses Codex OpenAI auth from this Mac.</span>
-              </div>
-              <span className="provider-status">
-                {authBusy && draft.openAiAuthMode === "openai-auth" ? (
-                  <>
-                    <LoaderCircle className="spin" aria-hidden="true" size={12} />
-                    Checking
-                  </>
-                ) : openAiAuthStatus.state === "connected" ? (
-                  <>
-                    <Check aria-hidden="true" size={12} />
-                    Connected
-                  </>
-                ) : openAiAuthStatus.state === "pending" ? (
-                  <>
-                    <LogIn aria-hidden="true" size={12} />
-                    Enter code
-                  </>
-                ) : openAiAuthStatus.state === "unavailable" ? (
-                  "Unavailable"
-                ) : (
-                  <>
-                    <LogIn aria-hidden="true" size={12} />
-                    Log in
-                  </>
-                )}
-              </span>
-            </button>
             {PROVIDER_OPTIONS.map((provider) => (
               <div className="auth-provider-card" data-status={provider.status} key={provider.name}>
                 <div>
                   <strong>{provider.name}</strong>
                   <span>{provider.description}</span>
                 </div>
-                <span className="provider-status">{provider.status}</span>
+                <span className="provider-status">
+                  {provider.status === "active" ? (
+                    draft.apiKeyConfigured ? (
+                      <>
+                        <Check aria-hidden="true" size={12} />
+                        Connected
+                      </>
+                    ) : (
+                      <>
+                        <Lock aria-hidden="true" size={12} />
+                        Missing key
+                      </>
+                    )
+                  ) : (
+                    provider.status
+                  )}
+                </span>
               </div>
             ))}
           </div>
-          {openAiAuthStatus.state === "pending" ? (
-            <div className="openai-login-code">
-              <span>OpenAI code</span>
-              <strong>{openAiAuthStatus.userCode}</strong>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={authBusy}
-                onClick={() => void handleStartOpenAiLogin()}
-              >
-                <ExternalLink aria-hidden="true" size={12} />
-                <span>Open auth page</span>
-              </button>
-            </div>
-          ) : null}
           <label className="settings-field api-key-field">
             <span>API key</span>
             <input

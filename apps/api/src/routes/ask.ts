@@ -7,14 +7,12 @@ import {
   type AskMauzResponse
 } from "@mauzai/shared";
 import { MissingOpenAIKeyError } from "../errors";
-import { askMauz, type AskMauzOptions } from "../openai/askMauz";
+import { askMauz } from "../openai/askMauz";
 
-export type OpenAiApiKeyProvider = () => Promise<string | undefined> | string | undefined;
-export type AskMauzHandler = (request: AskMauzRequest, options?: AskMauzOptions) => Promise<AskMauzResponse>;
+export type AskMauzHandler = (request: AskMauzRequest) => Promise<AskMauzResponse>;
 
 export type RegisterAskRouteOptions = {
   askHandler?: AskMauzHandler;
-  openAiApiKeyProvider?: OpenAiApiKeyProvider;
   authToken?: string;
 };
 
@@ -44,10 +42,7 @@ export async function registerAskRoute(
     }
 
     try {
-      const apiKey = await options.openAiApiKeyProvider?.();
-      const response = AskMauzResponseSchema.parse(
-        apiKey === undefined ? await askHandler(parsed.data) : await askHandler(parsed.data, { apiKey })
-      );
+      const response = AskMauzResponseSchema.parse(await askHandler(parsed.data));
       return reply.send(response);
     } catch (error) {
       if (error instanceof MissingOpenAIKeyError) {

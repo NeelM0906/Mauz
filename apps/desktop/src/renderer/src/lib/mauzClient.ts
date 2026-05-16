@@ -8,7 +8,6 @@ import type {
   ChatHistoryListResponse,
   MauzDesktopContext,
   MauzBridge,
-  OpenAiAuthStatus,
   Platform,
   MauzSettings,
   MauzSettingsUpdate,
@@ -84,13 +83,6 @@ const browserPreviewBridge: MauzBridge = {
       includeFullScreenshot: payload.includeFullScreenshot ?? false,
       apiKeyConfigured:
         payload.clearOpenAiApiKey === true ? false : (payload.openAiApiKey?.trim().length ?? 0) > 0
-    }),
-    getOpenAiAuthStatus: async () => ({
-      state: "signed-out"
-    }),
-    startOpenAiLogin: async () => ({
-      state: "unavailable",
-      message: "Run the Electron app to use OpenAI login."
     })
   },
   events: {
@@ -164,12 +156,6 @@ export const mauzClient = {
   },
   updateSettings(payload: MauzSettingsUpdate): Promise<MauzSettings> {
     return getBridge().settings.update(payload);
-  },
-  getOpenAiAuthStatus(): Promise<OpenAiAuthStatus> {
-    return getBridge().settings.getOpenAiAuthStatus();
-  },
-  startOpenAiLogin(): Promise<OpenAiAuthStatus> {
-    return getBridge().settings.startOpenAiLogin();
   },
   onActivation(callback: () => void): () => void {
     return getBridge().events.onActivation(callback);

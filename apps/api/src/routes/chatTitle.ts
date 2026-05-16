@@ -7,17 +7,12 @@ import {
   type ChatTitleResponse
 } from "@mauzai/shared";
 import { MissingOpenAIKeyError } from "../errors";
-import { generateChatTitle, type GenerateChatTitleOptions } from "../openai/generateChatTitle";
-import type { OpenAiApiKeyProvider } from "./ask";
+import { generateChatTitle } from "../openai/generateChatTitle";
 
-export type ChatTitleHandler = (
-  request: ChatTitleRequest,
-  options?: GenerateChatTitleOptions
-) => Promise<ChatTitleResponse>;
+export type ChatTitleHandler = (request: ChatTitleRequest) => Promise<ChatTitleResponse>;
 
 export type RegisterChatTitleRouteOptions = {
   chatTitleHandler?: ChatTitleHandler;
-  openAiApiKeyProvider?: OpenAiApiKeyProvider;
   authToken?: string;
 };
 
@@ -47,12 +42,7 @@ export async function registerChatTitleRoute(
     }
 
     try {
-      const apiKey = await options.openAiApiKeyProvider?.();
-      const response = ChatTitleResponseSchema.parse(
-        apiKey === undefined
-          ? await chatTitleHandler(parsed.data)
-          : await chatTitleHandler(parsed.data, { apiKey })
-      );
+      const response = ChatTitleResponseSchema.parse(await chatTitleHandler(parsed.data));
       return reply.send(response);
     } catch (error) {
       if (error instanceof MissingOpenAIKeyError) {

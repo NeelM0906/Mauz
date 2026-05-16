@@ -120,41 +120,28 @@ describe("SettingsService", () => {
     });
   });
 
-  it("keeps OpenAI auth mode on the OpenAI login path", async () => {
-    const { service } = createSettingsService({
-      settingsJson: JSON.stringify(DEFAULT_SETTINGS)
-    });
-
-    await expect(service.update({ openAiAuthMode: "openai-auth" })).resolves.toMatchObject({
-      openAiAuthMode: "openai-auth"
-    });
-    await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiAuthMode: "openai-auth"
-    });
-  });
-
-  it("migrates old Codex and ChatGPT auth mode settings to OpenAI login", async () => {
-    const codexSettings = createSettingsService({
+  it("migrates unsupported account auth mode settings to the API key path", async () => {
+    const accountSettings = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        openAiAuthMode: "codex"
+        openAiAuthMode: "account-login"
       })
     });
-    const chatGptSettings = createSettingsService({
+    const legacySettings = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        openAiAuthMode: "chatgpt"
+        openAiAuthMode: "openai-auth"
       })
     });
 
-    await expect(codexSettings.service.get()).resolves.toMatchObject({
-      openAiAuthMode: "openai-auth"
+    await expect(accountSettings.service.get()).resolves.toMatchObject({
+      openAiAuthMode: "api-key"
     });
-    await expect(chatGptSettings.service.get()).resolves.toMatchObject({
-      openAiAuthMode: "openai-auth"
+    await expect(legacySettings.service.get()).resolves.toMatchObject({
+      openAiAuthMode: "api-key"
     });
-    expect(codexSettings.writes.at(-1)).toContain('"openAiAuthMode": "openai-auth"');
-    expect(chatGptSettings.writes.at(-1)).toContain('"openAiAuthMode": "openai-auth"');
+    expect(accountSettings.writes.at(-1)).toContain('"openAiAuthMode": "api-key"');
+    expect(legacySettings.writes.at(-1)).toContain('"openAiAuthMode": "api-key"');
   });
 });
 
