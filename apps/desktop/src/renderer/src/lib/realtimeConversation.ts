@@ -1,4 +1,4 @@
-import type { MauzDesktopContext, RealtimeMode, ScreenshotPayload } from "@mauzai/shared";
+import type { MauzDesktopContext, ScreenshotPayload } from "@mauzai/shared";
 
 export type VoiceState =
   | "connecting"
@@ -12,6 +12,20 @@ export type VoiceState =
 
 export type RealtimeServerEvent = {
   type: string;
+  eventId?: string | undefined;
+  itemId?: string | undefined;
+  responseId?: string | undefined;
+  delta?: string | undefined;
+  transcript?: string | undefined;
+  outputIndex?: number | undefined;
+  contentIndex?: number | undefined;
+};
+
+export type RealtimeTranscriptCue = {
+  role: "user" | "assistant";
+  id: string;
+  text: string;
+  kind: "delta" | "final";
 };
 
 export type SendableDataChannel = {
@@ -54,6 +68,32 @@ export function getVoiceStateForRealtimeEvent(
   return null;
 }
 
+export function getTranscriptCueForRealtimeEvent(event: RealtimeServerEvent): RealtimeTranscriptCue | null {
+  if (event.type === "conversation.item.input_audio_transcription.delta") {
+    return toTranscriptCue(event, "user", event.delta, "delta");
+  }
+
+  if (event.type === "conversation.item.input_audio_transcription.completed") {
+    return toTranscriptCue(event, "user", event.transcript, "final");
+  }
+
+  if (
+    event.type === "response.output_audio_transcript.delta" ||
+    event.type === "response.audio_transcript.delta"
+  ) {
+    return toTranscriptCue(event, "assistant", event.delta, "delta");
+  }
+
+  if (
+    event.type === "response.output_audio_transcript.done" ||
+    event.type === "response.audio_transcript.done"
+  ) {
+    return toTranscriptCue(event, "assistant", event.transcript, "final");
+  }
+
+  return null;
+}
+
 export function setMicrophoneMuted(stream: AudioStreamLike | null, muted: boolean): void {
   for (const track of stream?.getAudioTracks() ?? []) {
     track.enabled = !muted;
@@ -66,33 +106,13 @@ export function stopRealtimeMedia(stream: MediaStream | null): void {
   }
 }
 
-export function sendInitialContext(
-  dataChannel: SendableDataChannel,
-  mode: RealtimeMode,
-  context: MauzDesktopContext
-): void {
+export function sendInitialContext(dataChannel: SendableDataChannel, context: MauzDesktopContext): void {
   sendConversationMessage(dataChannel, [
     {
       type: "input_text",
-      text: buildRealtimeContextText(mode, context)
+      text: buildRealtimeContextText(context)
     },
     ...getInitialImages(context)
-  ]);
-}
-
-export function sendScreenFrame(dataChannel: SendableDataChannel, context: MauzDesktopContext): void {
-  const image = context.pointer?.screenshot ?? context.screenshot ?? context.pointer?.cursorCrop;
-
-  if (image === undefined) {
-    return;
-  }
-
-  sendConversationMessage(dataChannel, [
-    {
-      type: "input_text",
-      text: "Updated explicit screen-share frame. Use this as current visual context when the user asks about the screen."
-    },
-    toInputImage(image)
   ]);
 }
 
@@ -108,7 +128,16 @@ export function parseRealtimeEvent(data: unknown): RealtimeServerEvent | null {
       const event = parsed as { type?: unknown };
 
       if (typeof event.type === "string") {
-        return { type: event.type };
+        return {
+          type: event.type,
+          eventId: getStringField(event, "event_id"),
+          itemId: getStringField(event, "item_id"),
+          responseId: getStringField(event, "response_id"),
+          delta: getStringField(event, "delta"),
+          transcript: getStringField(event, "transcript"),
+          outputIndex: getNumberField(event, "output_index"),
+          contentIndex: getNumberField(event, "content_index")
+        };
       }
     }
   } catch {
@@ -120,14 +149,6 @@ export function parseRealtimeEvent(data: unknown): RealtimeServerEvent | null {
 
 export function getPrimaryImage(context: MauzDesktopContext | null): ScreenshotPayload | undefined {
   return context?.pointer?.cursorCrop ?? context?.pointer?.screenshot ?? context?.screenshot;
-}
-
-export function hashImage(image: ScreenshotPayload): string {
-  return `${image.mimeType}:${image.width}x${image.height}:${image.base64.length}:${image.base64.slice(0, 96)}:${image.base64.slice(-96)}`;
-}
-
-export function canSendScreenFrame(options: { screenPaused: boolean; dataChannelReady: boolean }): boolean {
-  return !options.screenPaused && options.dataChannelReady;
 }
 
 export function getContextLabel(context: MauzDesktopContext | null): string {
@@ -159,13 +180,11 @@ function sendConversationMessage(dataChannel: SendableDataChannel, content: unkn
   );
 }
 
-function buildRealtimeContextText(mode: RealtimeMode, context: MauzDesktopContext): string {
+function buildRealtimeContextText(context: MauzDesktopContext): string {
   const selectedText = context.selectedText ?? context.pointer?.selectedText;
 
   return [
-    mode === "screen"
-      ? "The user started explicit screen sharing with Mauz."
-      : "The user started a voice conversation with Mauz.",
+    "The user started a voice conversation with Mauz.",
     "Use this desktop context to resolve this, that, and here.",
     "Priority: selected text > cursor crop > active window metadata > full screenshot > cursor position.",
     `Cursor: (${Math.round(context.cursor.x)}, ${Math.round(context.cursor.y)})`,
@@ -197,4 +216,40 @@ function toInputImage(image: ScreenshotPayload): { type: "input_image"; image_ur
     image_url: `data:${image.mimeType};base64,${image.base64}`,
     detail: "auto"
   };
+}
+
+function toTranscriptCue(
+  event: RealtimeServerEvent,
+  role: RealtimeTranscriptCue["role"],
+  text: string | undefined,
+  kind: RealtimeTranscriptCue["kind"]
+): RealtimeTranscriptCue | null {
+  if (text === undefined) {
+    return null;
+  }
+
+  const id =
+    event.itemId ??
+    event.responseId ??
+    event.eventId ??
+    `${role}:${event.outputIndex ?? 0}:${event.contentIndex ?? 0}`;
+
+  return {
+    role,
+    id,
+    text,
+    kind
+  };
+}
+
+function getStringField(event: { [key: string]: unknown }, key: string): string | undefined {
+  const value = event[key];
+
+  return typeof value === "string" ? value : undefined;
+}
+
+function getNumberField(event: { [key: string]: unknown }, key: string): number | undefined {
+  const value = event[key];
+
+  return typeof value === "number" ? value : undefined;
 }

@@ -48,7 +48,13 @@ describe("createRealtimeAnswer", () => {
       model?: unknown;
       output_modalities?: unknown;
       reasoning?: { effort?: unknown };
-      audio?: { input?: { turn_detection?: unknown }; output?: { voice?: unknown } };
+      audio?: {
+        input?: {
+          transcription?: unknown;
+          turn_detection?: unknown;
+        };
+        output?: { voice?: unknown };
+      };
       turn_detection?: unknown;
     };
 
@@ -57,6 +63,9 @@ describe("createRealtimeAnswer", () => {
     expect(session.output_modalities).toEqual(["audio"]);
     expect(session.reasoning).toEqual({ effort: "low" });
     expect(session.turn_detection).toBeUndefined();
+    expect(session.audio?.input?.transcription).toEqual({
+      model: "gpt-4o-mini-transcribe"
+    });
     expect(session.audio?.input?.turn_detection).toEqual({
       type: "semantic_vad",
       eagerness: "auto",
@@ -72,26 +81,27 @@ describe("createRealtimeAnswer", () => {
     const session = buildRealtimeSessionConfig(validRealtimeRequest, {
       model: "gpt-realtime-2",
       voice: "cedar",
-      reasoningEffort: "low"
+      reasoningEffort: "low",
+      transcriptionModel: "gpt-4o-transcribe"
     }) as {
-      audio?: { input?: { turn_detection?: { type?: string } }; output?: { voice?: string } };
+      audio?: {
+        input?: { transcription?: { model?: string }; turn_detection?: { type?: string } };
+        output?: { voice?: string };
+      };
       turn_detection?: unknown;
     };
 
     expect(session.turn_detection).toBeUndefined();
+    expect(session.audio?.input?.transcription?.model).toBe("gpt-4o-transcribe");
     expect(session.audio?.input?.turn_detection?.type).toBe("semantic_vad");
     expect(session.audio?.output?.voice).toBe("cedar");
   });
 
-  it("tells screen mode to wait for user speech instead of narrating frames", () => {
-    const screenInstructions = buildRealtimeInstructions({
-      ...validRealtimeRequest,
-      mode: "screen"
-    });
+  it("tells talk mode to use only the initial screenshot context", () => {
+    const instructions = buildRealtimeInstructions(validRealtimeRequest);
 
-    expect(screenInstructions).toContain("Voice is the primary interaction channel.");
-    expect(screenInstructions).toContain("Do not narrate every screen change");
-    expect(screenInstructions).toContain("Wait for the user to ask");
+    expect(instructions).toContain("The user explicitly enabled voice chat.");
+    expect(instructions).toContain("Use the initial screenshot context only unless they share more context.");
   });
 
   it("requires an API key for Realtime", async () => {

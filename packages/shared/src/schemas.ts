@@ -209,7 +209,7 @@ export const RealtimeSessionResponseSchema = z.object({
   session: z.unknown().optional()
 });
 
-export const RealtimeModeSchema = z.enum(["talk", "screen"]);
+export const RealtimeModeSchema = z.literal("talk");
 
 export const RealtimeConnectRequestSchema = z.object({
   offerSdp: z.string().min(1),

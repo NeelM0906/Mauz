@@ -23,9 +23,7 @@ const mauzApi: MauzBridge = {
     showMenu: () => ipcRenderer.invoke(IPC_CHANNELS.menuShowMenu) as Promise<void>,
     close: () => ipcRenderer.invoke(IPC_CHANNELS.menuClose) as Promise<void>,
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
-    startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
-    startScreenShare: () =>
-      ipcRenderer.invoke(IPC_CHANNELS.menuStartScreenShare) as Promise<MauzDesktopContext>
+    startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>
   },
   ask: {
     submit: (payload: AskMauzRequest) =>
@@ -42,8 +40,7 @@ const mauzApi: MauzBridge = {
     createSession: () =>
       ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>,
     connect: (payload: RealtimeConnectRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.realtimeConnect, payload) as Promise<RealtimeConnectResponse>,
-    captureFrame: () => ipcRenderer.invoke(IPC_CHANNELS.realtimeCaptureFrame) as Promise<MauzDesktopContext>
+      ipcRenderer.invoke(IPC_CHANNELS.realtimeConnect, payload) as Promise<RealtimeConnectResponse>
   },
   settings: {
     open: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpen) as Promise<MauzSettings>,
@@ -51,7 +48,7 @@ const mauzApi: MauzBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, payload).then((settings: unknown) => {
         const parsed = MauzSettingsSchema.parse(settings);
         return parsed;
-      })
+      }) as Promise<MauzSettings>
   },
   events: {
     onActivation: (callback) => {

@@ -1,10 +1,10 @@
-import { History, MessageCircleQuestion, Settings, X } from "lucide-react";
+import { History, MessageCircleQuestion, Mic, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = "ask";
+type MenuAction = "ask" | "talk";
 
 export function MauzMenu(): React.JSX.Element {
   const {
@@ -48,9 +48,9 @@ export function MauzMenu(): React.JSX.Element {
     setStatus(null);
 
     try {
-      const context = await mauzClient.startAsk();
+      const context = action === "talk" ? await mauzClient.startTalk() : await mauzClient.startAsk();
       setCurrentContext(context);
-      setMode("ask");
+      setMode(action);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {
@@ -95,6 +95,15 @@ export function MauzMenu(): React.JSX.Element {
         >
           <MessageCircleQuestion aria-hidden="true" size={18} />
           <span>{pendingAction === "ask" ? "Capturing screen..." : "Ask Mauz"}</span>
+        </button>
+        <button
+          type="button"
+          className="mauz-action"
+          onClick={() => void handleAction("talk")}
+          disabled={pendingAction !== null}
+        >
+          <Mic aria-hidden="true" size={18} />
+          <span>{pendingAction === "talk" ? "Opening voice..." : "Talk to Mauz"}</span>
         </button>
         <button
           type="button"
