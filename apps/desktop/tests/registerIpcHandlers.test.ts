@@ -142,6 +142,20 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
   });
 
+  it("can read settings from the popover without opening the settings panel", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await handler(createInvokeEvent("popover"), {
+      resizePopover: false
+    });
+
+    expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
+  });
+
   it("blocks continuing chats from the popover surface", async () => {
     const options = createOptions();
 
@@ -266,6 +280,8 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       devHotkeyEnabled: true,
       shakeSensitivity: "normal" as const,
       openAiAuthMode: "api-key" as const,
+      openAiAuthDisconnected: false,
+      openAiCredentialSource: "none" as const,
       askModel: "gpt-5.4-mini",
       chatTitleModel: "gpt-5.4-nano",
       realtimeModel: "gpt-realtime-2",
@@ -279,6 +295,8 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       devHotkeyEnabled: update.devHotkeyEnabled ?? true,
       shakeSensitivity: update.shakeSensitivity ?? ("normal" as const),
       openAiAuthMode: update.openAiAuthMode ?? ("api-key" as const),
+      openAiAuthDisconnected: update.openAiAuthDisconnected ?? false,
+      openAiCredentialSource: "none" as const,
       askModel: update.askModel ?? "gpt-5.4-mini",
       chatTitleModel: update.chatTitleModel ?? "gpt-5.4-nano",
       realtimeModel: update.realtimeModel ?? "gpt-realtime-2",

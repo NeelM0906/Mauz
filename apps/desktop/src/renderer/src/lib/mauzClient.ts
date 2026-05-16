@@ -8,6 +8,7 @@ import type {
   ChatHistoryListResponse,
   MauzDesktopContext,
   MauzBridge,
+  MauzSettingsOpenOptions,
   Platform,
   MauzSettings,
   MauzSettingsUpdate,
@@ -62,6 +63,8 @@ const browserPreviewBridge: MauzBridge = {
       devHotkeyEnabled: true,
       shakeSensitivity: "normal",
       openAiAuthMode: "api-key",
+      openAiAuthDisconnected: false,
+      openAiCredentialSource: "none",
       askModel: "gpt-5.4-mini",
       chatTitleModel: "gpt-5.4-nano",
       realtimeModel: "gpt-realtime-2",
@@ -70,20 +73,28 @@ const browserPreviewBridge: MauzBridge = {
       includeFullScreenshot: false,
       apiKeyConfigured: false
     }),
-    update: async (payload: MauzSettingsUpdate) => ({
-      nativeShakeEnabled: payload.nativeShakeEnabled ?? true,
-      devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
-      shakeSensitivity: payload.shakeSensitivity ?? "normal",
-      openAiAuthMode: payload.openAiAuthMode ?? "api-key",
-      askModel: payload.askModel ?? "gpt-5.4-mini",
-      chatTitleModel: payload.chatTitleModel ?? "gpt-5.4-nano",
-      realtimeModel: payload.realtimeModel ?? "gpt-realtime-2",
-      realtimeVoice: payload.realtimeVoice ?? "marin",
-      realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
-      includeFullScreenshot: payload.includeFullScreenshot ?? false,
-      apiKeyConfigured:
-        payload.clearOpenAiApiKey === true ? false : (payload.openAiApiKey?.trim().length ?? 0) > 0
-    })
+    update: async (payload: MauzSettingsUpdate) => {
+      const openAiAuthDisconnected = payload.openAiAuthDisconnected ?? false;
+      const hasDraftApiKey = (payload.openAiApiKey?.trim().length ?? 0) > 0;
+      const openAiCredentialSource =
+        openAiAuthDisconnected || payload.clearOpenAiApiKey === true || !hasDraftApiKey ? "none" : "saved";
+
+      return {
+        nativeShakeEnabled: payload.nativeShakeEnabled ?? true,
+        devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
+        shakeSensitivity: payload.shakeSensitivity ?? "normal",
+        openAiAuthMode: payload.openAiAuthMode ?? "api-key",
+        openAiAuthDisconnected,
+        openAiCredentialSource,
+        askModel: payload.askModel ?? "gpt-5.4-mini",
+        chatTitleModel: payload.chatTitleModel ?? "gpt-5.4-nano",
+        realtimeModel: payload.realtimeModel ?? "gpt-realtime-2",
+        realtimeVoice: payload.realtimeVoice ?? "marin",
+        realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
+        includeFullScreenshot: payload.includeFullScreenshot ?? false,
+        apiKeyConfigured: openAiCredentialSource !== "none"
+      };
+    }
   },
   events: {
     onActivation: () => () => {},
@@ -151,8 +162,8 @@ export const mauzClient = {
   connectRealtime(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse> {
     return getBridge().realtime.connect(payload);
   },
-  openSettings(): Promise<MauzSettings> {
-    return getBridge().settings.open();
+  openSettings(options?: MauzSettingsOpenOptions): Promise<MauzSettings> {
+    return getBridge().settings.open(options);
   },
   updateSettings(payload: MauzSettingsUpdate): Promise<MauzSettings> {
     return getBridge().settings.update(payload);

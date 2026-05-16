@@ -10,7 +10,7 @@ import {
   Trash2,
   Zap
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MauzSettings, MauzSettingsUpdate, ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -36,12 +36,7 @@ const SENSITIVITY_OPTIONS: Array<{
 
 const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
 const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
-const PROVIDER_OPTIONS = [
-  {
-    name: "OpenAI login",
-    status: "active",
-    description: "Uses OpenAI credentials from the launch environment or an encrypted saved key."
-  },
+const UPCOMING_PROVIDER_OPTIONS = [
   {
     name: "z.ai",
     status: "coming soon",
@@ -70,6 +65,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const openAiApiKeyInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setDraft(settings);
@@ -119,6 +115,80 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
     setDraft((current) => (current === null ? current : { ...current, [key]: value }));
   };
 
+  const focusOpenAiApiKeyInput = (): void => {
+    requestAnimationFrame(() => {
+      openAiApiKeyInputRef.current?.focus();
+    });
+  };
+
+  const handleOpenAiReconnect = async (): Promise<void> => {
+    if (draft === null) {
+      return;
+    }
+
+    if (draft.apiKeyConfigured && !draft.openAiAuthDisconnected) {
+      setSettingsMessage("Paste a new OpenAI API key, then Save to reconnect.");
+      focusOpenAiApiKeyInput();
+      return;
+    }
+
+    setSaving(true);
+    setSettingsMessage(null);
+
+    try {
+      const nextSettings = await mauzClient.updateSettings({
+        openAiAuthDisconnected: false
+      });
+
+      setSettings(nextSettings);
+      setDraft(nextSettings);
+      setOpenAiApiKeyDraft("");
+      setClearSavedOpenAiApiKey(false);
+
+      if (nextSettings.apiKeyConfigured) {
+        setSettingsMessage(getOpenAiReconnectMessage(nextSettings));
+      } else {
+        setSettingsMessage("Enter an OpenAI API key, then Save.");
+        focusOpenAiApiKeyInput();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not reconnect OpenAI.";
+
+      setSettingsMessage(message);
+      setStatus(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOpenAiDisconnect = async (): Promise<void> => {
+    if (draft === null) {
+      return;
+    }
+
+    setSaving(true);
+    setSettingsMessage(null);
+
+    try {
+      const nextSettings = await mauzClient.updateSettings({
+        openAiAuthDisconnected: true
+      });
+
+      setSettings(nextSettings);
+      setDraft(nextSettings);
+      setOpenAiApiKeyDraft("");
+      setClearSavedOpenAiApiKey(false);
+      setSettingsMessage("OpenAI disconnected. Reconnect here or from the Mauz menu.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not disconnect OpenAI.";
+
+      setSettingsMessage(message);
+      setStatus(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async (): Promise<void> => {
     if (draft === null) {
       return;
@@ -132,6 +202,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         nativeShakeEnabled: draft.nativeShakeEnabled,
         devHotkeyEnabled: draft.devHotkeyEnabled,
         shakeSensitivity: draft.shakeSensitivity,
+        openAiAuthDisconnected: draft.openAiAuthDisconnected,
         askModel: draft.askModel,
         chatTitleModel: draft.chatTitleModel,
         realtimeModel: draft.realtimeModel,
@@ -184,43 +255,72 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             <span>Login</span>
           </div>
           <div className="auth-provider-list" aria-label="Model provider login options">
-            {PROVIDER_OPTIONS.map((provider) => (
+            <div className="auth-provider-card" data-status={getOpenAiAuthState(draft)} key="OpenAI login">
+              <div>
+                <strong>OpenAI login</strong>
+                <span>{getOpenAiProviderDescription(draft)}</span>
+              </div>
+              <div className="provider-side">
+                <span className="provider-status">
+                  {draft.apiKeyConfigured ? (
+                    <>
+                      <Check aria-hidden="true" size={12} />
+                      Connected
+                    </>
+                  ) : (
+                    <>
+                      <Lock aria-hidden="true" size={12} />
+                      {draft.openAiAuthDisconnected ? "Disconnected" : "Missing key"}
+                    </>
+                  )}
+                </span>
+                <div className="provider-auth-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={saving}
+                    onClick={() => void handleOpenAiReconnect()}
+                  >
+                    <KeyRound aria-hidden="true" size={11} />
+                    <span>{getOpenAiAuthActionLabel(draft)}</span>
+                  </button>
+                  {draft.apiKeyConfigured ? (
+                    <button
+                      type="button"
+                      className="danger-button"
+                      disabled={saving}
+                      onClick={() => void handleOpenAiDisconnect()}
+                    >
+                      <Lock aria-hidden="true" size={11} />
+                      <span>Disconnect</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            {UPCOMING_PROVIDER_OPTIONS.map((provider) => (
               <div className="auth-provider-card" data-status={provider.status} key={provider.name}>
                 <div>
                   <strong>{provider.name}</strong>
                   <span>{provider.description}</span>
                 </div>
-                <span className="provider-status">
-                  {provider.status === "active" ? (
-                    draft.apiKeyConfigured ? (
-                      <>
-                        <Check aria-hidden="true" size={12} />
-                        Connected
-                      </>
-                    ) : (
-                      <>
-                        <Lock aria-hidden="true" size={12} />
-                        Missing key
-                      </>
-                    )
-                  ) : (
-                    provider.status
-                  )}
-                </span>
+                <span className="provider-status">{provider.status}</span>
               </div>
             ))}
           </div>
           <label className="settings-field api-key-field">
             <span>API key</span>
             <input
+              ref={openAiApiKeyInputRef}
               type="password"
               value={openAiApiKeyDraft}
-              placeholder={draft.apiKeyConfigured ? "Configured - enter new key to replace" : "sk-..."}
+              placeholder={draft.apiKeyConfigured ? "Configured - enter new key to reconnect" : "sk-..."}
               autoComplete="off"
               spellCheck={false}
               onChange={(event) => {
                 setOpenAiApiKeyDraft(event.target.value);
                 setClearSavedOpenAiApiKey(false);
+                updateDraft("openAiAuthDisconnected", false);
               }}
             />
           </label>
@@ -319,6 +419,50 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
       </footer>
     </section>
   );
+}
+
+function getOpenAiAuthState(settings: MauzSettings): "active" | "disconnected" | "missing" {
+  if (settings.apiKeyConfigured) {
+    return "active";
+  }
+
+  return settings.openAiAuthDisconnected ? "disconnected" : "missing";
+}
+
+function getOpenAiProviderDescription(settings: MauzSettings): string {
+  if (settings.openAiAuthDisconnected) {
+    return "OpenAI is disconnected. Reconnect to use a saved or launch key.";
+  }
+
+  if (settings.openAiCredentialSource === "saved") {
+    return "Using the encrypted saved API key. Reconnect anytime with a new key.";
+  }
+
+  if (settings.openAiCredentialSource === "environment") {
+    return "Using the launch environment key. Save a key here to reconnect without restarting.";
+  }
+
+  return "Connect with an OpenAI API key without restarting Mauz.";
+}
+
+function getOpenAiAuthActionLabel(settings: MauzSettings): string {
+  if (settings.apiKeyConfigured || settings.openAiAuthDisconnected) {
+    return "Reconnect";
+  }
+
+  return "Connect";
+}
+
+function getOpenAiReconnectMessage(settings: MauzSettings): string {
+  if (settings.openAiCredentialSource === "saved") {
+    return "OpenAI reconnected with the saved key.";
+  }
+
+  if (settings.openAiCredentialSource === "environment") {
+    return "OpenAI reconnected with the launch key.";
+  }
+
+  return "OpenAI reconnected.";
 }
 
 function SettingsHeader({

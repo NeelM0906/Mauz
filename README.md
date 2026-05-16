@@ -10,6 +10,8 @@ This is a research preview experimenting with ways to make AI feel more accessib
 
 Mauz is not a finished product. It is a working preview for trying out interaction patterns and for inviting others to build on the idea.
 
+For local installation, credentials, macOS permissions, and packaging, see [setup.md](setup.md).
+
 ## What It Does
 
 - Opens an AI interaction from a mouse gesture or shortcut.
