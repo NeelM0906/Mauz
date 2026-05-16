@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "format:check": "pnpm lint",
     "env:check": "node scripts/check-env.mjs",
+    "github:protect-main": "node scripts/configure-main-protection.mjs",
     "security:secrets": "node scripts/check-secrets.mjs",
     "security:audit": "pnpm audit --audit-level moderate",
     "smoke": "pnpm build",

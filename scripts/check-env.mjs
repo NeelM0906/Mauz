@@ -17,7 +17,14 @@ const documentedRequiredKeys = [
   "MAUZ_ENABLE_DEV_HOTKEY",
   "MAUZ_INPUT_AGENT_PATH"
 ];
-const intentionallyUndocumentedEnvKeys = new Set(["ELECTRON_RENDERER_URL", "MAUZAI_APP_OUTPUT"]);
+const intentionallyUndocumentedEnvKeys = new Set([
+  "ELECTRON_RENDERER_URL",
+  "GH_TOKEN",
+  "GITHUB_REPOSITORY",
+  "GITHUB_TOKEN",
+  "MAUZAI_APP_OUTPUT",
+  "PROTECTED_BRANCH"
+]);
 const sourceFilePattern = /\.(?:cjs|mjs|js|jsx|ts|tsx)$/;
 const secretKeyPattern =
   /(?:^|_)(?:API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|PASSWORD|CREDENTIAL|PRIVATE_KEY)(?:$|_)/;
