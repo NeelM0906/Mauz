@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Cpu, KeyRound, MousePointerClick, Save, Settings2, Zap } from "lucide-react";
+import { ArrowLeft, Check, Cpu, KeyRound, Lock, MousePointerClick, Save, Settings2, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MauzSettings, RealtimeReasoningEffort, ShakeSensitivity } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
@@ -28,6 +28,33 @@ const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const REALTIME_MODEL_OPTIONS = ["gpt-realtime-2", "gpt-realtime-mini"];
 const VOICE_OPTIONS = ["marin", "cedar", "alloy"];
 const REASONING_OPTIONS: RealtimeReasoningEffort[] = ["low", "medium", "high"];
+const PROVIDER_OPTIONS = [
+  {
+    name: "OpenAI API",
+    status: "active",
+    description: "Uses OPENAI_API_KEY from the launch environment."
+  },
+  {
+    name: "ChatGPT account",
+    status: "unavailable",
+    description: "OpenAI does not expose ChatGPT web-login sessions for local API calls."
+  },
+  {
+    name: "z.ai",
+    status: "coming soon",
+    description: "Provider integration planned."
+  },
+  {
+    name: "MiniMax",
+    status: "coming soon",
+    description: "Provider integration planned."
+  },
+  {
+    name: "Kimi",
+    status: "coming soon",
+    description: "Provider integration planned."
+  }
+] as const;
 
 type SettingsPanelProps = {
   chrome?: "popover" | "desktop";
@@ -132,11 +159,35 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         <div className="settings-section">
           <div className="settings-label">
             <KeyRound aria-hidden="true" size={15} />
-            <span>OpenAI</span>
+            <span>Login</span>
           </div>
-          <p className="settings-message">
-            {draft.apiKeyConfigured ? "API key configured at launch." : "OPENAI_API_KEY is not configured."}
-          </p>
+          <div className="auth-provider-list" aria-label="Model provider login options">
+            {PROVIDER_OPTIONS.map((provider) => (
+              <div className="auth-provider-card" data-status={provider.status} key={provider.name}>
+                <div>
+                  <strong>{provider.name}</strong>
+                  <span>{provider.description}</span>
+                </div>
+                <span className="provider-status">
+                  {provider.status === "active" ? (
+                    draft.apiKeyConfigured ? (
+                      <>
+                        <Check aria-hidden="true" size={12} />
+                        Connected
+                      </>
+                    ) : (
+                      <>
+                        <Lock aria-hidden="true" size={12} />
+                        Missing key
+                      </>
+                    )
+                  ) : (
+                    provider.status
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="settings-section">
@@ -181,7 +232,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             <MousePointerClick aria-hidden="true" size={16} />
             <div>
               <strong>Native shake</strong>
-              <span>Starts the macOS helper after each launch.</span>
+              <span>Starts the macOS helper. Requires Accessibility permission.</span>
             </div>
             <ToggleButton
               pressed={draft.nativeShakeEnabled}

@@ -136,7 +136,7 @@ function applyDefinedSetting<Key extends keyof StoredMauzSettings>(
 
 function getDefaultSettings(): StoredMauzSettings {
   return {
-    nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, false),
+    nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, true),
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
     openAiAuthMode: "api-key",

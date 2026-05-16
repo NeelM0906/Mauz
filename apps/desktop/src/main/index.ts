@@ -119,9 +119,10 @@ function createInputProviders(settings: MauzSettings): InputProvider[] {
   }
 
   if (process.platform === "darwin" && settings.nativeShakeEnabled) {
+    const helperPath = getNativeInputAgentPath();
     providers.push(
       new MacInputAgentProvider({
-        helperPath: getNativeInputAgentPath(),
+        helperPath,
         detector: new ShakeDetector(getShakeDetectorConfigForSensitivity(settings.shakeSensitivity))
       })
     );
@@ -168,11 +169,23 @@ function getAppIconPath(): string {
 }
 
 function getNativeInputAgentPath(): string {
-  if (process.env.MAUZ_INPUT_AGENT_PATH !== undefined && process.env.MAUZ_INPUT_AGENT_PATH.length > 0) {
-    return process.env.MAUZ_INPUT_AGENT_PATH;
+  const configuredHelperPath = process.env.MAUZ_INPUT_AGENT_PATH?.trim();
+
+  if (configuredHelperPath && existsSync(configuredHelperPath)) {
+    return configuredHelperPath;
   }
 
   const candidates = [
+    resolve(
+      dirname(process.execPath),
+      "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
+    resolve(dirname(process.execPath), "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent"),
+    resolve(
+      process.resourcesPath,
+      "app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
+    resolve(process.resourcesPath, "app/native/macos/MauzInputAgent/MauzInputAgent"),
     resolve(app.getAppPath(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
     resolve(app.getAppPath(), "native/macos/MauzInputAgent/MauzInputAgent"),
     resolve(

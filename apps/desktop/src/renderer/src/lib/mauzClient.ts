@@ -60,7 +60,7 @@ const browserPreviewBridge: MauzBridge = {
   },
   settings: {
     open: async () => ({
-      nativeShakeEnabled: false,
+      nativeShakeEnabled: true,
       devHotkeyEnabled: true,
       shakeSensitivity: "normal",
       openAiAuthMode: "api-key",
@@ -73,7 +73,7 @@ const browserPreviewBridge: MauzBridge = {
       apiKeyConfigured: false
     }),
     update: async (payload: MauzSettingsUpdate) => ({
-      nativeShakeEnabled: payload.nativeShakeEnabled ?? false,
+      nativeShakeEnabled: payload.nativeShakeEnabled ?? true,
       devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
       shakeSensitivity: payload.shakeSensitivity ?? "normal",
       openAiAuthMode: payload.openAiAuthMode ?? "api-key",
