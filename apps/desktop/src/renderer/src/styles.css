@@ -1112,6 +1112,69 @@ button {
   gap: 7px;
 }
 
+.auth-provider-list {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-provider-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid rgb(23 23 23 / 10%);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 70%);
+}
+
+.auth-provider-card[data-status="active"] {
+  border-color: rgb(22 122 107 / 24%);
+  background: rgb(22 122 107 / 7%);
+}
+
+.auth-provider-card strong {
+  display: block;
+  color: #171717;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.auth-provider-card span {
+  display: block;
+  margin-top: 2px;
+  color: #686f6b;
+  font-size: 9.5px;
+  font-weight: 540;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.provider-status {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 76px;
+  min-height: 24px;
+  margin-top: 0 !important;
+  padding: 0 7px;
+  border: 1px solid rgb(23 23 23 / 10%);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #686f6b !important;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.auth-provider-card[data-status="active"] .provider-status {
+  border-color: rgb(22 122 107 / 24%);
+  color: #167a6b !important;
+}
+
 .settings-field {
   display: grid;
   grid-template-columns: 78px minmax(0, 1fr);

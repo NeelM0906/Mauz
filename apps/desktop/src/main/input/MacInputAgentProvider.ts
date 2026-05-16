@@ -1,8 +1,6 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, unlinkSync } from "node:fs";
-import { createServer, type Server, type Socket } from "node:net";
-import { dirname, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { MacInputAgentEventSchema, type PermissionError } from "@mauzai/shared";
@@ -28,7 +26,6 @@ type ShakeDetectorLike = {
 
 export type MacInputAgentProviderOptions = {
   helperPath?: string;
-  helperAppPath?: string;
   platform?: NodeJS.Platform;
   pathExists?: (path: string) => boolean;
   spawn?: SpawnLike;
@@ -56,9 +53,6 @@ export class MacInputAgentProvider implements InputProvider {
   private child: ChildProcessLike | null = null;
   private stdoutBuffer = "";
   private readonly decoder = new StringDecoder("utf8");
-  private socketServer: Server | null = null;
-  private socket: Socket | null = null;
-  private socketPath: string | null = null;
   private stopping = false;
   private restartAttempts = 0;
   private restartTimer: NodeJS.Timeout | null = null;
@@ -72,14 +66,12 @@ export class MacInputAgentProvider implements InputProvider {
     this.spawnHelper = options.spawn ?? ((command, args) => spawn(command, args ?? []));
     this.platform = options.platform ?? process.platform;
     this.helperPath = options.helperPath ?? findDefaultHelperPath();
-    this.helperAppPath = options.helperAppPath ?? getAppBundlePathForExecutable(this.helperPath);
   }
 
   private readonly helperPath: string;
-  private readonly helperAppPath: string | undefined;
 
   start(): void {
-    if (this.child !== null || this.socketServer !== null || this.restartTimer !== null) {
+    if (this.child !== null || this.restartTimer !== null) {
       return;
     }
 
@@ -94,9 +86,7 @@ export class MacInputAgentProvider implements InputProvider {
       return;
     }
 
-    const launchPath = this.getLaunchPath();
-
-    if (!this.pathExists(launchPath)) {
+    if (!this.pathExists(this.helperPath)) {
       this.emitPermissionError({
         permission: "unknown",
         message: HELPER_NOT_FOUND_MESSAGE
@@ -104,11 +94,7 @@ export class MacInputAgentProvider implements InputProvider {
       return;
     }
 
-    if (this.shouldLaunchAppBundle()) {
-      this.startAppBundleChild();
-    } else {
-      this.startExecutableChild();
-    }
+    this.startExecutableChild();
   }
 
   stop(): void {
@@ -121,7 +107,6 @@ export class MacInputAgentProvider implements InputProvider {
 
     const child = this.child;
     this.child = null;
-    this.closeSocketServer();
     this.stdoutBuffer = "";
     this.decoder.end();
     this.detector.reset();
@@ -129,8 +114,6 @@ export class MacInputAgentProvider implements InputProvider {
     if (child !== null && child.killed !== true) {
       child.kill("SIGTERM");
     }
-
-    this.stopHelperApp();
   }
 
   onActivation(callback: (event: ActivationEvent) => void): Unsubscribe {
@@ -178,123 +161,6 @@ export class MacInputAgentProvider implements InputProvider {
       this.flushStdout();
       this.scheduleRestartIfNeeded();
     });
-  }
-
-  private startAppBundleChild(): void {
-    const helperAppPath = this.helperAppPath;
-
-    if (helperAppPath === undefined) {
-      this.startExecutableChild();
-      return;
-    }
-
-    const socketPath = join("/tmp", `mauz-input-${process.pid}-${randomUUID()}.sock`);
-    const server = createServer((socket) => {
-      this.socket?.destroy();
-      this.socket = socket;
-
-      socket.on("data", (chunk: Buffer | string) => {
-        this.handleStdout(chunk);
-      });
-      socket.once("close", () => {
-        if (this.socket === socket) {
-          this.socket = null;
-        }
-      });
-    });
-
-    this.socketPath = socketPath;
-    this.socketServer = server;
-
-    server.once("error", (error) => {
-      this.closeSocketServer();
-      this.emitPermissionError({
-        permission: "unknown",
-        message: `Mauz could not start the native input helper socket: ${error.message}`
-      });
-    });
-
-    server.listen(socketPath, () => {
-      if (this.stopping || this.socketServer !== server) {
-        this.closeSocketServer();
-        return;
-      }
-
-      const child = this.spawnHelper("/usr/bin/open", [
-        "-n",
-        "-W",
-        helperAppPath,
-        "--args",
-        "--socket",
-        socketPath
-      ]);
-      this.child = child;
-
-      child.stderr?.on("data", () => {
-        // Intentionally discard helper stderr so screenshot or selected text data can never leak into logs.
-      });
-      child.once("error", (error) => {
-        if (this.child === child) {
-          this.child = null;
-        }
-        this.closeSocketServer();
-        this.emitPermissionError({
-          permission: "unknown",
-          message: `Mauz could not start the native input helper: ${error.message}`
-        });
-      });
-      child.once("exit", () => {
-        if (this.child === child) {
-          this.child = null;
-        }
-
-        this.closeSocketServer();
-
-        if (this.stopping) {
-          return;
-        }
-
-        this.flushStdout();
-        this.scheduleRestartIfNeeded();
-      });
-    });
-  }
-
-  private getLaunchPath(): string {
-    return this.shouldLaunchAppBundle() ? this.helperAppPath! : this.helperPath;
-  }
-
-  private shouldLaunchAppBundle(): boolean {
-    return this.helperAppPath !== undefined;
-  }
-
-  private closeSocketServer(): void {
-    this.socket?.destroy();
-    this.socket = null;
-
-    this.socketServer?.close();
-    this.socketServer = null;
-
-    if (this.socketPath !== null) {
-      try {
-        unlinkSync(this.socketPath);
-      } catch {
-        // The socket path may already be gone if the server never finished binding.
-      }
-
-      this.socketPath = null;
-    }
-  }
-
-  private stopHelperApp(): void {
-    if (this.helperAppPath === undefined) {
-      return;
-    }
-
-    const helperExecutablePath = join(this.helperAppPath, "Contents/MacOS/MauzInputAgent");
-    const stopper = this.spawnHelper("/usr/bin/pkill", ["-f", helperExecutablePath]);
-    stopper.stdout?.resume();
-    stopper.stderr?.resume();
   }
 
   private handleStdout(chunk: Buffer | string): void {
@@ -394,12 +260,24 @@ function parseJson(line: string): unknown | undefined {
 }
 
 function findDefaultHelperPath(): string {
-  if (process.env.MAUZ_INPUT_AGENT_PATH !== undefined && process.env.MAUZ_INPUT_AGENT_PATH.length > 0) {
-    return process.env.MAUZ_INPUT_AGENT_PATH;
+  const configuredHelperPath = process.env.MAUZ_INPUT_AGENT_PATH?.trim();
+
+  if (configuredHelperPath && existsSync(configuredHelperPath)) {
+    return configuredHelperPath;
   }
 
   const currentFileDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
+    resolve(
+      dirname(process.execPath),
+      "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
+    resolve(dirname(process.execPath), "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent"),
+    resolve(
+      process.resourcesPath,
+      "app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
+    ),
+    resolve(process.resourcesPath, "app/native/macos/MauzInputAgent/MauzInputAgent"),
     resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
     resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent"),
     resolve(
