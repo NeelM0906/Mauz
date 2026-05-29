@@ -35,8 +35,6 @@ let shutdownPromise: Promise<void> | null = null;
 let shutdownComplete = false;
 const shownPermissionMessages = new Set<string>();
 
-app.commandLine.appendSwitch("use-mock-keychain");
-
 type QuitEvent = {
   preventDefault(): void;
 };
@@ -233,7 +231,7 @@ function restartInputProviders(settings: MauzSettings): void {
 
 async function handleActivation(cursor: { x: number; y: number }): Promise<void> {
   try {
-    await contextCollector?.prepareForActivation();
+    await contextCollector?.prepareForActivation(cursor);
   } finally {
     await popover?.showAt(cursor);
   }

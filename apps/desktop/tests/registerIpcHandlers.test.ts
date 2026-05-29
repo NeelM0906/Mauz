@@ -89,6 +89,19 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
   });
 
+  it("clears activation context when the popover closes", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuClose);
+
+    await handler();
+
+    expect(options.contextCollector.discardActivationSnapshot).toHaveBeenCalledOnce();
+    expect(options.popover.hide).toHaveBeenCalledOnce();
+  });
+
   it("opens Talk mode with Realtime context", async () => {
     const options = createOptions();
     const context = createRealtimeContext();
@@ -231,7 +244,8 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   const contextCollector = {
     collectBasicContext: vi.fn(),
     collectForAsk: vi.fn(),
-    collectForRealtime: vi.fn()
+    collectForRealtime: vi.fn(),
+    discardActivationSnapshot: vi.fn()
   } as unknown as ContextCollector;
   const api: LocalApiHandle = {
     baseUrl: "http://127.0.0.1:47891",

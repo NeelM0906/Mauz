@@ -6,6 +6,11 @@ import { ScreenshotCaptureError, ScreenshotService } from "./ScreenshotService";
 
 const supportedPlatforms = new Set<NodeJS.Platform>(["darwin", "win32", "linux"]);
 
+type Point = {
+  x: number;
+  y: number;
+};
+
 type CaptureHider = {
   hideDuringCapture<T>(operation: () => Promise<T>): Promise<T>;
 };
@@ -18,7 +23,12 @@ type ContextCollectorOptions = {
 };
 
 type ActivationSnapshot = ActiveWindowMetadata & {
-  selectedText?: string | undefined;
+  cursor: Point;
+};
+
+type CollectPointerContextOptions = {
+  useActivationSnapshot?: boolean | undefined;
+  useActivationCursor?: boolean | undefined;
 };
 
 export class ContextCollector {
@@ -35,9 +45,7 @@ export class ContextCollector {
     this.captureHider = options.captureHider;
   }
 
-  collectBasicContext(): MauzDesktopContext {
-    const cursor = screen.getCursorScreenPoint();
-
+  collectBasicContext(cursor: Point = screen.getCursorScreenPoint()): MauzDesktopContext {
     return {
       timestamp: new Date().toISOString(),
       platform: this.getPlatform(),
@@ -45,16 +53,24 @@ export class ContextCollector {
     };
   }
 
-  async collectForAsk(): Promise<MauzDesktopContext> {
-    return this.collectWithPointerContext();
+  async collectForAsk(options: CollectPointerContextOptions = {}): Promise<MauzDesktopContext> {
+    return this.collectWithPointerContext(options);
   }
 
   async collectForRealtime(): Promise<MauzDesktopContext> {
-    return this.collectWithPointerContext();
+    return this.collectWithPointerContext({
+      useActivationCursor: false
+    });
   }
 
-  private async collectWithPointerContext(): Promise<MauzDesktopContext> {
-    const context = await this.collectAskBaseContext();
+  discardActivationSnapshot(): void {
+    this.activationSnapshot = null;
+  }
+
+  private async collectWithPointerContext(
+    options: CollectPointerContextOptions = {}
+  ): Promise<MauzDesktopContext> {
+    const context = await this.collectAskBaseContext(options);
     const capture = async () => this.screenshotService.capturePointerContext(context.cursor);
 
     try {
@@ -78,13 +94,12 @@ export class ContextCollector {
     }
   }
 
-  async prepareForActivation(): Promise<void> {
+  async prepareForActivation(cursor: Point): Promise<void> {
     const metadata = await this.captureActiveWindowMetadata();
-    const selectedText = await this.captureSelectedText(metadata);
 
     this.activationSnapshot = withOptionalActivationFields({
       ...metadata,
-      selectedText
+      cursor
     });
   }
 
@@ -96,12 +111,24 @@ export class ContextCollector {
     return "linux";
   }
 
-  private async collectAskBaseContext(): Promise<MauzDesktopContext> {
-    const basicContext = this.collectBasicContext();
-    const activeMetadata: ActivationSnapshot =
-      this.activationSnapshot ?? (await this.captureActiveWindowMetadata());
-    this.activationSnapshot = null;
-    const selectedText = activeMetadata.selectedText ?? (await this.captureSelectedText(activeMetadata));
+  private async collectAskBaseContext(options: CollectPointerContextOptions): Promise<MauzDesktopContext> {
+    const useActivationSnapshot = options.useActivationSnapshot ?? true;
+    const activationSnapshot = useActivationSnapshot ? this.activationSnapshot : null;
+
+    if (useActivationSnapshot) {
+      this.activationSnapshot = null;
+    }
+
+    const activeMetadata =
+      activationSnapshot === null
+        ? await this.captureActiveWindowMetadata()
+        : getActivationMetadata(activationSnapshot);
+    const cursor =
+      activationSnapshot !== null && options.useActivationCursor !== false
+        ? activationSnapshot.cursor
+        : screen.getCursorScreenPoint();
+    const basicContext = this.collectBasicContext(cursor);
+    const selectedText = await this.captureSelectedText(activeMetadata);
 
     return withOptionalContextFields({
       ...basicContext,
@@ -149,6 +176,20 @@ function mergePointerMetadata(pointer: PointerContext, context: MauzDesktopConte
   return pointerContext;
 }
 
+function getActivationMetadata(snapshot: ActivationSnapshot): ActiveWindowMetadata {
+  const metadata: ActiveWindowMetadata = {};
+
+  if (snapshot.activeApp !== undefined) {
+    metadata.activeApp = snapshot.activeApp;
+  }
+
+  if (snapshot.activeWindow !== undefined) {
+    metadata.activeWindow = snapshot.activeWindow;
+  }
+
+  return metadata;
+}
+
 function withOptionalContextFields(context: MauzDesktopContext): MauzDesktopContext {
   const nextContext: MauzDesktopContext = {
     timestamp: context.timestamp,
@@ -172,7 +213,9 @@ function withOptionalContextFields(context: MauzDesktopContext): MauzDesktopCont
 }
 
 function withOptionalActivationFields(snapshot: ActivationSnapshot): ActivationSnapshot {
-  const nextSnapshot: ActivationSnapshot = {};
+  const nextSnapshot: ActivationSnapshot = {
+    cursor: snapshot.cursor
+  };
 
   if (snapshot.activeApp !== undefined) {
     nextSnapshot.activeApp = snapshot.activeApp;
@@ -180,10 +223,6 @@ function withOptionalActivationFields(snapshot: ActivationSnapshot): ActivationS
 
   if (snapshot.activeWindow !== undefined) {
     nextSnapshot.activeWindow = snapshot.activeWindow;
-  }
-
-  if (snapshot.selectedText?.trim()) {
-    nextSnapshot.selectedText = snapshot.selectedText;
   }
 
   return nextSnapshot;

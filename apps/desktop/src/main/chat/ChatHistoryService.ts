@@ -24,6 +24,7 @@ const PREVIEW_MAX_CHARS = 120;
 
 export class ChatHistoryService {
   private readonly storagePath: string;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(storagePath: string) {
     this.storagePath = storagePath;
@@ -34,13 +35,49 @@ export class ChatHistoryService {
   }
 
   async saveAskConversation(input: SaveAskConversationInput): Promise<ChatConversation> {
-    const now = new Date().toISOString();
-    const conversation: ChatConversation = {
-      id: randomUUID(),
-      title: input.title,
-      createdAt: now,
-      updatedAt: now,
-      messages: [
+    return this.runSerializedWrite(async () => {
+      const now = new Date().toISOString();
+      const conversation: ChatConversation = {
+        id: randomUUID(),
+        title: input.title,
+        createdAt: now,
+        updatedAt: now,
+        messages: [
+          {
+            id: randomUUID(),
+            role: "user",
+            content: input.question,
+            createdAt: now
+          },
+          {
+            id: randomUUID(),
+            role: "assistant",
+            content: input.answer,
+            createdAt: now
+          }
+        ]
+      };
+      const history = await this.readHistory();
+
+      history.conversations.unshift(conversation);
+      await this.writeHistory(history);
+
+      return conversation;
+    });
+  }
+
+  async appendAskTurn(id: string, input: Omit<SaveAskConversationInput, "title">): Promise<ChatConversation> {
+    return this.runSerializedWrite(async () => {
+      const history = await this.readHistory();
+      const conversation = history.conversations.find((candidate) => candidate.id === id);
+
+      if (conversation === undefined) {
+        throw new Error("Mauz could not find that chat.");
+      }
+
+      const now = new Date().toISOString();
+
+      conversation.messages.push(
         {
           id: randomUUID(),
           role: "user",
@@ -53,47 +90,16 @@ export class ChatHistoryService {
           content: input.answer,
           createdAt: now
         }
-      ]
-    };
-    const history = await this.readHistory();
+      );
+      conversation.updatedAt = now;
+      await this.writeHistory(history);
 
-    history.conversations.unshift(conversation);
-    await this.writeHistory(history);
-
-    return conversation;
-  }
-
-  async appendAskTurn(id: string, input: Omit<SaveAskConversationInput, "title">): Promise<ChatConversation> {
-    const history = await this.readHistory();
-    const conversation = history.conversations.find((candidate) => candidate.id === id);
-
-    if (conversation === undefined) {
-      throw new Error("Mauz could not find that chat.");
-    }
-
-    const now = new Date().toISOString();
-
-    conversation.messages.push(
-      {
-        id: randomUUID(),
-        role: "user",
-        content: input.question,
-        createdAt: now
-      },
-      {
-        id: randomUUID(),
-        role: "assistant",
-        content: input.answer,
-        createdAt: now
-      }
-    );
-    conversation.updatedAt = now;
-    await this.writeHistory(history);
-
-    return conversation;
+      return conversation;
+    });
   }
 
   async list(): Promise<ChatHistoryListResponse> {
+    await this.writeQueue;
     const history = await this.readHistory();
     const groups = new Map<string, ChatHistoryGroup>();
     const sorted = [...history.conversations].sort(
@@ -123,6 +129,7 @@ export class ChatHistoryService {
   }
 
   async get(id: string): Promise<ChatConversation> {
+    await this.writeQueue;
     const history = await this.readHistory();
     const conversation = history.conversations.find((candidate) => candidate.id === id);
 
@@ -134,17 +141,19 @@ export class ChatHistoryService {
   }
 
   async updateTitle(id: string, title: string): Promise<ChatConversation | null> {
-    const history = await this.readHistory();
-    const conversation = history.conversations.find((candidate) => candidate.id === id);
+    return this.runSerializedWrite(async () => {
+      const history = await this.readHistory();
+      const conversation = history.conversations.find((candidate) => candidate.id === id);
 
-    if (conversation === undefined) {
-      return null;
-    }
+      if (conversation === undefined) {
+        return null;
+      }
 
-    conversation.title = title;
-    await this.writeHistory(history);
+      conversation.title = title;
+      await this.writeHistory(history);
 
-    return conversation;
+      return conversation;
+    });
   }
 
   private async readHistory(): Promise<StoredChatHistory> {
@@ -172,6 +181,23 @@ export class ChatHistoryService {
 
     await writeFile(tempPath, `${JSON.stringify(history, null, 2)}\n`, "utf8");
     await rename(tempPath, this.storagePath);
+  }
+
+  private async runSerializedWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const previousWrite = this.writeQueue;
+    let releaseCurrentWrite!: () => void;
+
+    this.writeQueue = new Promise<void>((resolve) => {
+      releaseCurrentWrite = resolve;
+    });
+
+    await previousWrite;
+
+    try {
+      return await operation();
+    } finally {
+      releaseCurrentWrite();
+    }
   }
 }
 

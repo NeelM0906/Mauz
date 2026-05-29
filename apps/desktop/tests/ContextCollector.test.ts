@@ -80,6 +80,68 @@ describe("ContextCollector", () => {
     expect(context.screenshot).toEqual(pointerContext.screenshot);
   });
 
+  it("captures pointer context at the activation cursor even after the current cursor moves", async () => {
+    const activationCursor = {
+      x: 110,
+      y: 220
+    };
+    const activationPointerContext: PointerContext = {
+      ...pointerContext,
+      cursor: activationCursor
+    };
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => activationPointerContext)
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService()
+    });
+
+    await collector.prepareForActivation(activationCursor);
+    screenMock.getCursorScreenPoint.mockReturnValue({
+      x: 900,
+      y: 700
+    });
+    const context = await collector.collectForAsk();
+
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(activationCursor);
+    expect(context.cursor).toEqual(activationCursor);
+    expect(context.pointer?.cursor).toEqual(activationCursor);
+  });
+
+  it("can collect from the current cursor when activation context should be ignored", async () => {
+    const currentCursor = {
+      x: 900,
+      y: 700
+    };
+    const currentPointerContext: PointerContext = {
+      ...pointerContext,
+      cursor: currentCursor
+    };
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => currentPointerContext)
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService()
+    });
+
+    await collector.prepareForActivation({
+      x: 110,
+      y: 220
+    });
+    screenMock.getCursorScreenPoint.mockReturnValue(currentCursor);
+    const context = await collector.collectForAsk({
+      useActivationSnapshot: false
+    });
+
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(currentCursor);
+    expect(context.cursor).toEqual(currentCursor);
+    expect(context.pointer?.cursor).toEqual(currentCursor);
+  });
+
   it("returns basic context with screenshotError when pointer capture fails", async () => {
     const screenshotService = {
       capturePointerContext: vi.fn(async () => {
@@ -164,7 +226,7 @@ describe("ContextCollector", () => {
     expect(context.pointer?.activeWindow?.title).toBe("MauzAI");
   });
 
-  it("uses selected text captured before the popover steals focus", async () => {
+  it("captures selected text after Ask starts using activation app metadata", async () => {
     const screenshotService = {
       capturePointerContext: vi.fn(async () => pointerContext)
     } as unknown as ScreenshotService;
@@ -178,7 +240,7 @@ describe("ContextCollector", () => {
       }
     });
     const selectedTextService = {
-      capture: vi.fn().mockResolvedValueOnce("activation selected text").mockResolvedValueOnce(undefined)
+      capture: vi.fn(async () => "activation selected text")
     } as unknown as SelectedTextService;
     const collector = new ContextCollector({
       screenshotService,
@@ -186,9 +248,14 @@ describe("ContextCollector", () => {
       selectedTextService
     });
 
-    await collector.prepareForActivation();
+    await collector.prepareForActivation({
+      x: 320,
+      y: 240
+    });
+    expect(selectedTextService.capture).not.toHaveBeenCalled();
     const context = await collector.collectForAsk();
 
+    expect(activeWindowService.capture).toHaveBeenCalledTimes(1);
     expect(selectedTextService.capture).toHaveBeenCalledTimes(1);
     expect(selectedTextService.capture).toHaveBeenCalledWith({
       processId: 2026
