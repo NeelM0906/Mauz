@@ -59,6 +59,7 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.menuClose, () => {
+    contextCollector.discardActivationSnapshot();
     popover.hide();
   });
 
@@ -139,7 +140,9 @@ export function registerIpcHandlers({
 
     const request = ChatHistoryContinueRequestSchema.parse(payload);
     const conversation = await chatHistory.get(request.id);
-    const context = await contextCollector.collectForAsk();
+    const context = await contextCollector.collectForAsk({
+      useActivationSnapshot: false
+    });
     const response = await submitAskToLocalApi(api, localApiToken, {
       question: request.question,
       context,

@@ -84,4 +84,28 @@ describe("ChatHistoryService", () => {
       messages: updated.messages
     });
   });
+
+  it("serializes concurrent history writes so saved conversations are not lost", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mauz-history-"));
+    tempDirs.push(dir);
+    const service = new ChatHistoryService(join(dir, "history.json"));
+
+    const [first, second] = await Promise.all([
+      service.saveAskConversation({
+        title: "First",
+        question: "What is first?",
+        answer: "First answer."
+      }),
+      service.saveAskConversation({
+        title: "Second",
+        question: "What is second?",
+        answer: "Second answer."
+      })
+    ]);
+    const list = await service.list();
+
+    expect(
+      list.groups.flatMap((group) => group.conversations).map((conversation) => conversation.id)
+    ).toEqual([second.id, first.id]);
+  });
 });
