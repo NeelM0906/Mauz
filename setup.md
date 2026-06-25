@@ -60,6 +60,16 @@ Start the desktop app:
 pnpm dev
 ```
 
+The desktop app launches its local API with an internal random token. If you run the API package directly
+for development, set a local token first:
+
+```bash
+export MAUZ_LOCAL_API_TOKEN="$(uuidgen)"
+pnpm --filter @mauzai/api dev
+```
+
+`MAUZ_API_ALLOW_UNAUTHENTICATED=true` is only for isolated local debugging without credentials.
+
 Useful controls:
 
 - Mouse shake opens the Mauz menu when native input is enabled.
@@ -85,10 +95,30 @@ pnpm check
 
 ## Package for macOS
 
-Create the packaged macOS app:
+Install the packaged macOS app into `/Applications` for normal double-click use:
+
+```bash
+pnpm install:mac
+```
+
+This stops any running MauzAI processes, rebuilds `/Applications/MauzAI.app`, and replaces `dist/mac/MauzAI.app` plus `~/Applications/MauzAI.app` with symlinks to the installed app. The next launch uses the new renderer assets even if you previously double-clicked a local packaged app.
+
+Stop the installed app without reinstalling:
+
+```bash
+pnpm stop:mac
+```
+
+Create the packaged macOS app in `~/Applications/MauzAI.app`:
 
 ```bash
 pnpm --filter @mauzai/desktop package:mac
+```
+
+Create a downloadable DMG in `dist/`:
+
+```bash
+pnpm package:dmg:mac
 ```
 
 Then launch the packaged app:
@@ -98,3 +128,5 @@ pnpm --filter @mauzai/desktop launch:mac
 ```
 
 If permissions were previously granted to Electron during development, macOS may ask again for the packaged MauzAI app.
+
+Release DMGs built without an Apple Developer ID certificate are ad-hoc signed. They are usable, but macOS Gatekeeper may require users to right-click Open the first time. For fully silent public distribution, sign with a Developer ID Application certificate and notarize the DMG before publishing it.

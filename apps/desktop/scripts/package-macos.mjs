@@ -227,15 +227,9 @@ async function clearCodeSignDetritus() {
     return;
   }
 
-  for await (const path of walkPaths(outputApp)) {
-    if (path.endsWith(".app") || path.endsWith(".framework")) {
-      try {
-        await execFileAsync("SetFile", ["-a", "b", path]);
-      } catch {
-        // SetFile is macOS-only and may not be present on minimal systems.
-      }
-    }
+  await clearExtendedAttributes(outputApp);
 
+  for await (const path of walkPaths(outputApp)) {
     for (const attribute of [
       "com.apple.FinderInfo",
       "com.apple.ResourceFork",
@@ -248,16 +242,12 @@ async function clearCodeSignDetritus() {
       }
     }
   }
+
+  await clearExtendedAttributes(outputApp);
 }
 
 async function prepareCodeSignTarget(path) {
-  if (path.endsWith(".app") || path.endsWith(".framework")) {
-    try {
-      await execFileAsync("SetFile", ["-a", "b", path]);
-    } catch {
-      // SetFile is macOS-only and may not be present on minimal systems.
-    }
-  }
+  await clearExtendedAttributes(path);
 
   for (const attribute of [
     "com.apple.FinderInfo",
@@ -269,6 +259,14 @@ async function prepareCodeSignTarget(path) {
     } catch {
       // Most paths do not have each attribute.
     }
+  }
+}
+
+async function clearExtendedAttributes(path) {
+  try {
+    await execFileAsync("xattr", ["-cr", path]);
+  } catch {
+    // Some nested paths may not support recursive extended attribute cleanup.
   }
 }
 

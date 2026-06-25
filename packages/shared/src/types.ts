@@ -129,6 +129,10 @@ export type ChatHistoryGetRequest = {
   id: string;
 };
 
+export type ChatHistoryDeleteRequest = {
+  id: string;
+};
+
 export type ChatHistoryContinueRequest = {
   id: string;
   question: string;
@@ -208,6 +212,10 @@ export type MauzSettingsOpenOptions = {
   resizePopover?: boolean | undefined;
 };
 
+export type MauzLensResizeRequest = {
+  expanded: boolean;
+};
+
 export type MouseMoveSample = {
   x: number;
   y: number;
@@ -221,6 +229,7 @@ export type MauzBridge = {
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
+    setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;
@@ -229,6 +238,8 @@ export type MauzBridge = {
     list(): Promise<ChatHistoryListResponse>;
     get(payload: ChatHistoryGetRequest): Promise<ChatConversation>;
     continue(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse>;
+    delete(payload: ChatHistoryDeleteRequest): Promise<ChatHistoryListResponse>;
+    clear(): Promise<ChatHistoryListResponse>;
   };
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;

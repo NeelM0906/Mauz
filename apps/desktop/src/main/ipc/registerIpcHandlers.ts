@@ -2,8 +2,10 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   AskMauzRequestSchema,
   ChatHistoryContinueRequestSchema,
+  ChatHistoryDeleteRequestSchema,
   ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
+  MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
   type MauzSettings,
   type MauzSettingsUpdate
@@ -31,12 +33,15 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
+  IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.chatHistoryList,
   IPC_CHANNELS.chatHistoryGet,
   IPC_CHANNELS.chatHistoryContinue,
+  IPC_CHANNELS.chatHistoryDelete,
+  IPC_CHANNELS.chatHistoryClear,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect
 ] as const;
@@ -54,35 +59,52 @@ export function registerIpcHandlers({
     ipcMain.removeHandler(channel);
   }
 
-  ipcMain.handle(IPC_CHANNELS.menuShowMenu, () => {
+  ipcMain.handle(IPC_CHANNELS.menuShowMenu, (event) => {
+    assertTrustedSurface(event, ["popover"]);
     popover.resizeForMenu();
   });
 
-  ipcMain.handle(IPC_CHANNELS.menuClose, () => {
+  ipcMain.handle(IPC_CHANNELS.menuClose, (event) => {
+    assertTrustedSurface(event, ["popover"]);
     contextCollector.discardActivationSnapshot();
     popover.hide();
   });
 
-  ipcMain.handle(IPC_CHANNELS.menuStartAsk, async () => {
-    const context = await contextCollector.collectForAsk();
-    popover.resizeForAsk();
-    return context;
+  ipcMain.handle(IPC_CHANNELS.menuStartAsk, async (event) => {
+    assertTrustedSurface(event, ["popover"]);
+    return contextCollector.collectForAsk();
   });
-  ipcMain.handle(IPC_CHANNELS.menuStartTalk, async () => {
+  ipcMain.handle(IPC_CHANNELS.menuStartTalk, async (event) => {
+    assertTrustedSurface(event, ["popover"]);
     const context = await contextCollector.collectForRealtime();
     popover.resizeForRealtime();
     return context;
   });
 
+  ipcMain.handle(IPC_CHANNELS.menuSetLensExpanded, (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
+    const request = MauzLensResizeRequestSchema.parse(payload);
+
+    if (request.expanded) {
+      popover.resizeForAsk();
+      return;
+    }
+
+    popover.resizeForMenu();
+  });
+
   ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event, payload: unknown) => {
-    if (isPopoverEvent(event) && shouldResizeForSettingsOpen(payload)) {
+    const surface = getTrustedSurface(event);
+
+    if (surface === "popover" && shouldResizeForSettingsOpen(payload)) {
       popover.resizeForSettings();
     }
 
     return getSettings();
   });
 
-  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (_event, payload: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (event, payload: unknown) => {
+    getTrustedSurface(event);
     const parsedPayload = MauzSettingsUpdateSchema.safeParse(payload);
 
     if (!parsedPayload.success) {
@@ -92,7 +114,8 @@ export function registerIpcHandlers({
     return updateSettings(toSettingsUpdate(parsedPayload.data));
   });
 
-  ipcMain.handle(IPC_CHANNELS.askSubmit, async (_event, payload: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.askSubmit, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
     const request = AskMauzRequestSchema.parse(payload);
     const response = await submitAskToLocalApi(api, localApiToken, request);
     const fallbackTitle = buildFallbackChatTitle(request.question);
@@ -120,24 +143,24 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.chatHistoryList, async (event) => {
-    if (isPopoverEvent(event)) {
+    const surface = getTrustedSurface(event);
+
+    if (surface === "popover") {
       popover.resizeForHistory();
     }
 
     return chatHistory.list();
   });
 
-  ipcMain.handle(IPC_CHANNELS.chatHistoryGet, async (_event, payload: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.chatHistoryGet, async (event, payload: unknown) => {
+    getTrustedSurface(event);
     const request = ChatHistoryGetRequestSchema.parse(payload);
 
     return chatHistory.get(request.id);
   });
 
-  ipcMain.handle(IPC_CHANNELS.chatHistoryContinue, async (_event, payload: unknown) => {
-    if (isPopoverEvent(_event)) {
-      throw new Error("Continue chats from the Mauz desktop app.");
-    }
-
+  ipcMain.handle(IPC_CHANNELS.chatHistoryContinue, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["desktop"]);
     const request = ChatHistoryContinueRequestSchema.parse(payload);
     const conversation = await chatHistory.get(request.id);
     const context = await contextCollector.collectForAsk({
@@ -160,27 +183,83 @@ export function registerIpcHandlers({
     };
   });
 
-  ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, () => {
+  ipcMain.handle(IPC_CHANNELS.chatHistoryDelete, async (event, payload: unknown) => {
+    getTrustedSurface(event);
+    const request = ChatHistoryDeleteRequestSchema.parse(payload);
+
+    await chatHistory.delete(request.id);
+    return chatHistory.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.chatHistoryClear, async (event) => {
+    getTrustedSurface(event);
+
+    await chatHistory.clear();
+    return chatHistory.list();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, (event) => {
+    getTrustedSurface(event);
     throw new Error("Mauz uses the Realtime WebRTC unified connection path.");
   });
 
-  ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (_event, payload: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
     return connectRealtimeToLocalApi(api, localApiToken, payload);
   });
 }
 
-function isPopoverEvent(event: IpcMainInvokeEvent | undefined): boolean {
+type RendererSurface = "desktop" | "popover";
+
+function assertTrustedSurface(event: IpcMainInvokeEvent, allowed: readonly RendererSurface[]): void {
+  const surface = getTrustedSurface(event);
+
+  if (!allowed.includes(surface)) {
+    throw new Error("Mauz rejected an IPC request from the wrong renderer surface.");
+  }
+}
+
+function getTrustedSurface(event: IpcMainInvokeEvent | undefined): RendererSurface {
   if (event === undefined) {
-    return true;
+    throw new Error("Mauz rejected an IPC request without renderer metadata.");
   }
 
   const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
 
   try {
-    return new URL(frameUrl).searchParams.get("surface") !== "desktop";
+    const url = new URL(frameUrl);
+
+    if (!isTrustedRendererOrigin(url)) {
+      throw new Error("untrusted origin");
+    }
+
+    const surface = url.searchParams.get("surface");
+
+    if (surface === "desktop" || surface === "popover") {
+      return surface;
+    }
   } catch {
+    // Fall through to the generic rejection below.
+  }
+
+  throw new Error("Mauz rejected an IPC request from an untrusted renderer.");
+}
+
+function isTrustedRendererOrigin(url: URL): boolean {
+  if (url.protocol === "file:") {
     return true;
   }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return false;
+  }
+
+  return (
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "::1" ||
+    url.hostname === "[::1]"
+  );
 }
 
 function shouldResizeForSettingsOpen(payload: unknown): boolean {

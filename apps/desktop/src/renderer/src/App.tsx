@@ -1,8 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { AskPanel } from "./components/AskPanel";
 import { ChatHistoryPanel } from "./components/ChatHistoryPanel";
 import { DesktopApp } from "./components/DesktopApp";
+import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TalkPanel } from "./components/TalkPanel";
@@ -35,8 +35,8 @@ function App(): React.JSX.Element {
     return <DesktopApp />;
   }
 
-  if (mode === "ask") {
-    return <AskPanel />;
+  if (mode === "lens") {
+    return <LensPanel />;
   }
 
   if (mode === "settings") {

@@ -41,7 +41,7 @@ type QuitEvent = {
 
 async function bootstrap(): Promise<void> {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
-  const preloadPath = join(__dirname, "../preload/index.mjs");
+  const preloadPath = join(__dirname, "../preload/index.cjs");
   const rendererFile = join(__dirname, "../renderer/index.html");
   const appIconPath = getAppIconPath();
   settingsService = new SettingsService();

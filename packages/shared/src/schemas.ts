@@ -1,12 +1,36 @@
 import { z } from "zod";
 
+const MAX_TEXT_FIELD_CHARS = 8_000;
+const MAX_QUESTION_CHARS = 4_000;
+const MAX_ANSWER_CHARS = 40_000;
+const MAX_IMAGE_BASE64_CHARS = 3_500_000;
+const MAX_SDP_CHARS = 240_000;
+const MAX_WINDOW_TEXT_CHARS = 500;
+const MAX_MODEL_NAME_CHARS = 128;
+const MAX_VOICE_NAME_CHARS = 64;
+const MAX_CONVERSATION_MESSAGES = 32;
+const ModelNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_MODEL_NAME_CHARS)
+  .regex(/^[A-Za-z0-9._:/-]+$/);
+const VoiceNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_VOICE_NAME_CHARS)
+  .regex(/^[A-Za-z0-9._-]+$/);
+const WindowTextSchema = z.string().max(MAX_WINDOW_TEXT_CHARS);
+const UserTextSchema = z.string().max(MAX_TEXT_FIELD_CHARS);
+
 export const PlatformSchema = z.enum(["darwin", "win32", "linux"]);
 
 export const ScreenshotPayloadSchema = z.object({
   mimeType: z.enum(["image/jpeg", "image/png"]),
-  base64: z.string().min(1),
-  width: z.number().int().positive(),
-  height: z.number().int().positive()
+  base64: z.string().min(1).max(MAX_IMAGE_BASE64_CHARS),
+  width: z.number().int().positive().max(4096),
+  height: z.number().int().positive().max(4096)
 });
 
 export const BoundsSchema = z.object({
@@ -38,10 +62,10 @@ export const MauzSettingsSchema = z.object({
   openAiAuthMode: OpenAiAuthModeSchema,
   openAiAuthDisconnected: z.boolean(),
   openAiCredentialSource: OpenAiCredentialSourceSchema,
-  askModel: z.string().min(1),
-  chatTitleModel: z.string().min(1),
-  realtimeModel: z.string().min(1),
-  realtimeVoice: z.string().min(1),
+  askModel: ModelNameSchema,
+  chatTitleModel: ModelNameSchema,
+  realtimeModel: ModelNameSchema,
+  realtimeVoice: VoiceNameSchema,
   realtimeReasoningEffort: RealtimeReasoningEffortSchema,
   includeFullScreenshot: z.boolean(),
   apiKeyConfigured: z.boolean()
@@ -88,18 +112,18 @@ export const PointerContextSchema = z.object({
     .optional(),
   activeApp: z
     .object({
-      name: z.string().optional(),
-      bundleId: z.string().optional(),
+      name: WindowTextSchema.optional(),
+      bundleId: WindowTextSchema.optional(),
       processId: z.number().int().nonnegative().optional()
     })
     .optional(),
   activeWindow: z
     .object({
-      title: z.string().optional(),
+      title: WindowTextSchema.optional(),
       bounds: BoundsSchema.optional()
     })
     .optional(),
-  selectedText: z.string().optional(),
+  selectedText: UserTextSchema.optional(),
   cursorCrop: ScreenshotPayloadSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional()
 });
@@ -109,14 +133,14 @@ export const MauzDesktopContextSchema = z.object({
   platform: PlatformSchema,
   activeApp: z
     .object({
-      name: z.string().optional(),
-      bundleId: z.string().optional(),
+      name: WindowTextSchema.optional(),
+      bundleId: WindowTextSchema.optional(),
       processId: z.number().int().nonnegative().optional()
     })
     .optional(),
   activeWindow: z
     .object({
-      title: z.string().optional(),
+      title: WindowTextSchema.optional(),
       bounds: z
         .object({
           x: z.number().finite(),
@@ -128,7 +152,7 @@ export const MauzDesktopContextSchema = z.object({
     })
     .optional(),
   cursor: CursorPositionSchema,
-  selectedText: z.string().optional(),
+  selectedText: UserTextSchema.optional(),
   pointer: PointerContextSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional(),
   screenshotError: PermissionErrorSchema.optional()
@@ -139,19 +163,19 @@ export const ChatRoleSchema = z.enum(["user", "assistant"]);
 export const ChatMessageSchema = z.object({
   id: z.string().min(1),
   role: ChatRoleSchema,
-  content: z.string(),
+  content: z.string().max(MAX_ANSWER_CHARS),
   createdAt: z.string().datetime()
 });
 
 export const AskMauzRequestSchema = z.object({
-  question: z.string().min(1),
+  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   context: MauzDesktopContextSchema,
-  conversationMessages: z.array(ChatMessageSchema).optional()
+  conversationMessages: z.array(ChatMessageSchema).max(MAX_CONVERSATION_MESSAGES).optional()
 });
 
 export const AskMauzResponseSchema = z.object({
   answer: z.string(),
-  model: z.string(),
+  model: ModelNameSchema,
   conversationId: z.string().optional(),
   conversationTitle: z.string().optional(),
   usage: z.unknown().optional()
@@ -186,9 +210,17 @@ export const ChatHistoryGetRequestSchema = z.object({
   id: z.string().min(1)
 });
 
+export const ChatHistoryDeleteRequestSchema = z.object({
+  id: z.string().min(1)
+});
+
 export const ChatHistoryContinueRequestSchema = z.object({
   id: z.string().min(1),
-  question: z.string().min(1)
+  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS)
+});
+
+export const MauzLensResizeRequestSchema = z.object({
+  expanded: z.boolean()
 });
 
 export const ChatHistoryContinueResponseSchema = z.object({
@@ -198,13 +230,13 @@ export const ChatHistoryContinueResponseSchema = z.object({
 });
 
 export const ChatTitleRequestSchema = z.object({
-  question: z.string().min(1),
-  answer: z.string().min(1)
+  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
+  answer: z.string().trim().min(1).max(MAX_ANSWER_CHARS)
 });
 
 export const ChatTitleResponseSchema = z.object({
   title: z.string().min(1),
-  model: z.string().min(1)
+  model: ModelNameSchema
 });
 
 export const RealtimeSessionResponseSchema = z.object({
@@ -216,12 +248,12 @@ export const RealtimeSessionResponseSchema = z.object({
 export const RealtimeModeSchema = z.literal("talk");
 
 export const RealtimeConnectRequestSchema = z.object({
-  offerSdp: z.string().min(1),
+  offerSdp: z.string().min(1).max(MAX_SDP_CHARS),
   mode: RealtimeModeSchema,
   context: MauzDesktopContextSchema
 });
 
 export const RealtimeConnectResponseSchema = z.object({
   answerSdp: z.string().min(1),
-  model: z.string().min(1)
+  model: ModelNameSchema
 });

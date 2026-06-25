@@ -6,7 +6,8 @@ const electronMock = vi.hoisted(() => {
 
     readonly webContents = {
       on: vi.fn(),
-      send: vi.fn()
+      send: vi.fn(),
+      setWindowOpenHandler: vi.fn()
     };
     private visible = false;
     private destroyed = false;

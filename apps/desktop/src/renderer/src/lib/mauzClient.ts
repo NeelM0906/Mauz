@@ -2,10 +2,12 @@ import type {
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
+  ChatHistoryDeleteRequest,
   ChatHistoryContinueRequest,
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
+  MauzLensResizeRequest,
   MauzDesktopContext,
   MauzBridge,
   MauzSettingsOpenOptions,
@@ -27,7 +29,8 @@ const browserPreviewBridge: MauzBridge = {
     showMenu: async () => {},
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
-    startTalk: async () => collectPreviewContext()
+    startTalk: async () => collectPreviewContext(),
+    setLensExpanded: async (_payload: MauzLensResizeRequest) => {}
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
@@ -47,7 +50,13 @@ const browserPreviewBridge: MauzBridge = {
     },
     continue: async (_payload: ChatHistoryContinueRequest) => {
       throw new Error("Run the Electron app to continue Mauz chat history.");
-    }
+    },
+    delete: async (_payload: ChatHistoryDeleteRequest) => ({
+      groups: []
+    }),
+    clear: async () => ({
+      groups: []
+    })
   },
   realtime: {
     createSession: async () => {
@@ -103,7 +112,21 @@ const browserPreviewBridge: MauzBridge = {
 };
 
 function getBridge(): MauzBridge {
-  return (window as WindowWithOptionalBridge).mauz ?? browserPreviewBridge;
+  const bridge = (window as WindowWithOptionalBridge).mauz;
+
+  if (bridge !== undefined) {
+    return bridge;
+  }
+
+  if (isDesktopRenderer()) {
+    throw new Error("Mauz desktop bridge is unavailable. Quit and reopen the installed MauzAI app.");
+  }
+
+  return browserPreviewBridge;
+}
+
+function isDesktopRenderer(): boolean {
+  return navigator.userAgent.includes("Electron") || window.location.protocol === "file:";
 }
 
 function collectPreviewContext(): MauzDesktopContext {
@@ -144,6 +167,9 @@ export const mauzClient = {
   startTalk(): Promise<MauzDesktopContext> {
     return getBridge().menu.startTalk();
   },
+  setLensExpanded(payload: MauzLensResizeRequest): Promise<void> {
+    return getBridge().menu.setLensExpanded(payload);
+  },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);
   },
@@ -155,6 +181,12 @@ export const mauzClient = {
   },
   continueChat(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse> {
     return getBridge().history.continue(payload);
+  },
+  deleteChat(payload: ChatHistoryDeleteRequest): Promise<ChatHistoryListResponse> {
+    return getBridge().history.delete(payload);
+  },
+  clearChatHistory(): Promise<ChatHistoryListResponse> {
+    return getBridge().history.clear();
   },
   createRealtimeSession(): Promise<RealtimeSessionResponse> {
     return getBridge().realtime.createSession();

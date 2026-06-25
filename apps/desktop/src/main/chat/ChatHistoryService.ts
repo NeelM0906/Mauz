@@ -156,6 +156,29 @@ export class ChatHistoryService {
     });
   }
 
+  async delete(id: string): Promise<void> {
+    return this.runSerializedWrite(async () => {
+      const history = await this.readHistory();
+      const nextHistory: StoredChatHistory = {
+        version: 1,
+        conversations: history.conversations.filter((conversation) => conversation.id !== id)
+      };
+
+      await this.writeHistory(nextHistory);
+    });
+  }
+
+  async clear(): Promise<void> {
+    return this.runSerializedWrite(async () => {
+      const nextHistory: StoredChatHistory = {
+        version: 1,
+        conversations: []
+      };
+
+      await this.writeHistory(nextHistory);
+    });
+  }
+
   private async readHistory(): Promise<StoredChatHistory> {
     try {
       const raw = await readFile(this.storagePath, "utf8");

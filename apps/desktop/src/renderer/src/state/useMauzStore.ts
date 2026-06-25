@@ -6,7 +6,17 @@ import type {
   MauzSettings
 } from "@mauzai/shared";
 
-type MauzMode = "menu" | "ask" | "talk" | "settings" | "history";
+export type LensAction = "ask" | "explain" | "transform" | "remember" | "compare";
+
+export type LensMemory = {
+  id: string;
+  label: string;
+  type: string;
+  summary: string;
+  createdAt: string;
+};
+
+type MauzMode = "menu" | "lens" | "talk" | "settings" | "history";
 
 type MauzStore = {
   mode: MauzMode;
@@ -21,6 +31,8 @@ type MauzStore = {
   historyError: string | null;
   historyLoading: boolean;
   settings: MauzSettings | null;
+  selectedLensAction: LensAction;
+  pinnedLensObject: LensMemory | null;
   setMode(mode: MauzMode): void;
   setStatus(status: string | null): void;
   setCurrentContext(context: MauzDesktopContext | null): void;
@@ -33,6 +45,8 @@ type MauzStore = {
   setHistoryError(error: string | null): void;
   setHistoryLoading(loading: boolean): void;
   setSettings(settings: MauzSettings | null): void;
+  setSelectedLensAction(action: LensAction): void;
+  setPinnedLensObject(memory: LensMemory | null): void;
   backToMenu(): void;
   reset(): void;
 };
@@ -50,6 +64,8 @@ export const useMauzStore = create<MauzStore>((set) => ({
   historyError: null,
   historyLoading: false,
   settings: null,
+  selectedLensAction: "ask",
+  pinnedLensObject: null,
   setMode: (mode) => set({ mode }),
   setStatus: (status) => set({ status }),
   setCurrentContext: (currentContext) => set({ currentContext }),
@@ -62,6 +78,8 @@ export const useMauzStore = create<MauzStore>((set) => ({
   setHistoryError: (historyError) => set({ historyError }),
   setHistoryLoading: (historyLoading) => set({ historyLoading }),
   setSettings: (settings) => set({ settings }),
+  setSelectedLensAction: (selectedLensAction) => set({ selectedLensAction }),
+  setPinnedLensObject: (pinnedLensObject) => set({ pinnedLensObject }),
   backToMenu: () =>
     set({
       mode: "menu",
@@ -72,7 +90,8 @@ export const useMauzStore = create<MauzStore>((set) => ({
       askLoading: false,
       selectedConversation: null,
       historyError: null,
-      historyLoading: false
+      historyLoading: false,
+      selectedLensAction: "ask"
     }),
   reset: () =>
     set({
@@ -85,6 +104,7 @@ export const useMauzStore = create<MauzStore>((set) => ({
       askLoading: false,
       selectedConversation: null,
       historyError: null,
-      historyLoading: false
+      historyLoading: false,
+      selectedLensAction: "ask"
     })
 }));

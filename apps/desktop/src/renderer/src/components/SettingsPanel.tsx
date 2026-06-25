@@ -405,7 +405,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
               checked={draft.includeFullScreenshot}
               onChange={(event) => updateDraft("includeFullScreenshot", event.target.checked)}
             />
-            <span>Include full screenshot with cursor crop</span>
+            <span>Send full screenshot with cursor crop</span>
           </label>
         </div>
       </div>

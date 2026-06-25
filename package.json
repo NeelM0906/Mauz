@@ -9,6 +9,9 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
+    "stop:mac": "pnpm --filter @mauzai/desktop stop:mac",
+    "install:mac": "pnpm --filter @mauzai/desktop install:mac",
+    "package:dmg:mac": "pnpm --filter @mauzai/desktop package:dmg:mac",
     "lint": "prettier --check .",
     "format": "prettier --write .",
     "format:check": "pnpm lint",
@@ -24,6 +27,9 @@
     "typescript": "^5.9.3"
   },
   "pnpm": {
+    "overrides": {
+      "undici": "7.28.0"
+    },
     "onlyBuiltDependencies": [
       "electron",
       "esbuild"

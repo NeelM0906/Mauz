@@ -8,7 +8,11 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "package:mac": "pnpm --filter @mauzai/shared build && pnpm --filter @mauzai/api build && electron-vite build && node scripts/package-macos.mjs",
+    "electron:install": "node scripts/ensure-electron-runtime.mjs",
+    "stop:mac": "node scripts/stop-macos.mjs",
+    "package:mac": "pnpm --filter @mauzai/shared build && pnpm --filter @mauzai/api build && node scripts/ensure-electron-runtime.mjs && electron-vite build && node scripts/package-macos.mjs",
+    "install:mac": "node scripts/stop-macos.mjs && pnpm --filter @mauzai/shared build && pnpm --filter @mauzai/api build && node scripts/ensure-electron-runtime.mjs && electron-vite build && MAUZAI_APP_OUTPUT=/Applications/MauzAI.app node scripts/package-macos.mjs && node scripts/link-installed-macos.mjs",
+    "package:dmg:mac": "pnpm --filter @mauzai/shared build && pnpm --filter @mauzai/api build && node scripts/ensure-electron-runtime.mjs && electron-vite build && MAUZAI_APP_OUTPUT=/tmp/mauzai-release/MauzAI.app node scripts/package-macos.mjs && MAUZAI_DMG_APP_PATH=/tmp/mauzai-release/MauzAI.app node scripts/create-dmg.mjs",
     "launch:mac": "node scripts/launch-macos.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -28,11 +32,11 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^42.1.0",
+    "electron": "^42.5.0",
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.1.6",
     "typescript": "^5.9.3",
-    "vite": "^7.3.3",
+    "vite": "^7.3.6",
     "vitest": "^4.1.6"
   }
 }
