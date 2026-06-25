@@ -9,6 +9,7 @@ import {
   MAUZ_SETTINGS_PANEL_SIZE
 } from "@mauzai/shared";
 import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosition";
+import { hardenRendererWindow } from "./WindowSecurity";
 
 type PopoverWindowControllerOptions = {
   preloadPath: string;
@@ -65,8 +66,13 @@ export class PopoverWindowController {
         preload: this.options.preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false
+        sandbox: true,
+        webSecurity: true
       }
+    });
+
+    hardenRendererWindow(win, {
+      rendererUrl: this.options.rendererUrl
     });
 
     win.setAlwaysOnTop(true, "pop-up-menu");

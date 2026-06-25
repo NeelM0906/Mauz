@@ -30,6 +30,8 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.chatHistoryList,
   IPC_CHANNELS.chatHistoryGet,
   IPC_CHANNELS.chatHistoryContinue,
+  IPC_CHANNELS.chatHistoryDelete,
+  IPC_CHANNELS.chatHistoryClear,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect
 ] as const;
@@ -85,7 +87,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuStartAsk);
 
-    await expect(handler()).resolves.toEqual(context);
+    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual(context);
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
   });
 
@@ -96,7 +98,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuClose);
 
-    await handler();
+    await handler(createInvokeEvent("popover"));
 
     expect(options.contextCollector.discardActivationSnapshot).toHaveBeenCalledOnce();
     expect(options.popover.hide).toHaveBeenCalledOnce();
@@ -111,7 +113,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuStartTalk);
 
-    await expect(handler()).resolves.toEqual(context);
+    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual(context);
     expect(options.contextCollector.collectForRealtime).toHaveBeenCalledOnce();
     expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
   });
@@ -132,7 +134,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.realtimeConnect);
 
-    await expect(handler(undefined, request)).resolves.toEqual({
+    await expect(handler(createInvokeEvent("popover"), request)).resolves.toEqual({
       answerSdp: "answer-sdp",
       model: "test-realtime-model"
     });
@@ -181,8 +183,73 @@ describe("registerIpcHandlers", () => {
         id: "conversation-id",
         question: "Can you expand on this?"
       })
-    ).rejects.toThrow("Continue chats from the Mauz desktop app.");
+    ).rejects.toThrow("Mauz rejected an IPC request from the wrong renderer surface.");
     expect(options.chatHistory.get).not.toHaveBeenCalled();
+  });
+
+  it("deletes a saved conversation from a trusted renderer", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryDelete);
+
+    await expect(handler(createInvokeEvent("desktop"), { id: "conversation-id" })).resolves.toEqual({
+      groups: []
+    });
+    expect(options.chatHistory.delete).toHaveBeenCalledWith("conversation-id");
+    expect(options.chatHistory.list).toHaveBeenCalledOnce();
+  });
+
+  it("clears saved conversations from a trusted renderer", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryClear);
+
+    await expect(handler(createInvokeEvent("desktop"))).resolves.toEqual({
+      groups: []
+    });
+    expect(options.chatHistory.clear).toHaveBeenCalledOnce();
+    expect(options.chatHistory.list).toHaveBeenCalledOnce();
+  });
+
+  it("rejects privileged invoke calls without renderer metadata", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuStartAsk);
+
+    await expect(handler()).rejects.toThrow("Mauz rejected an IPC request without renderer metadata.");
+    expect(options.contextCollector.collectForAsk).not.toHaveBeenCalled();
+  });
+
+  it("accepts trusted loopback dev renderer origins", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryList);
+
+    await expect(handler(createInvokeEvent("popover", "http://[::1]:5173"))).resolves.toEqual({
+      groups: []
+    });
+    expect(options.popover.resizeForHistory).toHaveBeenCalledOnce();
+  });
+
+  it("rejects renderer requests from non-local origins", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryList);
+
+    await expect(handler(createInvokeEvent("popover", "https://example.test"))).rejects.toThrow(
+      "Mauz rejected an IPC request from an untrusted renderer."
+    );
+    expect(options.chatHistory.list).not.toHaveBeenCalled();
   });
 });
 
@@ -196,8 +263,8 @@ function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<
   return call[1] as (...args: unknown[]) => Promise<unknown>;
 }
 
-function createInvokeEvent(surface: "desktop" | "popover"): unknown {
-  const url = `file:///renderer/index.html?surface=${surface}`;
+function createInvokeEvent(surface: "desktop" | "popover", origin = "file:///renderer"): unknown {
+  const url = `${origin}/index.html?surface=${surface}`;
 
   return {
     senderFrame: {
@@ -285,7 +352,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       }),
       appendAskTurn: vi.fn(async () => {
         throw new Error("not found");
-      })
+      }),
+      updateTitle: vi.fn(async () => {}),
+      delete: vi.fn(async () => {}),
+      clear: vi.fn(async () => {})
     } as never,
     api,
     localApiToken: "test-token",

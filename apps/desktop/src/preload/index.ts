@@ -3,6 +3,7 @@ import type {
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
+  ChatHistoryDeleteRequest,
   ChatHistoryContinueRequest,
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
@@ -35,7 +36,10 @@ const mauzApi: MauzBridge = {
     get: (payload: ChatHistoryGetRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.chatHistoryGet, payload) as Promise<ChatConversation>,
     continue: (payload: ChatHistoryContinueRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryContinue, payload) as Promise<ChatHistoryContinueResponse>
+      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryContinue, payload) as Promise<ChatHistoryContinueResponse>,
+    delete: (payload: ChatHistoryDeleteRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryDelete, payload) as Promise<ChatHistoryListResponse>,
+    clear: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryClear) as Promise<ChatHistoryListResponse>
   },
   realtime: {
     createSession: () =>

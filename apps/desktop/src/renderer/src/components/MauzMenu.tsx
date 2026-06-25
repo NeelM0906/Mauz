@@ -1,12 +1,60 @@
-import { Check, History, KeyRound, Lock, MessageCircleQuestion, Mic, Settings, X } from "lucide-react";
+import {
+  Check,
+  GitCompareArrows,
+  History,
+  KeyRound,
+  Lock,
+  Mic,
+  MousePointer2,
+  Pin,
+  ScanSearch,
+  Settings,
+  Sparkles,
+  Wand2,
+  X
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MauzSettings } from "@mauzai/shared";
+import type { LensAction } from "@renderer/state/useMauzStore";
+import { detectLensObject, toLensMemory } from "@renderer/lib/lensObject";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = "ask" | "talk";
+type MenuAction = LensAction | "talk";
 type AuthAction = "connect" | "disconnect";
+
+const HALO_ACTIONS: Array<{
+  action: LensAction;
+  label: string;
+  icon: typeof ScanSearch;
+}> = [
+  {
+    action: "ask",
+    label: "Ask",
+    icon: ScanSearch
+  },
+  {
+    action: "explain",
+    label: "Explain",
+    icon: Sparkles
+  },
+  {
+    action: "transform",
+    label: "Transform",
+    icon: Wand2
+  },
+  {
+    action: "remember",
+    label: "Remember",
+    icon: Pin
+  },
+  {
+    action: "compare",
+    label: "Compare",
+    icon: GitCompareArrows
+  }
+];
 
 export function MauzMenu(): React.JSX.Element {
   const {
@@ -15,7 +63,9 @@ export function MauzMenu(): React.JSX.Element {
     setChatHistory,
     setCurrentContext,
     setMode,
+    setPinnedLensObject,
     setSelectedConversation,
+    setSelectedLensAction,
     setSettings,
     setStatus
   } = useMauzStore();
@@ -119,14 +169,38 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  const handleAction = async (action: MenuAction): Promise<void> => {
+  const handleLensAction = async (action: LensAction): Promise<void> => {
     setPendingAction(action);
     setStatus(null);
 
     try {
-      const context = action === "talk" ? await mauzClient.startTalk() : await mauzClient.startAsk();
+      const context = await mauzClient.startAsk();
+      const lensObject = detectLensObject(context);
+
       setCurrentContext(context);
-      setMode(action);
+      setSelectedLensAction(action);
+
+      if (action === "remember") {
+        setPinnedLensObject(toLensMemory(lensObject));
+        setStatus(`Pinned ${lensObject.label} as this.`);
+      }
+
+      setMode("lens");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Mauz action failed.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const handleTalk = async (): Promise<void> => {
+    setPendingAction("talk");
+    setStatus(null);
+
+    try {
+      const context = await mauzClient.startTalk();
+      setCurrentContext(context);
+      setMode("talk");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {
@@ -169,20 +243,35 @@ export function MauzMenu(): React.JSX.Element {
         onDisconnect={handleOpenAiDisconnect}
       />
 
-      <div className="mauz-actions">
+      <div className="lens-halo" aria-label="Mauz Lens actions">
+        <div className="lens-halo-center">
+          <MousePointer2 aria-hidden="true" size={17} />
+          <span>Lens</span>
+        </div>
+        {HALO_ACTIONS.map((item) => {
+          const Icon = item.icon;
+
+          return (
+            <button
+              key={item.action}
+              type="button"
+              className="halo-action"
+              data-action={item.action}
+              onClick={() => void handleLensAction(item.action)}
+              disabled={pendingAction !== null}
+            >
+              <Icon aria-hidden="true" size={15} />
+              <span>{pendingAction === item.action ? "Capturing" : item.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mauz-actions secondary-actions">
         <button
           type="button"
           className="mauz-action"
-          onClick={() => void handleAction("ask")}
-          disabled={pendingAction !== null}
-        >
-          <MessageCircleQuestion aria-hidden="true" size={18} />
-          <span>{pendingAction === "ask" ? "Capturing screen..." : "Ask Mauz"}</span>
-        </button>
-        <button
-          type="button"
-          className="mauz-action"
-          onClick={() => void handleAction("talk")}
+          onClick={() => void handleTalk()}
           disabled={pendingAction !== null}
         >
           <Mic aria-hidden="true" size={18} />
@@ -200,7 +289,7 @@ export function MauzMenu(): React.JSX.Element {
       </div>
 
       <footer className="mauz-footer">
-        <span>{status ?? "Mauz sees nothing until you choose an option."}</span>
+        <span>{status ?? "Point first. Gesture next. Mauz acts only after you choose."}</span>
       </footer>
     </section>
   );

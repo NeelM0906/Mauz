@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import { join } from "node:path";
+import { hardenRendererWindow } from "./WindowSecurity";
 
 type DesktopWindowControllerOptions = {
   preloadPath: string;
@@ -42,8 +43,13 @@ export class DesktopWindowController {
         preload: this.options.preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false
+        sandbox: true,
+        webSecurity: true
       }
+    });
+
+    hardenRendererWindow(win, {
+      rendererUrl: this.options.rendererUrl
     });
 
     win.on("close", (event) => {

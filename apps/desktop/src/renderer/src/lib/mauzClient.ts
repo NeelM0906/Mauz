@@ -2,6 +2,7 @@ import type {
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
+  ChatHistoryDeleteRequest,
   ChatHistoryContinueRequest,
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
@@ -47,7 +48,13 @@ const browserPreviewBridge: MauzBridge = {
     },
     continue: async (_payload: ChatHistoryContinueRequest) => {
       throw new Error("Run the Electron app to continue Mauz chat history.");
-    }
+    },
+    delete: async (_payload: ChatHistoryDeleteRequest) => ({
+      groups: []
+    }),
+    clear: async () => ({
+      groups: []
+    })
   },
   realtime: {
     createSession: async () => {
@@ -155,6 +162,12 @@ export const mauzClient = {
   },
   continueChat(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse> {
     return getBridge().history.continue(payload);
+  },
+  deleteChat(payload: ChatHistoryDeleteRequest): Promise<ChatHistoryListResponse> {
+    return getBridge().history.delete(payload);
+  },
+  clearChatHistory(): Promise<ChatHistoryListResponse> {
+    return getBridge().history.clear();
   },
   createRealtimeSession(): Promise<RealtimeSessionResponse> {
     return getBridge().realtime.createSession();

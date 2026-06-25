@@ -129,6 +129,10 @@ export type ChatHistoryGetRequest = {
   id: string;
 };
 
+export type ChatHistoryDeleteRequest = {
+  id: string;
+};
+
 export type ChatHistoryContinueRequest = {
   id: string;
   question: string;
@@ -229,6 +233,8 @@ export type MauzBridge = {
     list(): Promise<ChatHistoryListResponse>;
     get(payload: ChatHistoryGetRequest): Promise<ChatConversation>;
     continue(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse>;
+    delete(payload: ChatHistoryDeleteRequest): Promise<ChatHistoryListResponse>;
+    clear(): Promise<ChatHistoryListResponse>;
   };
   realtime: {
     createSession(): Promise<RealtimeSessionResponse>;

@@ -1,4 +1,4 @@
-import { ArrowLeft, History, LoaderCircle, MessageSquareText, Send, X } from "lucide-react";
+import { ArrowLeft, History, LoaderCircle, MessageSquareText, Send, Trash2, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import type { ChatConversation, ChatHistoryGroup } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
@@ -123,6 +123,42 @@ export function ChatHistoryPanel({
     }
   };
 
+  const handleDeleteSelectedConversation = async (): Promise<void> => {
+    if (selectedConversation === null) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const history = await mauzClient.deleteChat({
+        id: selectedConversation.id
+      });
+
+      setSelectedConversation(null);
+      setChatHistory(history);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Could not delete that Mauz chat.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleClearHistory = async (): Promise<void> => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      setSelectedConversation(null);
+      setChatHistory(await mauzClient.clearChatHistory());
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Could not clear Mauz chats.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   return (
     <section className="history-panel" data-chrome={chrome} aria-label="Previous Mauz chats">
       <header className="history-header">
@@ -159,6 +195,29 @@ export function ChatHistoryPanel({
       </header>
 
       {historyError !== null ? <p className="history-error">{historyError}</p> : null}
+      <div className="history-toolbar">
+        {selectedConversation !== null ? (
+          <button
+            type="button"
+            className="danger-button compact"
+            disabled={historyLoading}
+            onClick={() => void handleDeleteSelectedConversation()}
+          >
+            <Trash2 aria-hidden="true" size={13} />
+            <span>Delete</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="secondary-button compact"
+            disabled={historyLoading || (chatHistory?.groups.length ?? 0) === 0}
+            onClick={() => void handleClearHistory()}
+          >
+            <Trash2 aria-hidden="true" size={13} />
+            <span>Clear all</span>
+          </button>
+        )}
+      </div>
       {historyLoading && selectedConversation === null ? (
         <div className="history-loading">
           <LoaderCircle aria-hidden="true" className="spin" size={16} />
