@@ -112,7 +112,21 @@ const browserPreviewBridge: MauzBridge = {
 };
 
 function getBridge(): MauzBridge {
-  return (window as WindowWithOptionalBridge).mauz ?? browserPreviewBridge;
+  const bridge = (window as WindowWithOptionalBridge).mauz;
+
+  if (bridge !== undefined) {
+    return bridge;
+  }
+
+  if (isDesktopRenderer()) {
+    throw new Error("Mauz desktop bridge is unavailable. Quit and reopen the installed MauzAI app.");
+  }
+
+  return browserPreviewBridge;
+}
+
+function isDesktopRenderer(): boolean {
+  return navigator.userAgent.includes("Electron") || window.location.protocol === "file:";
 }
 
 function collectPreviewContext(): MauzDesktopContext {

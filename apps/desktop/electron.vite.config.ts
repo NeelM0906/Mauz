@@ -20,6 +20,15 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin({ exclude: ["@mauzai/api", "@mauzai/shared"] })],
+    build: {
+      rollupOptions: {
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].cjs",
+          chunkFileNames: "[name]-[hash].cjs"
+        }
+      }
+    },
     resolve: {
       alias: {
         "@mauzai/api/server": apiServerEntry,

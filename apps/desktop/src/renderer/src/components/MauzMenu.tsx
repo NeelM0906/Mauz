@@ -67,6 +67,10 @@ export function MauzMenu(): React.JSX.Element {
   const {
     settings,
     status,
+    setAskAnswer,
+    setAskConversationTitle,
+    setAskError,
+    setAskLoading,
     setChatHistory,
     setCurrentContext,
     setMode,
@@ -179,6 +183,10 @@ export function MauzMenu(): React.JSX.Element {
   const handleLensAction = async (action: LensAction): Promise<void> => {
     setPendingAction(action);
     setStatus(null);
+    setAskAnswer(null);
+    setAskConversationTitle(null);
+    setAskError(null);
+    setAskLoading(false);
 
     try {
       const context = await mauzClient.startAsk();
@@ -192,6 +200,9 @@ export function MauzMenu(): React.JSX.Element {
         setStatus(`Pinned ${lensObject.label} as this.`);
       }
 
+      await mauzClient.setLensExpanded({
+        expanded: true
+      });
       setMode("lens");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");

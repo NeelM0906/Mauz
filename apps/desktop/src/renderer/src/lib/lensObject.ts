@@ -29,8 +29,8 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
   const selectedText = context.selectedText ?? context.pointer?.selectedText;
   const activeApp = context.activeApp ?? context.pointer?.activeApp;
   const activeWindow = context.activeWindow ?? context.pointer?.activeWindow;
-  const appName = activeApp?.name ?? "current app";
-  const windowTitle = activeWindow?.title?.trim();
+  const appName = activeApp?.name?.trim() || "current app";
+  const windowTitle = activeWindow?.title?.trim() || undefined;
 
   if (selectedText?.trim()) {
     return {
