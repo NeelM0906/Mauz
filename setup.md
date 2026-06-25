@@ -101,6 +101,14 @@ Install the packaged macOS app into `/Applications` for normal double-click use:
 pnpm install:mac
 ```
 
+This stops any running MauzAI processes, rebuilds `/Applications/MauzAI.app`, and replaces `dist/mac/MauzAI.app` with a symlink to the installed app. The next launch uses the new renderer assets even if you previously double-clicked the local packaged app.
+
+Stop the installed app without reinstalling:
+
+```bash
+pnpm stop:mac
+```
+
 Create the packaged macOS app in `~/Applications/MauzAI.app`:
 
 ```bash

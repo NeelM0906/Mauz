@@ -9,6 +9,7 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
+    "stop:mac": "pnpm --filter @mauzai/desktop stop:mac",
     "install:mac": "pnpm --filter @mauzai/desktop install:mac",
     "package:dmg:mac": "pnpm --filter @mauzai/desktop package:dmg:mac",
     "lint": "prettier --check .",

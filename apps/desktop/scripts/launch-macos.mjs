@@ -11,7 +11,7 @@ const appPath = resolve(process.env.MAUZAI_APP_OUTPUT ?? `${homedir()}/Applicati
 
 if (!existsSync(appPath)) {
   throw new Error(
-    `MauzAI.app is missing at ${appPath}. Run \`npm run package:mac --workspace @mauzai/desktop\` first.`
+    `MauzAI.app is missing at ${appPath}. Run \`pnpm --filter @mauzai/desktop package:mac\` first.`
   );
 }
 
