@@ -7,6 +7,7 @@ import type {
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
+  MauzLensResizeRequest,
   MauzDesktopContext,
   MauzBridge,
   MauzSettingsOpenOptions,
@@ -28,7 +29,8 @@ const browserPreviewBridge: MauzBridge = {
     showMenu: async () => {},
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
-    startTalk: async () => collectPreviewContext()
+    startTalk: async () => collectPreviewContext(),
+    setLensExpanded: async (_payload: MauzLensResizeRequest) => {}
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
@@ -150,6 +152,9 @@ export const mauzClient = {
   },
   startTalk(): Promise<MauzDesktopContext> {
     return getBridge().menu.startTalk();
+  },
+  setLensExpanded(payload: MauzLensResizeRequest): Promise<void> {
+    return getBridge().menu.setLensExpanded(payload);
   },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);

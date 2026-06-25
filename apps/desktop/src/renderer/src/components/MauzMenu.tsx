@@ -1,4 +1,5 @@
 import {
+  ChevronRight,
   Check,
   GitCompareArrows,
   History,
@@ -24,34 +25,40 @@ import { BrandLogo } from "./BrandLogo";
 type MenuAction = LensAction | "talk";
 type AuthAction = "connect" | "disconnect";
 
-const HALO_ACTIONS: Array<{
+const LENS_ACTIONS: Array<{
   action: LensAction;
   label: string;
+  detail: string;
   icon: typeof ScanSearch;
 }> = [
   {
     action: "ask",
     label: "Ask",
+    detail: "Ask a question about this",
     icon: ScanSearch
   },
   {
     action: "explain",
     label: "Explain",
+    detail: "Explain key points simply",
     icon: Sparkles
   },
   {
     action: "transform",
     label: "Transform",
+    detail: "Rewrite, summarize, or adapt",
     icon: Wand2
   },
   {
     action: "remember",
     label: "Remember",
+    detail: "Pin this as memory",
     icon: Pin
   },
   {
     action: "compare",
     label: "Compare",
+    detail: "Compare this with another object",
     icon: GitCompareArrows
   }
 ];
@@ -243,28 +250,34 @@ export function MauzMenu(): React.JSX.Element {
         onDisconnect={handleOpenAiDisconnect}
       />
 
-      <div className="lens-halo" aria-label="Mauz Lens actions">
-        <div className="lens-halo-center">
-          <MousePointer2 aria-hidden="true" size={17} />
-          <span>Lens</span>
+      <div className="menu-lens-card" aria-label="Mauz Lens actions">
+        <div className="menu-lens-heading">
+          <span>
+            <MousePointer2 aria-hidden="true" size={13} />
+            Mauz Lens
+          </span>
+          <small>Point first, choose next</small>
         </div>
-        {HALO_ACTIONS.map((item) => {
-          const Icon = item.icon;
+        <div className="menu-command-list">
+          {LENS_ACTIONS.map((item) => {
+            const Icon = item.icon;
 
-          return (
-            <button
-              key={item.action}
-              type="button"
-              className="halo-action"
-              data-action={item.action}
-              onClick={() => void handleLensAction(item.action)}
-              disabled={pendingAction !== null}
-            >
-              <Icon aria-hidden="true" size={15} />
-              <span>{pendingAction === item.action ? "Capturing" : item.label}</span>
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={item.action}
+                type="button"
+                className="menu-command"
+                onClick={() => void handleLensAction(item.action)}
+                disabled={pendingAction !== null}
+              >
+                <Icon aria-hidden="true" size={14} />
+                <span>{pendingAction === item.action ? "Capturing..." : item.label}</span>
+                <small>{item.detail}</small>
+                <ChevronRight aria-hidden="true" size={13} />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="mauz-actions secondary-actions">

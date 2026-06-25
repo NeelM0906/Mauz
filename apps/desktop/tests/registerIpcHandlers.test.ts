@@ -24,6 +24,7 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
+  IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -88,7 +89,27 @@ describe("registerIpcHandlers", () => {
     const handler = getRegisteredHandler(IPC_CHANNELS.menuStartAsk);
 
     await expect(handler(createInvokeEvent("popover"))).resolves.toEqual(context);
+    expect(options.popover.resizeForAsk).not.toHaveBeenCalled();
+    expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
+  });
+
+  it("resizes Lens only when the popover asks to expand or collapse", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuSetLensExpanded);
+
+    await handler(createInvokeEvent("popover"), {
+      expanded: true
+    });
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
+    expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
+
+    await handler(createInvokeEvent("popover"), {
+      expanded: false
+    });
+    expect(options.popover.resizeForMenu).toHaveBeenCalledOnce();
   });
 
   it("clears activation context when the popover closes", async () => {

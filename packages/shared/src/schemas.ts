@@ -219,6 +219,10 @@ export const ChatHistoryContinueRequestSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS)
 });
 
+export const MauzLensResizeRequestSchema = z.object({
+  expanded: z.boolean()
+});
+
 export const ChatHistoryContinueResponseSchema = z.object({
   conversation: ChatConversationSchema,
   answer: z.string(),

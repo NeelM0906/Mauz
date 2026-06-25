@@ -2,8 +2,11 @@ import {
   AppWindow,
   ArrowLeft,
   Camera,
+  ChevronRight,
   GitCompareArrows,
   LoaderCircle,
+  Maximize2,
+  Minimize2,
   MousePointer2,
   Pin,
   ScanSearch,
@@ -78,6 +81,7 @@ export function LensPanel(): React.JSX.Element {
   } = useMauzStore();
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [question, setQuestion] = useState("");
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleBack = async (): Promise<void> => {
     await mauzClient.showMenu();
@@ -97,6 +101,19 @@ export function LensPanel(): React.JSX.Element {
 
     if (action === "compare" && pinnedLensObject === null) {
       setAskError("Point at something, remember it, then compare another object with it.");
+    }
+  };
+
+  const handleToggleExpanded = async (): Promise<void> => {
+    const expanded = !isExpanded;
+
+    try {
+      await mauzClient.setLensExpanded({
+        expanded
+      });
+      setIsExpanded(expanded);
+    } catch (error) {
+      setAskError(error instanceof Error ? error.message : "Mauz could not resize Lens.");
     }
   };
 
@@ -140,7 +157,7 @@ export function LensPanel(): React.JSX.Element {
   };
 
   return (
-    <section className="lens-panel" aria-label="Mauz Lens">
+    <section className="lens-panel" data-expanded={isExpanded} aria-label="Mauz Lens">
       <header className="lens-header">
         <button
           className="icon-button"
@@ -157,14 +174,29 @@ export function LensPanel(): React.JSX.Element {
             <p>{lensObject.label}</p>
           </div>
         </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauzClient.close()}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
+        <div className="lens-header-actions">
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={isExpanded ? "Collapse Mauz Lens" : "Expand Mauz Lens"}
+            title={isExpanded ? "Collapse" : "Expand"}
+            onClick={() => void handleToggleExpanded()}
+          >
+            {isExpanded ? (
+              <Minimize2 aria-hidden="true" size={15} />
+            ) : (
+              <Maximize2 aria-hidden="true" size={15} />
+            )}
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close Mauz"
+            onClick={() => void mauzClient.close()}
+          >
+            <X aria-hidden="true" size={16} />
+          </button>
+        </div>
       </header>
 
       <section className="lens-object" aria-label="Detected cursor object">
@@ -191,20 +223,10 @@ export function LensPanel(): React.JSX.Element {
         ) : null}
       </div>
 
-      <div className="context-strip lens-context-strip" aria-label="Lens context status">
+      <div className="lens-context-line" aria-label="Lens context status">
         <span>
           <Camera aria-hidden="true" size={14} />
           {lensObject.privacyMode}
-        </span>
-        <span>
-          <TextCursorInput aria-hidden="true" size={14} />
-          {currentContext?.selectedText?.trim() ? "Text selected" : "No selected text"}
-        </span>
-        <span>
-          <AppWindow aria-hidden="true" size={14} />
-          {currentContext?.activeWindow !== undefined || currentContext?.activeApp !== undefined
-            ? "Window aware"
-            : "No window"}
         </span>
         <span>
           <MousePointer2 aria-hidden="true" size={14} />
@@ -234,6 +256,7 @@ export function LensPanel(): React.JSX.Element {
               <Icon aria-hidden="true" size={15} />
               <span>{item.label}</span>
               <small>{item.detail}</small>
+              <ChevronRight aria-hidden="true" className="lens-action-arrow" size={13} />
             </button>
           );
         })}
@@ -257,7 +280,11 @@ export function LensPanel(): React.JSX.Element {
         </button>
       </form>
 
-      <div className="answer-area lens-answer-area" aria-live="polite">
+      <div
+        className="answer-area lens-answer-area"
+        data-empty={askError === null && askAnswer === null}
+        aria-live="polite"
+      >
         {askError !== null ? <p className="ask-error">{askError}</p> : null}
         {askAnswer !== null ? (
           <>
@@ -269,10 +296,23 @@ export function LensPanel(): React.JSX.Element {
         ) : null}
         {askError === null && askAnswer === null ? (
           <p className="ask-empty">
-            Choose an action, type only if needed, and let Lens work from the object under your cursor.
+            Choose an action, type only if needed, and expand when you want more room.
           </p>
         ) : null}
       </div>
+
+      <footer className="lens-footer-status">
+        <span>
+          <TextCursorInput aria-hidden="true" size={13} />
+          {currentContext?.selectedText?.trim() ? "Text selected" : "No selected text"}
+        </span>
+        <span>
+          <AppWindow aria-hidden="true" size={13} />
+          {currentContext?.activeWindow !== undefined || currentContext?.activeApp !== undefined
+            ? "Window aware"
+            : "No window"}
+        </span>
+      </footer>
     </section>
   );
 }

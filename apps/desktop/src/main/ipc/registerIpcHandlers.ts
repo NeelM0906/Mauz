@@ -5,6 +5,7 @@ import {
   ChatHistoryDeleteRequestSchema,
   ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
+  MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
   type MauzSettings,
   type MauzSettingsUpdate
@@ -32,6 +33,7 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
+  IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -70,15 +72,25 @@ export function registerIpcHandlers({
 
   ipcMain.handle(IPC_CHANNELS.menuStartAsk, async (event) => {
     assertTrustedSurface(event, ["popover"]);
-    const context = await contextCollector.collectForAsk();
-    popover.resizeForAsk();
-    return context;
+    return contextCollector.collectForAsk();
   });
   ipcMain.handle(IPC_CHANNELS.menuStartTalk, async (event) => {
     assertTrustedSurface(event, ["popover"]);
     const context = await contextCollector.collectForRealtime();
     popover.resizeForRealtime();
     return context;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.menuSetLensExpanded, (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
+    const request = MauzLensResizeRequestSchema.parse(payload);
+
+    if (request.expanded) {
+      popover.resizeForAsk();
+      return;
+    }
+
+    popover.resizeForMenu();
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event, payload: unknown) => {

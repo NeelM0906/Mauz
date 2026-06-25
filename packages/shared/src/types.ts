@@ -212,6 +212,10 @@ export type MauzSettingsOpenOptions = {
   resizePopover?: boolean | undefined;
 };
 
+export type MauzLensResizeRequest = {
+  expanded: boolean;
+};
+
 export type MouseMoveSample = {
   x: number;
   y: number;
@@ -225,6 +229,7 @@ export type MauzBridge = {
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
+    setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;

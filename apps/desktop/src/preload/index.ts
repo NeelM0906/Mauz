@@ -8,6 +8,7 @@ import type {
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
+  MauzLensResizeRequest,
   MauzBridge,
   MauzDesktopContext,
   MauzSettings,
@@ -25,7 +26,9 @@ const mauzApi: MauzBridge = {
     showMenu: () => ipcRenderer.invoke(IPC_CHANNELS.menuShowMenu) as Promise<void>,
     close: () => ipcRenderer.invoke(IPC_CHANNELS.menuClose) as Promise<void>,
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
-    startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>
+    startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
+    setLensExpanded: (payload: MauzLensResizeRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>
   },
   ask: {
     submit: (payload: AskMauzRequest) =>

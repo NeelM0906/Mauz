@@ -30,6 +30,7 @@ export const IPC_CHANNELS = {
   menuClose: "mauz:menu:close",
   menuStartAsk: "mauz:menu:start-ask",
   menuStartTalk: "mauz:menu:start-talk",
+  menuSetLensExpanded: "mauz:menu:set-lens-expanded",
   settingsOpen: "mauz:settings:open",
   settingsUpdate: "mauz:settings:update",
   askSubmit: "mauz:ask:submit",
