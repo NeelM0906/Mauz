@@ -23,7 +23,7 @@
     "@mauzai/shared": "workspace:*",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react-dom": "^19.2.7",
     "zustand": "^5.0.13"
   },
   "devDependencies": {
