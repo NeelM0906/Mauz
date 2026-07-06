@@ -75,6 +75,10 @@ const plistUpdates = [
   [
     "NSHumanReadableCopyright",
     "Created by FirstPoint Labs. Copyright (c) FirstPoint Labs and previous authors."
+  ],
+  [
+    "NSAppleEventsUsageDescription",
+    "Mauz reads the active window and selected text to answer questions about what you're looking at."
   ]
 ];
 

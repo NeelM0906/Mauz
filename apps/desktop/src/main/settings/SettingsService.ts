@@ -1,10 +1,13 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
 import {
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
   readBooleanEnv,
+  type AgentMode,
+  type BackendPreset,
   type MauzSettings,
   type MauzSettingsUpdate,
   type OpenAiCredentialSource
@@ -14,6 +17,7 @@ type SettingsServiceOptions = {
   settingsPath?: string;
   readTextFile?: (path: string) => Promise<string>;
   writeTextFile?: (path: string, value: string) => Promise<void>;
+  renameFile?: (from: string, to: string) => Promise<void>;
   ensureDirectory?: (path: string) => Promise<void>;
   secretCodec?: SecretCodec;
   defaults?: StoredMauzSettings;
@@ -40,6 +44,7 @@ type ApiKeySettingsUpdate = {
 
 type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource"> & {
   encryptedOpenAiApiKey?: string | undefined;
+  installId: string;
 };
 
 export type MauzRuntimeSettings = Omit<StoredMauzSettings, "encryptedOpenAiApiKey"> & {
@@ -50,11 +55,13 @@ export class SettingsService {
   private readonly settingsPath: string;
   private readonly readTextFile: (path: string) => Promise<string>;
   private readonly writeTextFile: (path: string, value: string) => Promise<void>;
+  private readonly renameFile: (from: string, to: string) => Promise<void>;
   private readonly ensureDirectory: (path: string) => Promise<void>;
   private readonly secretCodec: SecretCodec;
   private readonly defaults: StoredMauzSettings;
   private readonly environmentApiKey: string | undefined;
   private cachedSettings: StoredMauzSettings | null = null;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(options: SettingsServiceOptions = {}) {
     const rawEnvironmentApiKey =
@@ -63,6 +70,7 @@ export class SettingsService {
     this.settingsPath = options.settingsPath ?? join(app.getPath("userData"), SETTINGS_FILE_NAME);
     this.readTextFile = options.readTextFile ?? readFileUtf8;
     this.writeTextFile = options.writeTextFile ?? writeFileUtf8;
+    this.renameFile = options.renameFile ?? renameFiles;
     this.ensureDirectory = options.ensureDirectory ?? ensureDirectoryExists;
     this.secretCodec = options.secretCodec ?? createSafeStorageCodec();
     this.defaults = options.defaults ?? getDefaultSettings();
@@ -86,28 +94,52 @@ export class SettingsService {
   }
 
   async update(update: MauzSettingsUpdate): Promise<MauzSettings> {
-    const parsedUpdate = MauzSettingsUpdateSchema.parse(update);
-    const currentSettings = await this.getStored();
-    const nextSettings: StoredMauzSettings = { ...currentSettings };
+    return this.runSerializedWrite(async () => {
+      const parsedUpdate = MauzSettingsUpdateSchema.parse(update);
+      const currentSettings = await this.getStored();
+      const nextSettings: StoredMauzSettings = { ...currentSettings };
 
-    applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
-    applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
-    applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
-    applyDefinedSetting(nextSettings, "openAiAuthMode", parsedUpdate.openAiAuthMode);
-    applyDefinedSetting(nextSettings, "openAiAuthDisconnected", parsedUpdate.openAiAuthDisconnected);
-    applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
-    applyDefinedSetting(nextSettings, "chatTitleModel", parsedUpdate.chatTitleModel);
-    applyDefinedSetting(nextSettings, "realtimeModel", parsedUpdate.realtimeModel);
-    applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
-    applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
-    applyDefinedSetting(nextSettings, "includeFullScreenshot", parsedUpdate.includeFullScreenshot);
-    applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
+      applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
+      applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
+      applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
+      applyDefinedSetting(nextSettings, "openAiAuthMode", parsedUpdate.openAiAuthMode);
+      applyDefinedSetting(nextSettings, "openAiAuthDisconnected", parsedUpdate.openAiAuthDisconnected);
+      applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
+      applyDefinedSetting(nextSettings, "chatTitleModel", parsedUpdate.chatTitleModel);
+      applyDefinedSetting(nextSettings, "realtimeModel", parsedUpdate.realtimeModel);
+      applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
+      applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
+      applyDefinedSetting(nextSettings, "includeFullScreenshot", parsedUpdate.includeFullScreenshot);
+      applyDefinedSetting(nextSettings, "backendPreset", parsedUpdate.backendPreset);
+      applyDefinedSetting(nextSettings, "backendBaseUrl", parsedUpdate.backendBaseUrl);
+      applyDefinedSetting(nextSettings, "agentMode", parsedUpdate.agentMode);
+      applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
 
-    await this.ensureDirectory(dirname(this.settingsPath));
-    await this.writeTextFile(this.settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`);
-    this.cachedSettings = nextSettings;
+      await this.ensureDirectory(dirname(this.settingsPath));
+      const tempPath = `${this.settingsPath}.${process.pid}.${Date.now()}.tmp`;
+      await this.writeTextFile(tempPath, `${JSON.stringify(nextSettings, null, 2)}\n`);
+      await this.renameFile(tempPath, this.settingsPath);
+      this.cachedSettings = nextSettings;
 
-    return toPublicSettings(nextSettings, this.environmentApiKey, this.secretCodec);
+      return toPublicSettings(nextSettings, this.environmentApiKey, this.secretCodec);
+    });
+  }
+
+  private async runSerializedWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const previousWrite = this.writeQueue;
+    let releaseCurrentWrite!: () => void;
+
+    this.writeQueue = new Promise<void>((resolve) => {
+      releaseCurrentWrite = resolve;
+    });
+
+    await previousWrite;
+
+    try {
+      return await operation();
+    } finally {
+      releaseCurrentWrite();
+    }
   }
 
   private async getStored(): Promise<StoredMauzSettings> {
@@ -115,8 +147,10 @@ export class SettingsService {
       return this.cachedSettings;
     }
 
+    let rawSettings: string | undefined;
+
     try {
-      const rawSettings = await this.readTextFile(this.settingsPath);
+      rawSettings = await this.readTextFile(this.settingsPath);
       const parsed = JSON.parse(rawSettings) as unknown;
       const parsedSettings = parseStoredSettings(parsed);
 
@@ -132,8 +166,15 @@ export class SettingsService {
       // Missing or malformed settings should never prevent Mauz from starting.
     }
 
-    this.cachedSettings = this.defaults;
-    return this.defaults;
+    // Attempt to salvage the installId from raw file content so that a transient
+    // read failure or a failed schema migration does not silently rotate the
+    // installation identity and persist a new UUID on the next update().
+    const salvagedInstallId = rawSettings !== undefined ? salvageInstallId(rawSettings) : null;
+    const fallback =
+      salvagedInstallId !== null ? { ...this.defaults, installId: salvagedInstallId } : this.defaults;
+
+    this.cachedSettings = fallback;
+    return fallback;
   }
 
   private async sanitizeStoredSettings(settings: StoredMauzSettings): Promise<void> {
@@ -203,7 +244,15 @@ function getDefaultSettings(): StoredMauzSettings {
       process.env.OPENAI_REALTIME_REASONING_EFFORT === "high"
         ? process.env.OPENAI_REALTIME_REASONING_EFFORT
         : DEFAULT_REALTIME_REASONING_EFFORT,
-    includeFullScreenshot: readBooleanEnv(process.env.OPENAI_INCLUDE_FULL_SCREENSHOT, false)
+    includeFullScreenshot: readBooleanEnv(process.env.OPENAI_INCLUDE_FULL_SCREENSHOT, false),
+    backendPreset:
+      process.env.MAUZ_BACKEND_PRESET === "hermes" ||
+      process.env.MAUZ_BACKEND_PRESET === "custom"
+        ? (process.env.MAUZ_BACKEND_PRESET as BackendPreset)
+        : "openai",
+    backendBaseUrl: process.env.MAUZ_BACKEND_BASE_URL?.trim() ?? "",
+    agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? ("yolo" as AgentMode) : "approve",
+    installId: randomUUID()
   };
 }
 
@@ -213,9 +262,16 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
   }
 
   const parsedRecord = parsed as Record<string, unknown>;
+  const defaults = getDefaultSettings();
+  // Legacy migration: normalize any unrecognized preset to "hermes"
+  const validPresets = new Set(["openai", "hermes", "custom"]);
+  const migratedRecord =
+    typeof parsedRecord.backendPreset === "string" && !validPresets.has(parsedRecord.backendPreset)
+      ? { ...parsedRecord, backendPreset: "hermes" }
+      : parsedRecord;
   const candidate = {
-    ...getDefaultSettings(),
-    ...parsedRecord,
+    ...defaults,
+    ...migratedRecord,
     apiKeyConfigured: false,
     openAiCredentialSource: "none"
   };
@@ -243,6 +299,13 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeVoice: publicSettings.data.realtimeVoice,
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
     includeFullScreenshot: publicSettings.data.includeFullScreenshot,
+    backendPreset: publicSettings.data.backendPreset,
+    backendBaseUrl: publicSettings.data.backendBaseUrl,
+    agentMode: publicSettings.data.agentMode,
+    installId:
+      typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
+        ? parsedRecord.installId.trim()
+        : defaults.installId,
     ...(encryptedOpenAiApiKey === undefined ? {} : { encryptedOpenAiApiKey })
   };
 }
@@ -252,7 +315,12 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
     return false;
   }
 
-  return "openAiApiKey" in parsed || ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key");
+  return (
+    "openAiApiKey" in parsed ||
+    ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key") ||
+    !("installId" in parsed) ||
+    ("backendPreset" in parsed && typeof parsed.backendPreset === "string" && !["openai", "hermes", "custom"].includes(parsed.backendPreset as string))
+  );
 }
 
 function toPublicSettings(
@@ -275,7 +343,10 @@ function toPublicSettings(
     realtimeVoice: settings.realtimeVoice,
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
     includeFullScreenshot: settings.includeFullScreenshot,
-    apiKeyConfigured: openAiCredentialSource !== "none"
+    apiKeyConfigured: openAiCredentialSource !== "none",
+    backendPreset: settings.backendPreset,
+    backendBaseUrl: settings.backendBaseUrl,
+    agentMode: settings.agentMode
   };
 }
 
@@ -333,8 +404,18 @@ async function writeFileUtf8(path: string, value: string): Promise<void> {
   await writeFile(path, value, "utf8");
 }
 
+async function renameFiles(from: string, to: string): Promise<void> {
+  await rename(from, to);
+}
+
 async function ensureDirectoryExists(path: string): Promise<void> {
   await mkdir(path, {
     recursive: true
   });
+}
+
+const INSTALL_ID_PATTERN = /"installId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i;
+
+function salvageInstallId(raw: string): string | null {
+  return INSTALL_ID_PATTERN.exec(raw)?.[1] ?? null;
 }

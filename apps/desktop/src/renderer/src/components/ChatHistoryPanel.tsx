@@ -172,7 +172,7 @@ export function ChatHistoryPanel({
         <div className="panel-title">
           <BrandLogo className="panel-title-logo" />
           <div>
-            <h1>{selectedConversation === null ? "Prev chats" : selectedConversation.title}</h1>
+            <h1 tabIndex={-1}>{selectedConversation === null ? "Prev chats" : selectedConversation.title}</h1>
             <p>
               {selectedConversation === null
                 ? "Saved text-only Mauz conversations."

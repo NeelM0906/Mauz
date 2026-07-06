@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { LOCAL_API_TOKEN_HEADER, type AskMauzRequest, type RealtimeConnectRequest } from "@mauzai/shared";
-import { MissingOpenAIKeyError } from "../src/errors";
+import {
+  LOCAL_API_TOKEN_HEADER,
+  AskMauzRequestSchema,
+  MauzSettingsSchema,
+  DEFAULT_HERMES_BASE_URL,
+  type AskMauzRequest,
+  type RealtimeConnectRequest
+} from "@mauzai/shared";
+import { AgentRunStoppedError, MissingOpenAIKeyError } from "../src/errors";
 import { createMauzApiServer } from "../src/server";
 
 const validRequest: AskMauzRequest = {
@@ -123,6 +130,28 @@ describe("Ask Mauz API", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid Ask Mauz request."
+    });
+  });
+
+  it("maps AgentRunStoppedError to 499", async () => {
+    const app = await createMauzApiServer({
+      loadEnv: false,
+      askHandler: async () => {
+        throw new AgentRunStoppedError();
+      }
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/ask",
+      payload: validRequest
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(499);
+    expect(response.json()).toMatchObject({
+      error: "The agent run was stopped."
     });
   });
 
@@ -326,5 +355,62 @@ describe("Ask Mauz API", () => {
       title: "Settings Panel Help",
       model: "gpt-5.4-nano"
     });
+  });
+});
+
+function buildContext() {
+  return {
+    timestamp: new Date("2026-05-13T20:00:00.000Z").toISOString(),
+    platform: "darwin" as const,
+    cursor: { x: 120, y: 240 }
+  };
+}
+
+function buildSettingsFixture() {
+  return {
+    nativeShakeEnabled: true,
+    devHotkeyEnabled: false,
+    shakeSensitivity: "normal" as const,
+    openAiAuthMode: "api-key" as const,
+    openAiAuthDisconnected: false,
+    openAiCredentialSource: "none" as const,
+    askModel: "gpt-5.4-mini",
+    chatTitleModel: "gpt-5.4-mini",
+    realtimeModel: "gpt-4o-realtime-preview",
+    realtimeVoice: "alloy",
+    realtimeReasoningEffort: "medium" as const,
+    includeFullScreenshot: false,
+    apiKeyConfigured: false
+  };
+}
+
+describe("backend schema additions", () => {
+  it("accepts an optional sessionId on ask requests", () => {
+    const parsed = AskMauzRequestSchema.parse({
+      question: "hi",
+      context: buildContext(),
+      sessionId: "conv-123"
+    });
+    expect(parsed.sessionId).toBe("conv-123");
+  });
+
+  it("rejects a blank sessionId", () => {
+    expect(() =>
+      AskMauzRequestSchema.parse({ question: "hi", context: buildContext(), sessionId: " " })
+    ).toThrow();
+  });
+
+  it("parses backend settings fields", () => {
+    const settings = MauzSettingsSchema.parse({
+      ...buildSettingsFixture(),
+      backendPreset: "hermes",
+      backendBaseUrl: "http://localhost:8642/v1",
+      agentMode: "yolo"
+    });
+    expect(settings.backendPreset).toBe("hermes");
+  });
+
+  it("exports the Hermes gateway default base URL", () => {
+    expect(DEFAULT_HERMES_BASE_URL).toBe("http://localhost:8642/v1");
   });
 });

@@ -1,8 +1,9 @@
-import OpenAI from "openai";
+import OpenAI, { APIConnectionError } from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import type { AskMauzRequest, AskMauzResponse, MauzDesktopContext, ScreenshotPayload } from "@mauzai/shared";
-import { MissingOpenAIKeyError } from "../errors";
+import { BackendUnreachableError, MissingOpenAIKeyError } from "../errors";
 import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
+import { type BackendCapabilities, detectBackendCapabilities } from "../backend/capabilities";
 
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
 const DEFAULT_SCREENSHOT_DETAIL = "auto";
@@ -12,35 +13,63 @@ export type AskMauzOptions = {
   apiKey?: string;
   model?: string;
   client?: OpenAI;
+  baseUrl?: string;
+  backendApiKey?: string;
+  installId?: string;
+  fetchImpl?: typeof fetch;
 };
 
 export async function askMauz(
   request: AskMauzRequest,
   options: AskMauzOptions = {}
 ): Promise<AskMauzResponse> {
+  const baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.MAUZ_BACKEND_BASE_URL);
+  const backendApiKey = options.backendApiKey ?? process.env.MAUZ_BACKEND_API_KEY?.trim() ?? undefined;
+  const installId = options.installId ?? process.env.MAUZ_INSTALL_ID?.trim() ?? undefined;
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const model = options.model ?? process.env.OPENAI_ASK_MODEL ?? DEFAULT_ASK_MODEL;
 
-  if (!apiKey && options.client === undefined) {
+  if (baseUrl === undefined && !apiKey && options.client === undefined) {
     throw new MissingOpenAIKeyError();
   }
 
-  const client = options.client ?? new OpenAI({ apiKey });
-  const response = await client.responses.create({
-    model,
-    store: false,
-    max_output_tokens: getAskMaxOutputTokens(),
-    input: [
+  const client =
+    options.client ??
+    (baseUrl === undefined
+      ? new OpenAI({ apiKey })
+      // maxRetries: 0 is intentional — fail fast so a down local backend surfaces BackendUnreachableError immediately instead of retrying.
+      : new OpenAI({ apiKey: backendApiKey || "mauz-local-backend", baseURL: baseUrl, maxRetries: 0 }));
+
+  const capabilities =
+    baseUrl === undefined ? null : await detectBackendCapabilities(baseUrl, options.fetchImpl ?? fetch);
+  const headers = buildBackendHeaders(capabilities, request.sessionId, backendApiKey ? installId : undefined);
+
+  let response: Awaited<ReturnType<typeof client.responses.create>>;
+  try {
+    response = await client.responses.create(
       {
-        role: "system",
-        content: MAUZ_SYSTEM_PROMPT
+        model,
+        store: false,
+        max_output_tokens: getAskMaxOutputTokens(),
+        input: [
+          {
+            role: "system",
+            content: MAUZ_SYSTEM_PROMPT
+          },
+          {
+            role: "user",
+            content: buildResponseContent(request)
+          }
+        ]
       },
-      {
-        role: "user",
-        content: buildResponseContent(request)
-      }
-    ]
-  });
+      Object.keys(headers).length > 0 ? { headers } : undefined
+    );
+  } catch (error) {
+    if (baseUrl !== undefined && isConnectionError(error)) {
+      throw new BackendUnreachableError(baseUrl, { cause: error });
+    }
+    throw error;
+  }
   const answer = response.output_text?.trim();
 
   if (answer === undefined || answer.length === 0) {
@@ -199,6 +228,38 @@ function formatScreenshot(context: MauzDesktopContext): string {
   }
 
   return `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, attached as broad image input`;
+}
+
+function normalizeBaseUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed.replace(/\/+$/, "") : undefined;
+}
+
+function buildBackendHeaders(
+  capabilities: BackendCapabilities | null,
+  sessionId: string | undefined,
+  installId: string | undefined
+): Record<string, string> {
+  if (capabilities === null) {
+    return {};
+  }
+  return {
+    ...(sessionId === undefined ? {} : { [capabilities.sessionIdHeader]: sessionId }),
+    ...(installId === undefined ? {} : { [capabilities.sessionKeyHeader]: installId })
+  };
+}
+
+function isConnectionError(error: unknown): boolean {
+  if (error instanceof APIConnectionError) {
+    return true;
+  }
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  if ("name" in error && error.name === "APIConnectionError") {
+    return true;
+  }
+  return "cause" in error && isConnectionError((error as { cause: unknown }).cause);
 }
 
 function formatPointerContext(context: MauzDesktopContext): string {

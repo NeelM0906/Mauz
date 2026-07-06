@@ -9,13 +9,17 @@ import {
   Pin,
   ScanSearch,
   Send,
+  ShieldAlert,
   Sparkles,
+  Square,
   TextCursorInput,
   Wand2,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { AgentApprovalPayload, AgentMode, AgentRunActivityPayload } from "@mauzai/shared";
 import type { LensAction } from "@renderer/state/useMauzStore";
+import { classifyApprovalRisk } from "@renderer/lib/approvalRisk";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { detectLensObject, getLensActionQuestion, toLensMemory } from "@renderer/lib/lensObject";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -76,6 +80,8 @@ const ACTION_UI: Record<
   }
 };
 
+type ActivityEntry = AgentRunActivityPayload & { seq: number };
+
 export function LensPanel(): React.JSX.Element {
   const {
     currentContext,
@@ -86,17 +92,108 @@ export function LensPanel(): React.JSX.Element {
     askError,
     askLoading,
     backToMenu,
+    settings,
     setAskAnswer,
     setAskConversationTitle,
     setAskError,
     setAskLoading,
-    setPinnedLensObject
+    setPinnedLensObject,
+    setSettings
   } = useMauzStore();
+
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [question, setQuestion] = useState("");
+  const [approvalRequest, setApprovalRequest] = useState<AgentApprovalPayload | null>(null);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [runActivities, setRunActivities] = useState<ActivityEntry[]>([]);
+  const [activityExpanded, setActivityExpanded] = useState(false);
+  const activeRunIdRef = useRef<string | null>(null);
+  const activitySeqRef = useRef(0);
+
   const action = ACTION_UI[selectedLensAction];
   const ActionIcon = action.icon;
   const isRemembering = selectedLensAction === "remember";
+  const isYoloRing =
+    settings !== null && settings.agentMode === "yolo" && settings.backendPreset !== "openai";
+
+  // Load settings for mode toggle
+  useEffect(() => {
+    let disposed = false;
+
+    if (settings === null) {
+      void (async () => {
+        try {
+          const loaded = await mauzClient.openSettings({ resizePopover: false });
+
+          if (!disposed) {
+            setSettings(loaded);
+          }
+        } catch {
+          // Mode toggle stays hidden; non-critical
+        }
+      })();
+    }
+
+    return () => {
+      disposed = true;
+    };
+  }, [settings, setSettings]);
+
+  // Agent event subscriptions
+  useEffect(() => {
+    const unsubApproval = mauzClient.onAgentApprovalRequest((payload) => {
+      // Only accept approvals that belong to the currently active run
+      if (payload.runId === activeRunIdRef.current) {
+        setApprovalRequest(payload);
+      }
+    });
+
+    const unsubRunState = mauzClient.onAgentRunState(({ runId }) => {
+      activeRunIdRef.current = runId;
+      setActiveRunId(runId);
+
+      if (runId === null) {
+        // Run ended: clear approval and activities
+        setApprovalRequest(null);
+        setRunActivities([]);
+        setActivityExpanded(false);
+      } else {
+        // New run started: reset activity list
+        setRunActivities([]);
+        setActivityExpanded(false);
+      }
+    });
+
+    const unsubActivity = mauzClient.onAgentRunActivity((payload) => {
+      const seq = activitySeqRef.current++;
+      setRunActivities((prev) => {
+        const entry: ActivityEntry = { ...payload, seq };
+        const next = [...prev, entry];
+        // Cap at last 50 entries
+        return next.length > 50 ? next.slice(-50) : next;
+      });
+    });
+
+    return () => {
+      unsubApproval();
+      unsubRunState();
+      unsubActivity();
+    };
+  }, []);
+
+  const handleApprovalChoice = (choice: "once" | "session" | "always" | "deny"): void => {
+    if (approvalRequest === null) {
+      return;
+    }
+
+    void mauzClient.respondAgentApproval({ approvalId: approvalRequest.approvalId, choice });
+    setApprovalRequest(null);
+  };
+
+  const handleModeChange = async (mode: AgentMode): Promise<void> => {
+    const updated = await mauzClient.updateSettings({ agentMode: mode });
+    setSettings(updated);
+  };
 
   const handleBack = async (): Promise<void> => {
     await mauzClient.showMenu();
@@ -147,7 +244,11 @@ export function LensPanel(): React.JSX.Element {
   };
 
   return (
-    <section className="lens-panel lens-task-panel" aria-label={action.title}>
+    <section
+      className="lens-panel lens-task-panel"
+      aria-label={action.title}
+      {...(isYoloRing ? { "data-agent-mode": "yolo" } : {})}
+    >
       <header className="lens-header lens-task-header">
         <button
           className="icon-button"
@@ -160,7 +261,7 @@ export function LensPanel(): React.JSX.Element {
         <div className="panel-title">
           <BrandLogo className="panel-title-logo" />
           <div>
-            <h1>{action.title}</h1>
+            <h1 tabIndex={-1}>{action.title}</h1>
             <p>{lensObject.label}</p>
           </div>
         </div>
@@ -223,8 +324,32 @@ export function LensPanel(): React.JSX.Element {
             <strong>Remembered as this.</strong>
             <span>{pinnedLensObject?.label ?? lensObject.label}</span>
           </div>
-          <button type="button" onClick={handlePin}>
-            Refresh pin
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button type="button" onClick={handlePin}>
+              Refresh pin
+            </button>
+            <button type="button" onClick={() => setPinnedLensObject(null)}>
+              Clear pin
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {settings !== null && settings.backendPreset !== "openai" ? (
+        <div className="agent-mode-toggle" role="radiogroup" aria-label="Agent mode">
+          <button
+            type="button"
+            aria-pressed={settings.agentMode === "approve"}
+            onClick={() => void handleModeChange("approve")}
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            aria-pressed={settings.agentMode === "yolo"}
+            onClick={() => void handleModeChange("yolo")}
+          >
+            YOLO
           </button>
         </div>
       ) : null}
@@ -249,11 +374,50 @@ export function LensPanel(): React.JSX.Element {
         </button>
       </form>
 
+      {activeRunId !== null ? (
+        <>
+          <button
+            type="button"
+            className="agent-stop-button"
+            onClick={() => void mauzClient.stopAgentRun()}
+          >
+            <Square aria-hidden="true" size={12} /> Stop
+          </button>
+          <div className="agent-activity">
+            <span className="agent-activity-dot" aria-hidden="true" />
+            <span className="agent-activity-label">
+              {runActivities[runActivities.length - 1]?.label ?? "Working…"}
+            </span>
+            {runActivities.length > 0 ? (
+              <button
+                type="button"
+                className="agent-activity-count"
+                aria-expanded={activityExpanded}
+                onClick={() => setActivityExpanded((v) => !v)}
+              >
+                {runActivities.length} {runActivities.length === 1 ? "step" : "steps"}
+              </button>
+            ) : null}
+            {activityExpanded ? (
+              <ul className="agent-activity-list" aria-label="Activity history">
+                {runActivities.map((activity) => (
+                  <li key={activity.seq}>{activity.label}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </>
+      ) : null}
+
       <div
         className="answer-area lens-answer-area"
         data-empty={askError === null && askAnswer === null}
         aria-live="polite"
+        aria-busy={askLoading}
       >
+        {approvalRequest !== null ? (
+          <ApprovalCard description={approvalRequest.description} onChoice={handleApprovalChoice} />
+        ) : null}
         {askError !== null ? <p className="ask-error">{askError}</p> : null}
         {askAnswer !== null ? (
           <>
@@ -263,8 +427,47 @@ export function LensPanel(): React.JSX.Element {
             <FormattedAnswer answer={askAnswer} />
           </>
         ) : null}
-        {askError === null && askAnswer === null ? <p className="ask-empty">{action.emptyState}</p> : null}
+        {askError === null && askAnswer === null && !askLoading ? (
+          <p className="ask-empty">{action.emptyState}</p>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+type ApprovalCardProps = {
+  description: string;
+  onChoice: (choice: "once" | "session" | "always" | "deny") => void;
+};
+
+function ApprovalCard({ description, onChoice }: ApprovalCardProps): React.JSX.Element {
+  const risk = classifyApprovalRisk(description);
+
+  return (
+    <div
+      className="agent-approval"
+      role="alertdialog"
+      aria-label="Agent approval request"
+      data-risk={risk}
+    >
+      <p className="agent-approval-description">
+        <ShieldAlert aria-hidden="true" size={14} />
+        {description}
+      </p>
+      <div className="agent-approval-primary">
+        <button type="button" className="agent-approval-allow" onClick={() => onChoice("once")}>
+          Allow once
+        </button>
+        <button type="button" className="agent-approval-deny" onClick={() => onChoice("deny")}>
+          Deny
+        </button>
+      </div>
+      <button type="button" className="agent-approval-secondary" onClick={() => onChoice("session")}>
+        Allow for session
+      </button>
+      <button type="button" className="agent-approval-tertiary" onClick={() => onChoice("always")}>
+        Always allow <small>won&apos;t ask again</small>
+      </button>
+    </div>
   );
 }

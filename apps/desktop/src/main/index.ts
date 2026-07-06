@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { MauzSettings, MauzSettingsUpdate } from "@mauzai/shared";
+import { DEFAULT_HERMES_BASE_URL, IPC_CHANNELS, type MauzSettings, type MauzSettingsUpdate, type PermissionError } from "@mauzai/shared";
+import { AgentRunBridge } from "./agent/AgentRunBridge";
 import { ChatHistoryService } from "./chat/ChatHistoryService";
 import { ContextCollector } from "./context/ContextCollector";
 import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
@@ -56,10 +57,22 @@ async function bootstrap(): Promise<void> {
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
+  const agentRunBridge = new AgentRunBridge({
+    getPopoverWebContents: () => popover?.getWebContents() ?? null,
+    showPopover: () => {
+      void popover?.showAtLastAnchor({ notifyActivation: false, preserveSize: true });
+    }
+  });
+
   popover = new PopoverWindowController({
     preloadPath,
     rendererFile,
     iconPath: appIconPath,
+    onHide: (reason) => {
+      if (reason === "explicit") {
+        void agentRunBridge.stopActiveRun();
+      }
+    },
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
@@ -70,7 +83,8 @@ async function bootstrap(): Promise<void> {
 
   const localApiToken = randomUUID();
   const launchedApi = await launchLocalApi({
-    authToken: localApiToken
+    authToken: localApiToken,
+    runHooks: agentRunBridge.runHooks
   });
 
   if (isShuttingDown()) {
@@ -91,7 +105,8 @@ async function bootstrap(): Promise<void> {
     api: apiHandle,
     localApiToken,
     getSettings: () => settingsService!.get(),
-    updateSettings: applySettingsUpdate
+    updateSettings: applySettingsUpdate,
+    agentRunBridge
   });
   startInputProviders(initialSettings);
   await desktopWindow.show();
@@ -142,6 +157,41 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   process.env.OPENAI_REALTIME_VOICE = settings.realtimeVoice;
   process.env.OPENAI_REALTIME_REASONING_EFFORT = settings.realtimeReasoningEffort;
   process.env.OPENAI_INCLUDE_FULL_SCREENSHOT = settings.includeFullScreenshot ? "true" : "false";
+
+  const backendBaseUrl = resolveBackendBaseUrl(settings);
+
+  if (backendBaseUrl === undefined) {
+    delete process.env.MAUZ_BACKEND_BASE_URL;
+  } else {
+    process.env.MAUZ_BACKEND_BASE_URL = backendBaseUrl;
+  }
+
+  if (settings.backendPreset === "openai") {
+    delete process.env.MAUZ_BACKEND_PRESET;
+  } else {
+    process.env.MAUZ_BACKEND_PRESET = settings.backendPreset;
+  }
+
+  process.env.MAUZ_AGENT_MODE = settings.agentMode;
+  process.env.MAUZ_INSTALL_ID = settings.installId;
+}
+
+function resolveBackendBaseUrl(settings: MauzRuntimeSettings): string | undefined {
+  if (settings.backendPreset === "openai") {
+    return undefined;
+  }
+
+  const configured = settings.backendBaseUrl.trim();
+
+  if (configured.length > 0) {
+    return configured;
+  }
+
+  if (settings.backendPreset === "hermes") {
+    return DEFAULT_HERMES_BASE_URL;
+  }
+
+  return undefined;
 }
 
 function configureAppIdentity(iconPath: string): void {
@@ -212,7 +262,7 @@ function startInputProviders(settings: MauzSettings): void {
     });
     provider.onPermissionError((error) => {
       popover?.hide();
-      showPermissionError(error.message);
+      showPermissionError(error);
     });
     provider.start();
   }
@@ -226,6 +276,8 @@ function restartInputProviders(settings: MauzSettings): void {
     provider.stop();
   }
 
+  // Clear dedup so recurring permission errors re-notify after a provider restart.
+  shownPermissionMessages.clear();
   startInputProviders(settings);
 }
 
@@ -336,13 +388,21 @@ function showBootstrapError(error: unknown): void {
   );
 }
 
-function showPermissionError(message: string): void {
+function showPermissionError(error: PermissionError): void {
+  const { message } = error;
+
   if (shownPermissionMessages.has(message)) {
     return;
   }
 
   shownPermissionMessages.add(message);
   dialog.showErrorBox("Mauz permission needed", message);
+
+  const webContents = popover?.getWebContents();
+
+  if (webContents !== null && webContents?.isDestroyed() === false) {
+    webContents.send(IPC_CHANNELS.permissionError, error);
+  }
 }
 
 function reportShutdownError(action: string, error: unknown): void {

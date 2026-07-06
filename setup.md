@@ -42,6 +42,46 @@ export OPENAI_CHAT_TITLE_MODEL="gpt-5.4-nano"
 export OPENAI_REALTIME_MODEL="gpt-realtime-2"
 ```
 
+## Hermes Agent Backend
+
+Mauz's Ask path can attach to a [hermes-agent](https://github.com/NousResearch/hermes-agent) gateway instead of calling OpenAI directly. This turns Ask into a full agent interaction: persistent memory, session continuity, and the gateway's tools (web, browser, code execution, MCP).
+
+In Settings, the Backend section offers three providers:
+
+- `openai` (default): today's behavior — direct OpenAI Responses calls, no gateway.
+- `hermes`: the hermes-agent api_server gateway, default `http://localhost:8642/v1`.
+- `custom`: any OpenAI-compatible base URL.
+
+To run the gateway, enable the API server platform in your hermes-agent install and start its gateway:
+
+```bash
+export API_SERVER_ENABLED=true    # serves http://127.0.0.1:8642/v1
+```
+
+Mauz detects gateway capabilities via `GET {base}/capabilities` and then sends session headers automatically: a per-conversation session id (conversation continuity) and, when a backend API key is configured, a per-install session key for long-term memory scoping. Plain OpenAI-compatible endpoints without a capabilities route keep the exact non-agentic behavior.
+
+Optional environment settings:
+
+```bash
+export MAUZ_BACKEND_BASE_URL="http://localhost:8642/v1"  # overrides the default for the selected preset
+export MAUZ_BACKEND_API_KEY="..."   # only needed when the gateway has API-key auth; also enables memory scoping
+```
+
+### Agent modes
+
+When the connected gateway advertises run support, Ask runs through the gateway's agent-run lifecycle and the popover exposes two modes plus a Stop control:
+
+- **Approve**: each tool action the gateway gates surfaces an approval card in the popover with four choices — Allow once, Allow for session, Always allow, Deny. Closing the popover stops the in-flight run.
+- **YOLO**: Mauz auto-approves every gated action (no card). The gateway's own hard floor of never-allowed destructive patterns still applies server-side.
+
+Switch modes from the toggle in the Ask panel (shown only for non-OpenAI backends) or set the default with:
+
+```bash
+export MAUZ_AGENT_MODE="approve"   # or "yolo"
+```
+
+Note: the gateway may also gate actions through its own `approvals.mode` config; Mauz's Approve/YOLO choice governs how the client responds to the approval requests the gateway raises.
+
 ## macOS Permissions
 
 MauzAI works best with these permissions:
@@ -51,6 +91,13 @@ MauzAI works best with these permissions:
 - Microphone: required for Talk mode.
 
 Open System Settings, then Privacy & Security, and grant permissions to MauzAI, Electron, or the built local app depending on how you launch it.
+
+### After updating or reinstalling
+
+MauzAI is ad-hoc signed, so every rebuild changes the code hash and macOS silently drops previously granted permissions. After updating or reinstalling the app, re-grant the following in **System Settings → Privacy & Security**:
+
+- **Accessibility** — enable MauzInputAgent (required for mouse-shake).
+- **Screen Recording** — enable MauzAI (required for screen context).
 
 ## Run Locally
 

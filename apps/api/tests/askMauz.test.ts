@@ -1,7 +1,20 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
-import { buildContextText, buildResponseContent } from "../src/openai/askMauz";
+import { askMauz, buildContextText, buildResponseContent } from "../src/openai/askMauz";
 import { MAUZ_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
+import { clearBackendCapabilitiesCache } from "../src/backend/capabilities";
+import { BackendUnreachableError, MissingOpenAIKeyError } from "../src/errors";
+
+function buildRequest(): AskMauzRequest {
+  return {
+    question: "What is this?",
+    context: {
+      timestamp: new Date("2026-05-13T20:00:00.000Z").toISOString(),
+      platform: "darwin",
+      cursor: { x: 100, y: 200 }
+    }
+  };
+}
 
 const requestWithPointerContext: AskMauzRequest = {
   question: "What is this?",
@@ -124,5 +137,103 @@ describe("Ask Mauz prompt payload", () => {
     expect(contextText).toContain("Previous conversation:");
     expect(contextText).toContain("User: What is this warning?");
     expect(contextText).toContain("Mauz: It is a permissions warning.");
+  });
+});
+
+describe("askMauz with configurable backend", () => {
+  beforeEach(() => {
+    vi.stubEnv("MAUZ_BACKEND_API_KEY", "");
+    vi.stubEnv("MAUZ_BACKEND_BASE_URL", "");
+    vi.stubEnv("MAUZ_INSTALL_ID", "");
+    vi.stubEnv("OPENAI_API_KEY", "");
+  });
+
+  afterEach(() => {
+    clearBackendCapabilitiesCache();
+    vi.unstubAllEnvs();
+  });
+
+  it("sends session headers when a gateway backend is detected", async () => {
+    const create = vi.fn().mockResolvedValue({ output_text: "ok", usage: undefined });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          features: {
+            session_continuity_header: "X-Hermes-Session-Id",
+            session_key_header: "X-Hermes-Session-Key",
+            run_submission: true,
+            run_events_sse: true,
+            run_approval_response: true
+          }
+        }),
+        { status: 200 }
+      )
+    );
+    const response = await askMauz(
+      { ...buildRequest(), sessionId: "conv-1" },
+      {
+        client: { responses: { create } } as never,
+        baseUrl: "http://localhost:8642/v1",
+        backendApiKey: "gw-key",
+        installId: "install-uuid",
+        fetchImpl: fetchMock
+      }
+    );
+    expect(response.answer).toBe("ok");
+    const requestOptions = create.mock.calls[0]?.[1];
+    expect(requestOptions?.headers).toMatchObject({
+      "X-Hermes-Session-Id": "conv-1",
+      "X-Hermes-Session-Key": "install-uuid"
+    });
+  });
+
+  it("omits the session key header without a backend api key", async () => {
+    const create = vi.fn().mockResolvedValue({ output_text: "ok" });
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          features: {
+            session_continuity_header: "X-Hermes-Session-Id",
+            session_key_header: "X-Hermes-Session-Key"
+          }
+        }),
+        { status: 200 }
+      )
+    );
+    await askMauz(
+      { ...buildRequest(), sessionId: "conv-1" },
+      {
+        client: { responses: { create } } as never,
+        baseUrl: "http://localhost:8642/v1",
+        installId: "install-uuid",
+        fetchImpl: fetchMock
+      }
+    );
+    const requestOptions = create.mock.calls[0]?.[1];
+    expect(requestOptions?.headers).not.toHaveProperty("X-Hermes-Session-Key");
+  });
+
+  it("does not require an OpenAI key when a custom backend is configured", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
+    // OPENAI_API_KEY is already cleared by beforeEach; no client or apiKey provided
+    const error = await askMauz(buildRequest(), {
+      baseUrl: "http://127.0.0.1:9/v1",
+      fetchImpl: fetchMock
+    }).catch((e: unknown) => e);
+    // Must have passed the MissingOpenAIKeyError guard and attempted the backend call
+    expect(error).toBeInstanceOf(BackendUnreachableError);
+    expect(error).not.toBeInstanceOf(MissingOpenAIKeyError);
+  });
+
+  it("raises BackendUnreachableError when the backend connection fails", async () => {
+    const create = vi.fn().mockRejectedValue(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
+    const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
+    await expect(
+      askMauz(buildRequest(), {
+        client: { responses: { create } } as never,
+        baseUrl: "http://localhost:8642/v1",
+        fetchImpl: fetchMock
+      })
+    ).rejects.toThrow(/localhost:8642 is not responding/);
   });
 });

@@ -45,9 +45,15 @@ type ScreenLike = {
   getDisplayNearestPoint(point: Point): DisplayLike;
 };
 
+type SystemPreferencesLike = {
+  getMediaAccessStatus(mediaType: "screen"): string;
+};
+
 export type ScreenshotServiceDeps = {
   desktopCapturer: DesktopCapturerLike;
   screen: ScreenLike;
+  /** Present on macOS only; used to pre-check Screen Recording permission. */
+  systemPreferences?: SystemPreferencesLike;
 };
 
 export class ScreenshotCaptureError extends Error {
@@ -108,6 +114,20 @@ export class ScreenshotService {
     source: DesktopCapturerSourceLike;
   }> {
     const deps = this.deps ?? (await loadElectronDeps());
+
+    // On macOS, desktopCapturer.getSources may silently return a blank image when
+    // Screen Recording permission is denied rather than throwing.  Pre-check so
+    // the existing ScreenshotCaptureError path (and the UI note) is exercised.
+    if (deps.systemPreferences !== undefined) {
+      const status = deps.systemPreferences.getMediaAccessStatus("screen");
+
+      if (status === "denied" || status === "restricted") {
+        throw new ScreenshotCaptureError(
+          "Mauz needs Screen Recording permission to capture screenshot context."
+        );
+      }
+    }
+
     const display = deps.screen.getDisplayNearestPoint(point);
     const thumbnailSize = getThumbnailSize(display);
     const sources = await getSources(deps, thumbnailSize);
@@ -253,6 +273,7 @@ async function loadElectronDeps(): Promise<ScreenshotServiceDeps> {
 
   return {
     desktopCapturer: electron.desktopCapturer,
-    screen: electron.screen
+    screen: electron.screen,
+    ...(process.platform === "darwin" ? { systemPreferences: electron.systemPreferences } : {})
   };
 }

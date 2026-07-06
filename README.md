@@ -36,6 +36,10 @@ We hope people build integrations and customize Mauz to their own liking.
 
 We will also work on supporting lightweight local models, so Mauz can experiment with simpler, lower-latency, and more private AI interactions where that makes sense.
 
+## Agent Backends
+
+Ask can run against a [hermes-agent](https://github.com/NousResearch/hermes-agent) gateway instead of calling OpenAI directly, turning it into a full agent with persistent memory, session continuity, and tools (web, browser, code execution, MCP, computer use). Pick the backend in Settings; when the gateway supports agent runs, the popover adds Approve/YOLO modes and a Stop control. OpenAI remains the default and existing behavior is unchanged. See [setup.md](setup.md#hermes-agent-backend).
+
 ## Current Preview
 
 The current macOS preview includes:

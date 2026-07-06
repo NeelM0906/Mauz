@@ -23,6 +23,76 @@ type TestSecretCodec = {
 };
 
 describe("SettingsService", () => {
+  it("defaults backend settings and generates a stable installId", async () => {
+    const service = createService();
+    const runtime = await service.getRuntime();
+    expect(runtime.backendPreset).toBe("openai");
+    expect(runtime.backendBaseUrl).toBe("");
+    expect(runtime.agentMode).toBe("approve");
+    expect(runtime.installId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("persists installId across loads once written", async () => {
+    const files = new Map<string, string>();
+    const service = createServiceWithFiles(files);
+    const first = (await service.getRuntime()).installId;
+    await service.update({ askModel: "gpt-5.4-mini" }); // forces a write
+    const service2 = createServiceWithFiles(files);
+    expect((await service2.getRuntime()).installId).toBe(first);
+  });
+
+  it("updates backend settings", async () => {
+    const service = createService();
+    const settings = await service.update({
+      backendPreset: "hermes",
+      backendBaseUrl: "http://localhost:8642/v1",
+      agentMode: "yolo"
+    });
+    expect(settings.backendPreset).toBe("hermes");
+    expect(settings.agentMode).toBe("yolo");
+  });
+
+  it("updates backend settings with hermes preset", async () => {
+    const service = createService();
+    const settings = await service.update({
+      backendPreset: "hermes",
+      backendBaseUrl: "",
+      agentMode: "approve"
+    });
+    expect(settings.backendPreset).toBe("hermes");
+  });
+
+  it("migrates unknown legacy preset to hermes", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        backendPreset: "hermes-gateway",
+        backendBaseUrl: "",
+        agentMode: "approve"
+      })
+    });
+    const settings = await service.get();
+    expect(settings.backendPreset).toBe("hermes");
+    expect(settings.agentMode).toBe("approve");
+    expect(settings.nativeShakeEnabled).toBe(DEFAULT_SETTINGS.nativeShakeEnabled);
+  });
+
+  it("migrates unknown legacy preset and rewrites the file", async () => {
+    const { service, writes } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        backendPreset: "hermes-gateway",
+        backendBaseUrl: "",
+        agentMode: "approve"
+      })
+    });
+    await service.get();
+    expect(writes.length).toBeGreaterThan(0);
+    expect(writes.at(-1)).toContain('"hermes"');
+    expect(writes.at(-1)).not.toContain("hermes-gateway");
+  });
+
+
   it("removes legacy plaintext API keys from stored settings", async () => {
     const { service, writes } = createSettingsService({
       settingsJson: JSON.stringify({
@@ -169,6 +239,51 @@ describe("SettingsService", () => {
     });
   });
 
+  it("serializes concurrent updates so neither change is lost", async () => {
+    const files = new Map<string, string>();
+    files.set(SHARED_SETTINGS_PATH, JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      backendPreset: "openai",
+      backendBaseUrl: "",
+      agentMode: "approve",
+      installId: "aabbccdd-1122-3344-5566-778899aabbcc"
+    }));
+
+    const service = createServiceWithFiles(files);
+
+    await Promise.all([
+      service.update({ askModel: "gpt-concurrent-a" }),
+      service.update({ agentMode: "yolo" })
+    ]);
+
+    const service2 = createServiceWithFiles(files);
+    const runtime = await service2.getRuntime();
+    expect(runtime.askModel).toBe("gpt-concurrent-a");
+    expect(runtime.agentMode).toBe("yolo");
+  });
+
+  it("preserves installId from a settings file with malformed JSON", async () => {
+    const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
+    const { service } = createSettingsService({
+      settingsJson: `not valid json but "installId": "${knownId}" is in here`
+    });
+    const runtime = await service.getRuntime();
+    expect(runtime.installId).toBe(knownId);
+  });
+
+  it("preserves installId when valid JSON fails settings schema validation", async () => {
+    const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        installId: knownId,
+        backendPreset: "not-a-valid-preset"
+      })
+    });
+    const runtime = await service.getRuntime();
+    expect(runtime.installId).toBe(knownId);
+  });
+
   it("migrates unsupported account auth mode settings to the API key path", async () => {
     const accountSettings = createSettingsService({
       settingsJson: JSON.stringify({
@@ -194,6 +309,42 @@ describe("SettingsService", () => {
   });
 });
 
+const SHARED_SETTINGS_PATH = "/tmp/mauz-settings-shared-test.json";
+
+function createService(): SettingsService {
+  return new SettingsService({
+    settingsPath: join(tmpdir(), `mauz-settings-${randomUUID()}.json`),
+    readTextFile: async () => {
+      throw new Error("no file");
+    },
+    writeTextFile: async () => {},
+    renameFile: async () => {},
+    ensureDirectory: async () => {}
+  });
+}
+
+function createServiceWithFiles(files: Map<string, string>): SettingsService {
+  return new SettingsService({
+    settingsPath: SHARED_SETTINGS_PATH,
+    readTextFile: async (path) => {
+      const content = files.get(path);
+      if (content === undefined) throw new Error(`File not found: ${path}`);
+      return content;
+    },
+    writeTextFile: async (path, value) => {
+      files.set(path, value);
+    },
+    renameFile: async (from, to) => {
+      const content = files.get(from);
+      if (content !== undefined) {
+        files.delete(from);
+        files.set(to, content);
+      }
+    },
+    ensureDirectory: async () => {}
+  });
+}
+
 function createSettingsService({
   environmentApiKey = null,
   settingsJson,
@@ -211,6 +362,10 @@ function createSettingsService({
     readTextFile: async () => writes.at(-1) ?? settingsJson,
     writeTextFile: async (_path, value) => {
       writes.push(value);
+    },
+    renameFile: async () => {
+      // In tests the readTextFile already returns the latest write regardless of
+      // the final path, so a no-op rename is sufficient.
     },
     ensureDirectory: async () => {},
     ...(secretCodec === undefined ? {} : { secretCodec })

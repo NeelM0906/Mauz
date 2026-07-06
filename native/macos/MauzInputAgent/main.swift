@@ -35,8 +35,10 @@ func emitPermissionError() {
     )
 }
 
+// Fix 3: Support MAUZ_AX_PROMPT=0 to skip the system prompt on automatic retries.
+let promptForAccessibility = ProcessInfo.processInfo.environment["MAUZ_AX_PROMPT"] != "0"
 let accessibilityOptions = [
-    kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+    kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: promptForAccessibility
 ] as CFDictionary
 
 guard AXIsProcessTrustedWithOptions(accessibilityOptions) else {
@@ -46,7 +48,19 @@ guard AXIsProcessTrustedWithOptions(accessibilityOptions) else {
 
 let eventMask = CGEventMask(1 << CGEventType.mouseMoved.rawValue)
 
+// Fix 1: File-scope port so the callback can re-enable the tap when macOS disables it
+// under load (.tapDisabledByTimeout / .tapDisabledByUserInput).
+var eventTapPort: CFMachPort? = nil
+
 let callback: CGEventTapCallBack = { _, type, event, _ in
+    // Re-enable the tap if macOS disabled it due to timeout or user input.
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if let tap = eventTapPort {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
+        return nil
+    }
+
     if type == .mouseMoved {
         let location = event.location
         let sample = MouseMoveEvent(
@@ -72,9 +86,24 @@ guard let eventTap = CGEvent.tapCreate(
     exit(2)
 }
 
+// Set before CFRunLoopRun so the callback can safely read it.
+eventTapPort = eventTap
+
 let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
 CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
 CGEvent.tapEnable(tap: eventTap, enable: true)
+
+// Fix 4: Parent-death watchdog — exit cleanly if Electron is SIGKILLed so the
+// CGEventTap is released and does not linger in the system.
+let parentWatchdog = DispatchSource.makeTimerSource(queue: .main)
+parentWatchdog.schedule(deadline: .now() + 5, repeating: 5)
+parentWatchdog.setEventHandler {
+    if getppid() == 1 {
+        exit(0)
+    }
+}
+parentWatchdog.resume()
+
 CFRunLoopRun()
 
 final class EventOutput {

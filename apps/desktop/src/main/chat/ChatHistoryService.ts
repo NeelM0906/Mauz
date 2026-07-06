@@ -193,7 +193,21 @@ export class ChatHistoryService {
         };
       }
 
-      throw error;
+      // The file exists but is corrupt — back it up and return empty history so
+      // future operations do not fail forever.
+      try {
+        const backupPath = `${this.storagePath}.corrupt-${Date.now()}`;
+        await rename(this.storagePath, backupPath);
+      } catch {
+        // Backup is best-effort; startup and history ops must not be blocked.
+      }
+
+      console.error("Mauz: chat history file was corrupt; starting with empty history.");
+
+      return {
+        version: 1,
+        conversations: []
+      };
     }
   }
 

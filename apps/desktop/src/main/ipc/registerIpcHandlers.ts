@@ -1,5 +1,6 @@
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
+  AgentApprovalResponseSchema,
   AskMauzRequestSchema,
   ChatHistoryContinueRequestSchema,
   ChatHistoryDeleteRequestSchema,
@@ -10,6 +11,7 @@ import {
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
+import type { AgentRunBridge } from "../agent/AgentRunBridge";
 import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
@@ -26,6 +28,7 @@ type RegisterIpcHandlersOptions = {
   localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
+  agentRunBridge: AgentRunBridge;
 };
 
 const HANDLED_IPC_CHANNELS = [
@@ -43,7 +46,9 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.chatHistoryDelete,
   IPC_CHANNELS.chatHistoryClear,
   IPC_CHANNELS.realtimeCreateSession,
-  IPC_CHANNELS.realtimeConnect
+  IPC_CHANNELS.realtimeConnect,
+  IPC_CHANNELS.agentApprovalRespond,
+  IPC_CHANNELS.agentStop
 ] as const;
 
 export function registerIpcHandlers({
@@ -53,7 +58,8 @@ export function registerIpcHandlers({
   api,
   localApiToken,
   getSettings,
-  updateSettings
+  updateSettings,
+  agentRunBridge
 }: RegisterIpcHandlersOptions): void {
   for (const channel of HANDLED_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
@@ -111,7 +117,7 @@ export function registerIpcHandlers({
       throw new Error("Invalid Mauz settings update.");
     }
 
-    return updateSettings(toSettingsUpdate(parsedPayload.data));
+    return updateSettings(parsedPayload.data as MauzSettingsUpdate);
   });
 
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (event, payload: unknown) => {
@@ -169,7 +175,8 @@ export function registerIpcHandlers({
     const response = await submitAskToLocalApi(api, localApiToken, {
       question: request.question,
       context,
-      conversationMessages: conversation.messages
+      conversationMessages: conversation.messages,
+      sessionId: request.id
     });
     const updatedConversation = await chatHistory.appendAskTurn(request.id, {
       question: request.question,
@@ -206,6 +213,17 @@ export function registerIpcHandlers({
   ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (event, payload: unknown) => {
     assertTrustedSurface(event, ["popover"]);
     return connectRealtimeToLocalApi(api, localApiToken, payload);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentApprovalRespond, (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
+    const parsed = AgentApprovalResponseSchema.parse(payload);
+    agentRunBridge.respondToApproval(parsed.approvalId, parsed.choice);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentStop, async (event) => {
+    assertTrustedSurface(event, ["popover"]);
+    await agentRunBridge.stopActiveRun();
   });
 }
 
@@ -299,74 +317,3 @@ function buildFallbackChatTitle(question: string): string {
   return words.length > 0 ? words.join(" ") : "Untitled Mauz Chat";
 }
 
-function toSettingsUpdate(parsedUpdate: {
-  nativeShakeEnabled?: boolean | undefined;
-  devHotkeyEnabled?: boolean | undefined;
-  shakeSensitivity?: MauzSettings["shakeSensitivity"] | undefined;
-  openAiAuthMode?: MauzSettings["openAiAuthMode"] | undefined;
-  openAiAuthDisconnected?: MauzSettings["openAiAuthDisconnected"] | undefined;
-  askModel?: string | undefined;
-  chatTitleModel?: string | undefined;
-  realtimeModel?: string | undefined;
-  realtimeVoice?: string | undefined;
-  realtimeReasoningEffort?: MauzSettings["realtimeReasoningEffort"] | undefined;
-  includeFullScreenshot?: boolean | undefined;
-  openAiApiKey?: string | null | undefined;
-  clearOpenAiApiKey?: boolean | undefined;
-}): MauzSettingsUpdate {
-  const update: MauzSettingsUpdate = {};
-
-  if (parsedUpdate.nativeShakeEnabled !== undefined) {
-    update.nativeShakeEnabled = parsedUpdate.nativeShakeEnabled;
-  }
-
-  if (parsedUpdate.devHotkeyEnabled !== undefined) {
-    update.devHotkeyEnabled = parsedUpdate.devHotkeyEnabled;
-  }
-
-  if (parsedUpdate.shakeSensitivity !== undefined) {
-    update.shakeSensitivity = parsedUpdate.shakeSensitivity;
-  }
-
-  if (parsedUpdate.openAiAuthMode !== undefined) {
-    update.openAiAuthMode = parsedUpdate.openAiAuthMode;
-  }
-
-  if (parsedUpdate.openAiAuthDisconnected !== undefined) {
-    update.openAiAuthDisconnected = parsedUpdate.openAiAuthDisconnected;
-  }
-
-  if (parsedUpdate.askModel !== undefined) {
-    update.askModel = parsedUpdate.askModel;
-  }
-
-  if (parsedUpdate.chatTitleModel !== undefined) {
-    update.chatTitleModel = parsedUpdate.chatTitleModel;
-  }
-
-  if (parsedUpdate.realtimeModel !== undefined) {
-    update.realtimeModel = parsedUpdate.realtimeModel;
-  }
-
-  if (parsedUpdate.realtimeVoice !== undefined) {
-    update.realtimeVoice = parsedUpdate.realtimeVoice;
-  }
-
-  if (parsedUpdate.realtimeReasoningEffort !== undefined) {
-    update.realtimeReasoningEffort = parsedUpdate.realtimeReasoningEffort;
-  }
-
-  if (parsedUpdate.includeFullScreenshot !== undefined) {
-    update.includeFullScreenshot = parsedUpdate.includeFullScreenshot;
-  }
-
-  if (parsedUpdate.openAiApiKey !== undefined) {
-    update.openAiApiKey = parsedUpdate.openAiApiKey;
-  }
-
-  if (parsedUpdate.clearOpenAiApiKey !== undefined) {
-    update.clearOpenAiApiKey = parsedUpdate.clearOpenAiApiKey;
-  }
-
-  return update;
-}

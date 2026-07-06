@@ -81,6 +81,7 @@ export type AskMauzRequest = {
   question: string;
   context: MauzDesktopContext;
   conversationMessages?: ChatMessage[] | undefined;
+  sessionId?: string | undefined;
 };
 
 export type AskMauzResponse = {
@@ -185,6 +186,9 @@ export type RealtimeReasoningEffort = "low" | "medium" | "high";
 export type OpenAiAuthMode = "api-key";
 export type OpenAiCredentialSource = "none" | "environment" | "saved";
 
+export type BackendPreset = "openai" | "hermes" | "custom";
+export type AgentMode = "approve" | "yolo";
+
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
   devHotkeyEnabled: boolean;
@@ -199,6 +203,9 @@ export type MauzSettings = {
   realtimeReasoningEffort: RealtimeReasoningEffort;
   includeFullScreenshot: boolean;
   apiKeyConfigured: boolean;
+  backendPreset: BackendPreset;
+  backendBaseUrl: string;
+  agentMode: AgentMode;
 };
 
 export type MauzSettingsUpdate = Partial<
@@ -221,6 +228,23 @@ export type MouseMoveSample = {
   y: number;
   ts: number;
   buttons?: number | undefined;
+};
+
+export type AgentApprovalPayload = {
+  approvalId: string;
+  runId: string;
+  description: string;
+};
+
+export type AgentRunStatePayload = {
+  runId: string | null;
+};
+
+export type AgentRunActivityPayload = {
+  runId: string;
+  kind: "tool.started" | "tool.completed" | "reasoning";
+  tool?: string | undefined;
+  label: string;
 };
 
 export type MauzBridge = {
@@ -252,5 +276,12 @@ export type MauzBridge = {
   events: {
     onActivation(callback: () => void): () => void;
     onPermissionError(callback: (error: PermissionError) => void): () => void;
+  };
+  agent: {
+    respondApproval(payload: unknown): Promise<void>;
+    stop(): Promise<void>;
+    onApprovalRequest(callback: (payload: AgentApprovalPayload) => void): () => void;
+    onRunState(callback: (payload: AgentRunStatePayload) => void): () => void;
+    onRunActivity(callback: (payload: AgentRunActivityPayload) => void): () => void;
   };
 };
