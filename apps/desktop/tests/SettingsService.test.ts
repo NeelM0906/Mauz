@@ -26,7 +26,7 @@ describe("SettingsService", () => {
   it("defaults backend settings and generates a stable installId", async () => {
     const service = createService();
     const runtime = await service.getRuntime();
-    expect(runtime.backendPreset).toBe("openai");
+    expect(runtime.assistantMode).toBe("simple");
     expect(runtime.backendBaseUrl).toBe("");
     expect(runtime.agentMode).toBe("approve");
     expect(runtime.installId).toMatch(/^[0-9a-f-]{36}$/);
@@ -41,28 +41,70 @@ describe("SettingsService", () => {
     expect((await service2.getRuntime()).installId).toBe(first);
   });
 
-  it("updates backend settings", async () => {
+  it("updates assistant mode to agentic", async () => {
     const service = createService();
     const settings = await service.update({
-      backendPreset: "hermes",
+      assistantMode: "agentic",
       backendBaseUrl: "http://localhost:8642/v1",
       agentMode: "yolo"
     });
-    expect(settings.backendPreset).toBe("hermes");
+    expect(settings.assistantMode).toBe("agentic");
     expect(settings.agentMode).toBe("yolo");
   });
 
-  it("updates backend settings with hermes preset", async () => {
+  it("updates assistant mode to agentic with empty gateway URL", async () => {
     const service = createService();
     const settings = await service.update({
-      backendPreset: "hermes",
+      assistantMode: "agentic",
       backendBaseUrl: "",
       agentMode: "approve"
     });
-    expect(settings.backendPreset).toBe("hermes");
+    expect(settings.assistantMode).toBe("agentic");
   });
 
-  it("migrates unknown legacy preset to hermes", async () => {
+  it("migrates legacy backendPreset 'openai' to assistantMode 'simple'", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        backendPreset: "openai",
+        backendBaseUrl: "",
+        agentMode: "approve"
+      })
+    });
+    const settings = await service.get();
+    expect(settings.assistantMode).toBe("simple");
+    expect(settings.agentMode).toBe("approve");
+    expect(settings.nativeShakeEnabled).toBe(DEFAULT_SETTINGS.nativeShakeEnabled);
+  });
+
+  it("migrates legacy backendPreset 'hermes' to assistantMode 'agentic'", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        backendPreset: "hermes",
+        backendBaseUrl: "",
+        agentMode: "approve"
+      })
+    });
+    const settings = await service.get();
+    expect(settings.assistantMode).toBe("agentic");
+  });
+
+  it("migrates legacy backendPreset 'custom' to assistantMode 'agentic' and preserves backendBaseUrl", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        backendPreset: "custom",
+        backendBaseUrl: "https://my-gateway.example.com/v1",
+        agentMode: "approve"
+      })
+    });
+    const settings = await service.get();
+    expect(settings.assistantMode).toBe("agentic");
+    expect(settings.backendBaseUrl).toBe("https://my-gateway.example.com/v1");
+  });
+
+  it("migrates unknown legacy backendPreset value to assistantMode 'simple'", async () => {
     const { service } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
@@ -72,24 +114,37 @@ describe("SettingsService", () => {
       })
     });
     const settings = await service.get();
-    expect(settings.backendPreset).toBe("hermes");
+    expect(settings.assistantMode).toBe("simple");
     expect(settings.agentMode).toBe("approve");
-    expect(settings.nativeShakeEnabled).toBe(DEFAULT_SETTINGS.nativeShakeEnabled);
   });
 
-  it("migrates unknown legacy preset and rewrites the file", async () => {
+  it("migrates invalid stored assistantMode to 'simple'", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        assistantMode: "not-a-valid-mode",
+        backendBaseUrl: "",
+        agentMode: "approve"
+      })
+    });
+    const settings = await service.get();
+    expect(settings.assistantMode).toBe("simple");
+  });
+
+  it("legacy backendPreset migration rewrites the file in new assistantMode format", async () => {
     const { service, writes } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        backendPreset: "hermes-gateway",
+        backendPreset: "hermes",
         backendBaseUrl: "",
         agentMode: "approve"
       })
     });
     await service.get();
     expect(writes.length).toBeGreaterThan(0);
-    expect(writes.at(-1)).toContain('"hermes"');
-    expect(writes.at(-1)).not.toContain("hermes-gateway");
+    expect(writes.at(-1)).toContain('"assistantMode"');
+    expect(writes.at(-1)).toContain('"agentic"');
+    expect(writes.at(-1)).not.toContain("backendPreset");
   });
 
 
@@ -243,7 +298,7 @@ describe("SettingsService", () => {
     const files = new Map<string, string>();
     files.set(SHARED_SETTINGS_PATH, JSON.stringify({
       ...DEFAULT_SETTINGS,
-      backendPreset: "openai",
+      assistantMode: "simple",
       backendBaseUrl: "",
       agentMode: "approve",
       installId: "aabbccdd-1122-3344-5566-778899aabbcc"
@@ -271,7 +326,7 @@ describe("SettingsService", () => {
     expect(runtime.installId).toBe(knownId);
   });
 
-  it("preserves installId when valid JSON fails settings schema validation", async () => {
+  it("preserves installId when stored settings contain a legacy backendPreset field", async () => {
     const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
     const { service } = createSettingsService({
       settingsJson: JSON.stringify({

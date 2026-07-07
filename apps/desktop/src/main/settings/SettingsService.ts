@@ -7,7 +7,7 @@ import {
   MauzSettingsUpdateSchema,
   readBooleanEnv,
   type AgentMode,
-  type BackendPreset,
+  type AssistantMode,
   type MauzSettings,
   type MauzSettingsUpdate,
   type OpenAiCredentialSource
@@ -110,7 +110,7 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
       applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
       applyDefinedSetting(nextSettings, "includeFullScreenshot", parsedUpdate.includeFullScreenshot);
-      applyDefinedSetting(nextSettings, "backendPreset", parsedUpdate.backendPreset);
+      applyDefinedSetting(nextSettings, "assistantMode", parsedUpdate.assistantMode);
       applyDefinedSetting(nextSettings, "backendBaseUrl", parsedUpdate.backendBaseUrl);
       applyDefinedSetting(nextSettings, "agentMode", parsedUpdate.agentMode);
       applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
@@ -245,11 +245,7 @@ function getDefaultSettings(): StoredMauzSettings {
         ? process.env.OPENAI_REALTIME_REASONING_EFFORT
         : DEFAULT_REALTIME_REASONING_EFFORT,
     includeFullScreenshot: readBooleanEnv(process.env.OPENAI_INCLUDE_FULL_SCREENSHOT, false),
-    backendPreset:
-      process.env.MAUZ_BACKEND_PRESET === "hermes" ||
-      process.env.MAUZ_BACKEND_PRESET === "custom"
-        ? (process.env.MAUZ_BACKEND_PRESET as BackendPreset)
-        : "openai",
+    assistantMode: process.env.MAUZ_BACKEND_PRESET === "hermes" ? ("agentic" as AssistantMode) : ("simple" as AssistantMode),
     backendBaseUrl: process.env.MAUZ_BACKEND_BASE_URL?.trim() ?? "",
     agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? ("yolo" as AgentMode) : "approve",
     installId: randomUUID()
@@ -263,15 +259,29 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
 
   const parsedRecord = parsed as Record<string, unknown>;
   const defaults = getDefaultSettings();
-  // Legacy migration: normalize any unrecognized preset to "hermes"
-  const validPresets = new Set(["openai", "hermes", "custom"]);
-  const migratedRecord =
-    typeof parsedRecord.backendPreset === "string" && !validPresets.has(parsedRecord.backendPreset)
-      ? { ...parsedRecord, backendPreset: "hermes" }
-      : parsedRecord;
+
+  // Resolve assistantMode: new format first, then legacy backendPreset migration.
+  let assistantMode: AssistantMode;
+  if (
+    typeof parsedRecord.assistantMode === "string" &&
+    (parsedRecord.assistantMode === "simple" || parsedRecord.assistantMode === "agentic")
+  ) {
+    assistantMode = parsedRecord.assistantMode;
+  } else if (typeof parsedRecord.backendPreset === "string") {
+    // Legacy migration: "openai" → "simple"; "hermes"/"custom" → "agentic"; unknown → "simple".
+    assistantMode =
+      parsedRecord.backendPreset === "hermes" || parsedRecord.backendPreset === "custom"
+        ? "agentic"
+        : "simple";
+  } else {
+    // Invalid assistantMode value or missing entirely: use default.
+    assistantMode = defaults.assistantMode;
+  }
+
   const candidate = {
     ...defaults,
-    ...migratedRecord,
+    ...parsedRecord,
+    assistantMode,
     apiKeyConfigured: false,
     openAiCredentialSource: "none"
   };
@@ -299,7 +309,7 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeVoice: publicSettings.data.realtimeVoice,
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
     includeFullScreenshot: publicSettings.data.includeFullScreenshot,
-    backendPreset: publicSettings.data.backendPreset,
+    assistantMode: publicSettings.data.assistantMode,
     backendBaseUrl: publicSettings.data.backendBaseUrl,
     agentMode: publicSettings.data.agentMode,
     installId:
@@ -315,11 +325,17 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
     return false;
   }
 
+  const parsedRecord = parsed as Record<string, unknown>;
+
   return (
     "openAiApiKey" in parsed ||
     ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key") ||
     !("installId" in parsed) ||
-    ("backendPreset" in parsed && typeof parsed.backendPreset === "string" && !["openai", "hermes", "custom"].includes(parsed.backendPreset as string))
+    // Legacy backendPreset field present: migration rewrites to new assistantMode format.
+    "backendPreset" in parsed ||
+    // Invalid assistantMode value stored: rewrite with normalized value.
+    (typeof parsedRecord.assistantMode === "string" &&
+      !["simple", "agentic"].includes(parsedRecord.assistantMode))
   );
 }
 
@@ -344,7 +360,7 @@ function toPublicSettings(
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
     includeFullScreenshot: settings.includeFullScreenshot,
     apiKeyConfigured: openAiCredentialSource !== "none",
-    backendPreset: settings.backendPreset,
+    assistantMode: settings.assistantMode,
     backendBaseUrl: settings.backendBaseUrl,
     agentMode: settings.agentMode
   };

@@ -84,7 +84,7 @@ const browserPreviewBridge: MauzBridge = {
       realtimeReasoningEffort: "low",
       includeFullScreenshot: false,
       apiKeyConfigured: false,
-      backendPreset: "openai",
+      assistantMode: "simple",
       backendBaseUrl: "",
       agentMode: "approve"
     }),
@@ -108,7 +108,7 @@ const browserPreviewBridge: MauzBridge = {
         realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
         includeFullScreenshot: payload.includeFullScreenshot ?? false,
         apiKeyConfigured: openAiCredentialSource !== "none",
-        backendPreset: payload.backendPreset ?? "openai",
+        assistantMode: payload.assistantMode ?? "simple",
         backendBaseUrl: payload.backendBaseUrl ?? "",
         agentMode: payload.agentMode ?? "approve"
       };

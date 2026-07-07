@@ -186,7 +186,7 @@ export type RealtimeReasoningEffort = "low" | "medium" | "high";
 export type OpenAiAuthMode = "api-key";
 export type OpenAiCredentialSource = "none" | "environment" | "saved";
 
-export type BackendPreset = "openai" | "hermes" | "custom";
+export type AssistantMode = "simple" | "agentic";
 export type AgentMode = "approve" | "yolo";
 
 export type MauzSettings = {
@@ -203,7 +203,7 @@ export type MauzSettings = {
   realtimeReasoningEffort: RealtimeReasoningEffort;
   includeFullScreenshot: boolean;
   apiKeyConfigured: boolean;
-  backendPreset: BackendPreset;
+  assistantMode: AssistantMode;
   backendBaseUrl: string;
   agentMode: AgentMode;
 };

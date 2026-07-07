@@ -44,15 +44,12 @@ export OPENAI_REALTIME_MODEL="gpt-realtime-2"
 
 ## Hermes Agent Backend
 
-Mauz's Ask path can attach to a [hermes-agent](https://github.com/NousResearch/hermes-agent) gateway instead of calling OpenAI directly. This turns Ask into a full agent interaction: persistent memory, session continuity, and the gateway's tools (web, browser, code execution, MCP).
+Mauz has two modes, chosen in Settings under **Mode**:
 
-In Settings, the Backend section offers three providers:
+- **Simple** (default): direct OpenAI answering. No gateway needed.
+- **Agentic**: routes Ask through the [Hermes](https://github.com/NousResearch/hermes-agent) agent gateway, adding persistent memory, session continuity, and tools (web, browser, code execution, MCP, computer use). When Agentic mode is selected, a Gateway URL field appears (default `http://localhost:8642/v1`); enter a custom OpenAI-compatible URL there to use a different gateway.
 
-- `openai` (default): today's behavior — direct OpenAI Responses calls, no gateway.
-- `hermes`: the hermes-agent api_server gateway, default `http://localhost:8642/v1`.
-- `custom`: any OpenAI-compatible base URL.
-
-To run the gateway, enable the API server platform in your hermes-agent install and start its gateway:
+To run the Hermes gateway, enable the API server platform in your hermes-agent install and start its gateway:
 
 ```bash
 export API_SERVER_ENABLED=true    # serves http://127.0.0.1:8642/v1
@@ -74,7 +71,7 @@ When the connected gateway advertises run support, Ask runs through the gateway'
 - **Approve**: each tool action the gateway gates surfaces an approval card in the popover with four choices — Allow once, Allow for session, Always allow, Deny. Closing the popover stops the in-flight run.
 - **YOLO**: Mauz auto-approves every gated action (no card). The gateway's own hard floor of never-allowed destructive patterns still applies server-side.
 
-Switch modes from the toggle in the Ask panel (shown only for non-OpenAI backends) or set the default with:
+Switch modes from the toggle in the Ask panel (shown only in Agentic mode) or set the default with:
 
 ```bash
 export MAUZ_AGENT_MODE="approve"   # or "yolo"

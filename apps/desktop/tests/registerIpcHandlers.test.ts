@@ -277,7 +277,7 @@ describe("registerIpcHandlers", () => {
     expect(options.chatHistory.list).not.toHaveBeenCalled();
   });
 
-  it("passes backendPreset and agentMode through to updateSettings without stripping them", async () => {
+  it("passes assistantMode and agentMode through to updateSettings without stripping them", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
@@ -285,12 +285,12 @@ describe("registerIpcHandlers", () => {
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsUpdate);
 
     await handler(createInvokeEvent("popover"), {
-      backendPreset: "hermes",
+      assistantMode: "agentic",
       agentMode: "yolo"
     });
 
     expect(options.updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ backendPreset: "hermes", agentMode: "yolo" })
+      expect.objectContaining({ assistantMode: "agentic", agentMode: "yolo" })
     );
   });
 
@@ -460,7 +460,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeReasoningEffort: "low" as const,
       includeFullScreenshot: false,
       apiKeyConfigured: false,
-      backendPreset: "openai" as const,
+      assistantMode: "simple" as const,
       backendBaseUrl: "",
       agentMode: "approve" as const
     })),
@@ -478,7 +478,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
       includeFullScreenshot: update.includeFullScreenshot ?? false,
       apiKeyConfigured: false,
-      backendPreset: update.backendPreset ?? ("openai" as const),
+      assistantMode: update.assistantMode ?? ("simple" as const),
       backendBaseUrl: update.backendBaseUrl ?? "",
       agentMode: update.agentMode ?? ("approve" as const)
     }))

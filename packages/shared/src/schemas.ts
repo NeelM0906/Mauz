@@ -55,7 +55,7 @@ export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
 export const OpenAiAuthModeSchema = z.preprocess(() => "api-key", z.literal("api-key"));
 export const OpenAiCredentialSourceSchema = z.enum(["none", "environment", "saved"]);
 
-export const BackendPresetSchema = z.enum(["openai", "hermes", "custom"]);
+export const AssistantModeSchema = z.enum(["simple", "agentic"]);
 export const AgentModeSchema = z.enum(["approve", "yolo"]);
 
 export const MauzSettingsSchema = z.object({
@@ -72,7 +72,7 @@ export const MauzSettingsSchema = z.object({
   realtimeReasoningEffort: RealtimeReasoningEffortSchema,
   includeFullScreenshot: z.boolean(),
   apiKeyConfigured: z.boolean(),
-  backendPreset: BackendPresetSchema,
+  assistantMode: AssistantModeSchema,
   backendBaseUrl: z.string().trim().max(400),
   agentMode: AgentModeSchema
 });

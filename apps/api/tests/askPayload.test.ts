@@ -403,11 +403,11 @@ describe("backend schema additions", () => {
   it("parses backend settings fields", () => {
     const settings = MauzSettingsSchema.parse({
       ...buildSettingsFixture(),
-      backendPreset: "hermes",
+      assistantMode: "agentic",
       backendBaseUrl: "http://localhost:8642/v1",
       agentMode: "yolo"
     });
-    expect(settings.backendPreset).toBe("hermes");
+    expect(settings.assistantMode).toBe("agentic");
   });
 
   it("exports the Hermes gateway default base URL", () => {

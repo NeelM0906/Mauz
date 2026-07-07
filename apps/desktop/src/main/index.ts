@@ -166,10 +166,12 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
     process.env.MAUZ_BACKEND_BASE_URL = backendBaseUrl;
   }
 
-  if (settings.backendPreset === "openai") {
-    delete process.env.MAUZ_BACKEND_PRESET;
+  // The API package reads MAUZ_BACKEND_PRESET to derive the answer label.
+  // Keep the env var name stable; map "agentic" → "hermes" so the API side works unchanged.
+  if (settings.assistantMode === "agentic") {
+    process.env.MAUZ_BACKEND_PRESET = "hermes";
   } else {
-    process.env.MAUZ_BACKEND_PRESET = settings.backendPreset;
+    delete process.env.MAUZ_BACKEND_PRESET;
   }
 
   process.env.MAUZ_AGENT_MODE = settings.agentMode;
@@ -177,21 +179,13 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
 }
 
 function resolveBackendBaseUrl(settings: MauzRuntimeSettings): string | undefined {
-  if (settings.backendPreset === "openai") {
+  if (settings.assistantMode !== "agentic") {
     return undefined;
   }
 
   const configured = settings.backendBaseUrl.trim();
 
-  if (configured.length > 0) {
-    return configured;
-  }
-
-  if (settings.backendPreset === "hermes") {
-    return DEFAULT_HERMES_BASE_URL;
-  }
-
-  return undefined;
+  return configured.length > 0 ? configured : DEFAULT_HERMES_BASE_URL;
 }
 
 function configureAppIdentity(iconPath: string): void {

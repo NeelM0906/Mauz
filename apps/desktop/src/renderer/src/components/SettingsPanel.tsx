@@ -211,7 +211,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
         includeFullScreenshot: draft.includeFullScreenshot,
-        backendPreset: draft.backendPreset,
+        assistantMode: draft.assistantMode,
         backendBaseUrl: draft.backendBaseUrl,
         agentMode: draft.agentMode
       };
@@ -368,29 +368,37 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         <div className="settings-section">
           <div className="settings-label">
             <Server aria-hidden="true" size={15} />
-            <span>Backend</span>
+            <span>Mode</span>
           </div>
-          <SettingsSelect
-            label="Provider"
-            value={draft.backendPreset}
-            options={["openai", "hermes", "custom"]}
-            onChange={(backendPreset) => {
-              updateDraft("backendPreset", backendPreset as MauzSettings["backendPreset"]);
-              updateDraft("backendBaseUrl", "");
-            }}
-          />
-          {draft.backendPreset !== "openai" ? (
+          <div className="segmented-control" role="group" aria-label="Assistant mode">
+            <button
+              type="button"
+              aria-pressed={draft.assistantMode === "simple"}
+              onClick={() => updateDraft("assistantMode", "simple")}
+            >
+              Simple
+            </button>
+            <button
+              type="button"
+              aria-pressed={draft.assistantMode === "agentic"}
+              onClick={() => updateDraft("assistantMode", "agentic")}
+            >
+              Agentic
+            </button>
+          </div>
+          <p className="settings-helper">
+            {draft.assistantMode === "simple"
+              ? "Quick answers about what you're looking at."
+              : "Hermes agent with memory, tools, and computer use."}
+          </p>
+          {draft.assistantMode === "agentic" ? (
             <>
               <label className="settings-field">
-                <span>Base URL</span>
+                <span>Gateway URL</span>
                 <input
                   type="text"
                   value={draft.backendBaseUrl}
-                  placeholder={
-                    draft.backendPreset === "hermes"
-                      ? DEFAULT_HERMES_BASE_URL
-                      : "https://host/v1"
-                  }
+                  placeholder={DEFAULT_HERMES_BASE_URL}
                   onChange={(event) => updateDraft("backendBaseUrl", event.target.value)}
                 />
               </label>

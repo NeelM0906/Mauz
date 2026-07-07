@@ -114,7 +114,7 @@ export function LensPanel(): React.JSX.Element {
   const ActionIcon = action.icon;
   const isRemembering = selectedLensAction === "remember";
   const isYoloRing =
-    settings !== null && settings.agentMode === "yolo" && settings.backendPreset !== "openai";
+    settings !== null && settings.agentMode === "yolo" && settings.assistantMode === "agentic";
 
   // Load settings for mode toggle
   useEffect(() => {
@@ -335,7 +335,7 @@ export function LensPanel(): React.JSX.Element {
         </div>
       ) : null}
 
-      {settings !== null && settings.backendPreset !== "openai" ? (
+      {settings !== null && settings.assistantMode === "agentic" ? (
         <div className="agent-mode-toggle" role="radiogroup" aria-label="Agent mode">
           <button
             type="button"
