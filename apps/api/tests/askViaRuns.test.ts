@@ -8,7 +8,9 @@ type MockedFetch = typeof fetch & ReturnType<typeof vi.fn>;
 function runsFetchMock(events: string[]): MockedFetch {
   return vi.fn().mockImplementation((url: string) => {
     if (url.endsWith("/runs")) {
-      return Promise.resolve(new Response(JSON.stringify({ run_id: "run_1", status: "started" }), { status: 202 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ run_id: "run_1", status: "started" }), { status: 202 })
+      );
     }
     if (url.endsWith("/events")) {
       const stream = new ReadableStream<Uint8Array>({
@@ -44,7 +46,9 @@ const BASE_OPTIONS = {
 
 describe("askViaRuns", () => {
   it("returns the run output as the answer", async () => {
-    const fetchImpl = runsFetchMock(['{"event":"run.completed","run_id":"run_1","output":"answer text","usage":{"total_tokens":9}}']);
+    const fetchImpl = runsFetchMock([
+      '{"event":"run.completed","run_id":"run_1","output":"answer text","usage":{"total_tokens":9}}'
+    ]);
     const response = await askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl });
     expect(response).toMatchObject({ answer: "answer text", model: "hermes-agent" });
   });
@@ -114,7 +118,9 @@ describe("askViaRuns", () => {
 
   it("throws on run.failed and on run.cancelled", async () => {
     const failed = runsFetchMock(['{"event":"run.failed","run_id":"run_1","error":"boom"}']);
-    await expect(askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl: failed })).rejects.toThrow("boom");
+    await expect(
+      askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl: failed })
+    ).rejects.toThrow("boom");
 
     const cancelled = runsFetchMock(['{"event":"run.cancelled","run_id":"run_1"}']);
     await expect(
@@ -155,7 +161,11 @@ describe("askViaRuns", () => {
       }
       if (url.endsWith("/events")) {
         // Stream closes immediately without a terminal event
-        const stream = new ReadableStream<Uint8Array>({ start(c) { c.close(); } });
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.close();
+          }
+        });
         return Promise.resolve(new Response(stream, { status: 200 }));
       }
       if (/\/runs\/run_1$/.test(url)) {
@@ -163,7 +173,9 @@ describe("askViaRuns", () => {
         if (pollCount === 1) {
           return Promise.resolve(new Response(JSON.stringify({ status: "running" }), { status: 200 }));
         }
-        return Promise.resolve(new Response(JSON.stringify({ status: "completed", output: "retried answer" }), { status: 200 }));
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "completed", output: "retried answer" }), { status: 200 })
+        );
       }
       return Promise.resolve(new Response("{}", { status: 200 }));
     }) as unknown as MockedFetch;
@@ -185,7 +197,11 @@ describe("askViaRuns", () => {
         return Promise.resolve(new Response(JSON.stringify({ run_id: "run_1" }), { status: 202 }));
       }
       if (url.endsWith("/events")) {
-        const stream = new ReadableStream<Uint8Array>({ start(c) { c.close(); } });
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.close();
+          }
+        });
         return Promise.resolve(new Response(stream, { status: 200 }));
       }
       // Status always returns running
@@ -213,7 +229,11 @@ describe("askViaRuns", () => {
         return Promise.resolve(new Response(JSON.stringify({ run_id: "run_1" }), { status: 202 }));
       }
       if (url.endsWith("/events")) {
-        const stream = new ReadableStream<Uint8Array>({ start(c) { c.close(); } });
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.close();
+          }
+        });
         return Promise.resolve(new Response(stream, { status: 200 }));
       }
       // Status endpoint unreachable: getRunStatus resolves to null
@@ -241,7 +261,11 @@ describe("askViaRuns", () => {
         return Promise.resolve(new Response(JSON.stringify({ run_id: "run_1" }), { status: 202 }));
       }
       if (url.endsWith("/events")) {
-        const stream = new ReadableStream<Uint8Array>({ start(c) { c.close(); } });
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.close();
+          }
+        });
         return Promise.resolve(new Response(stream, { status: 200 }));
       }
       if (/\/runs\/run_1$/.test(url)) {
@@ -271,18 +295,24 @@ describe("askViaRuns", () => {
     const onRunActivity = vi.fn();
     await askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl, onRunActivity });
     expect(onRunActivity).toHaveBeenCalledTimes(2);
-    expect(onRunActivity).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      runId: "run_1",
-      kind: "tool.started",
-      tool: "terminal",
-      label: "terminal — ls ~/Desktop"
-    }));
-    expect(onRunActivity).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      runId: "run_1",
-      kind: "tool.completed",
-      tool: "terminal",
-      label: "terminal done"
-    }));
+    expect(onRunActivity).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        runId: "run_1",
+        kind: "tool.started",
+        tool: "terminal",
+        label: "terminal — ls ~/Desktop"
+      })
+    );
+    expect(onRunActivity).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        runId: "run_1",
+        kind: "tool.completed",
+        tool: "terminal",
+        label: "terminal done"
+      })
+    );
   });
 
   it("does not let a throwing onRunActivity hook abort the run", async () => {
@@ -290,8 +320,15 @@ describe("askViaRuns", () => {
       '{"event":"tool.started","run_id":"run_1","tool":"terminal","preview":"ls"}',
       '{"event":"run.completed","run_id":"run_1","output":"fine"}'
     ]);
-    const onRunActivity = vi.fn().mockImplementation(() => { throw new Error("hook blew up"); });
-    const response = await askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl, onRunActivity });
+    const onRunActivity = vi.fn().mockImplementation(() => {
+      throw new Error("hook blew up");
+    });
+    const response = await askViaRuns(buildRequest(), {
+      ...BASE_OPTIONS,
+      agentMode: "yolo",
+      fetchImpl,
+      onRunActivity
+    });
     expect(response.answer).toBe("fine");
   });
 });

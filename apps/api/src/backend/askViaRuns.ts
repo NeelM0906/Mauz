@@ -67,7 +67,9 @@ export async function askViaRuns(
       ? {
           timeouts: {
             ...(options.timeouts.requestMs !== undefined ? { requestMs: options.timeouts.requestMs } : {}),
-            ...(options.timeouts.streamIdleMs !== undefined ? { streamIdleMs: options.timeouts.streamIdleMs } : {})
+            ...(options.timeouts.streamIdleMs !== undefined
+              ? { streamIdleMs: options.timeouts.streamIdleMs }
+              : {})
           }
         }
       : {})
@@ -89,22 +91,40 @@ export async function askViaRuns(
       for await (const event of streamRunEvents({ ...clientOptions, runId })) {
         if (event.event === "tool.started") {
           const tool = typeof event.tool === "string" ? event.tool : "tool";
-          const preview = typeof event.preview === "string" && event.preview.length > 0 ? ` — ${event.preview}` : "";
-          try { options.onRunActivity?.({ runId, kind: "tool.started", tool, label: `${tool}${preview}` }); } catch { /* hooks must not kill the run */ }
+          const preview =
+            typeof event.preview === "string" && event.preview.length > 0 ? ` — ${event.preview}` : "";
+          try {
+            options.onRunActivity?.({ runId, kind: "tool.started", tool, label: `${tool}${preview}` });
+          } catch {
+            /* hooks must not kill the run */
+          }
           continue;
         }
 
         if (event.event === "tool.completed") {
           const tool = typeof event.tool === "string" ? event.tool : "tool";
           const failed = event.error !== undefined;
-          try { options.onRunActivity?.({ runId, kind: "tool.completed", tool, label: `${tool} ${failed ? "failed" : "done"}` }); } catch { /* hooks must not kill the run */ }
+          try {
+            options.onRunActivity?.({
+              runId,
+              kind: "tool.completed",
+              tool,
+              label: `${tool} ${failed ? "failed" : "done"}`
+            });
+          } catch {
+            /* hooks must not kill the run */
+          }
           continue;
         }
 
         if (event.event === "reasoning.available") {
           const raw = typeof event.reasoning === "string" ? event.reasoning : "";
           const text = raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
-          try { options.onRunActivity?.({ runId, kind: "reasoning", label: text }); } catch { /* hooks must not kill the run */ }
+          try {
+            options.onRunActivity?.({ runId, kind: "reasoning", label: text });
+          } catch {
+            /* hooks must not kill the run */
+          }
           continue;
         }
 
@@ -197,7 +217,11 @@ export async function askViaRuns(
       // Best-effort stop for failures; skip for cancellation (run already done
       // server-side) and for still-alive runs we merely lost sight of.
       if (!(error instanceof AgentRunStoppedError) && !(error instanceof AgentRunUnwatchableError)) {
-        try { await stopRun({ ...clientOptions, runId }); } catch { /* best-effort, ignore */ }
+        try {
+          await stopRun({ ...clientOptions, runId });
+        } catch {
+          /* best-effort, ignore */
+        }
       }
       throw error;
     }

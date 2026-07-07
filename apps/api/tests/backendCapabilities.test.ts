@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  clearBackendCapabilitiesCache,
-  detectBackendCapabilities
-} from "../src/backend/capabilities";
+import { clearBackendCapabilitiesCache, detectBackendCapabilities } from "../src/backend/capabilities";
 
 const GATEWAY_CAPABILITIES = {
   object: "hermes.api_server.capabilities",
@@ -85,7 +82,12 @@ describe("detectBackendCapabilities", () => {
 
   it("does not treat missing run features as runs support", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      okJson({ features: { session_continuity_header: "X-Custom-Session-Id", session_key_header: "X-Custom-Session-Key" } })
+      okJson({
+        features: {
+          session_continuity_header: "X-Custom-Session-Id",
+          session_key_header: "X-Custom-Session-Key"
+        }
+      })
     );
     const caps = await detectBackendCapabilities("http://localhost:8642/v1", fetchMock);
     expect(caps).toEqual({

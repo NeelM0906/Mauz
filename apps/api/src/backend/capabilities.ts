@@ -30,7 +30,10 @@ export async function detectBackendCapabilities(
   // returned an unrecognized response, so re-probe on the next call to allow
   // the user to start the gateway after the app without requiring a restart.
   if (capabilities !== null) {
-    capabilitiesCache.set(normalizedBaseUrl, { value: capabilities, expiresAt: Date.now() + CAPABILITIES_TTL_MS });
+    capabilitiesCache.set(normalizedBaseUrl, {
+      value: capabilities,
+      expiresAt: Date.now() + CAPABILITIES_TTL_MS
+    });
   }
 
   return capabilities;

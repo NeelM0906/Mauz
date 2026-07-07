@@ -24,11 +24,11 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|----------------|
-| `apps/desktop/src/renderer/src/styles.css` | Modify | Add `:root` token block + dark-mode overrides; migrate ~333 hardcoded color instances to variables; add `panel-in` keyframe; add bubble-cluster CSS classes |
-| `apps/desktop/src/renderer/src/components/MauzMenu.tsx` | Modify (presentation rewrite) | Replace card layout with bubble cluster; preserve all handlers/state/mauzClient calls exactly |
-| `.superpowers/sdd/ui-refresh-a-report.md` | Create | Post-implementation report |
+| File                                                    | Action                        | Responsibility                                                                                                                                              |
+| ------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/renderer/src/styles.css`              | Modify                        | Add `:root` token block + dark-mode overrides; migrate ~333 hardcoded color instances to variables; add `panel-in` keyframe; add bubble-cluster CSS classes |
+| `apps/desktop/src/renderer/src/components/MauzMenu.tsx` | Modify (presentation rewrite) | Replace card layout with bubble cluster; preserve all handlers/state/mauzClient calls exactly                                                               |
+| `.superpowers/sdd/ui-refresh-a-report.md`               | Create                        | Post-implementation report                                                                                                                                  |
 
 No other TSX files are touched.
 
@@ -37,9 +37,11 @@ No other TSX files are touched.
 ### Task 1: Design token block in styles.css
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/styles.css:1-19`
 
 **Interfaces:**
+
 - Produces: CSS custom property names consumed by Tasks 2, 3, 4, and 5
 
 - [ ] **Step 1: Read the current `:root` block (lines 1-19)**
@@ -129,15 +131,9 @@ Replace lines 1–19 of `apps/desktop/src/renderer/src/styles.css` with this exa
   --radius-pill: 999px;
 
   /* ── Shadows ── */
-  --shadow-panel:
-    0 24px 64px rgba(0, 0, 0, 0.28),
-    0 2px 8px rgba(0, 0, 0, 0.16);
-  --shadow-float:
-    0 18px 48px rgba(18, 24, 29, 0.18),
-    0 4px 12px rgba(18, 24, 29, 0.10);
-  --shadow-card:
-    0 18px 42px rgba(18, 24, 29, 0.15),
-    0 3px 10px rgba(18, 24, 29, 0.08);
+  --shadow-panel: 0 24px 64px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 18px 48px rgba(18, 24, 29, 0.18), 0 4px 12px rgba(18, 24, 29, 0.1);
+  --shadow-card: 0 18px 42px rgba(18, 24, 29, 0.15), 0 3px 10px rgba(18, 24, 29, 0.08);
 
   /* ── Motion ── */
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -153,13 +149,13 @@ Replace lines 1–19 of `apps/desktop/src/renderer/src/styles.css` with this exa
     --surface-base: #1c1c1e;
     --surface-panel: rgba(28, 28, 30, 0.72);
     --surface-card: rgba(44, 44, 46, 0.68);
-    --surface-input: rgba(44, 44, 46, 0.90);
+    --surface-input: rgba(44, 44, 46, 0.9);
     --surface-dark: #f0f0ee;
 
     --border-hairline: rgba(255, 255, 255, 0.12);
     --border-strong: rgba(255, 255, 255, 0.14);
     --border-accent: rgba(61, 219, 191, 0.28);
-    --border-danger: rgba(255, 100, 100, 0.20);
+    --border-danger: rgba(255, 100, 100, 0.2);
     --border-yolo: rgba(255, 179, 64, 0.22);
 
     --text-primary: #f5f5f7;
@@ -171,35 +167,29 @@ Replace lines 1–19 of `apps/desktop/src/renderer/src/styles.css` with this exa
 
     --accent-answer: #3ddbbf;
     --accent-answer-text: #3ddbbf;
-    --accent-answer-bg: rgba(61, 219, 191, 0.10);
+    --accent-answer-bg: rgba(61, 219, 191, 0.1);
     --accent-answer-bg-strong: rgba(61, 219, 191, 0.14);
     --accent-answer-border: rgba(61, 219, 191, 0.28);
 
     --accent-agent: #9d85ff;
     --accent-agent-text: #9d85ff;
-    --accent-agent-bg: rgba(157, 133, 255, 0.10);
+    --accent-agent-bg: rgba(157, 133, 255, 0.1);
     --accent-agent-border: rgba(157, 133, 255, 0.22);
 
     --accent-yolo: #ffb340;
     --accent-yolo-text: #ffb340;
-    --accent-yolo-bg: rgba(255, 179, 64, 0.10);
+    --accent-yolo-bg: rgba(255, 179, 64, 0.1);
     --accent-yolo-border: rgba(255, 179, 64, 0.22);
 
     --ok: #3ddbbf;
-    --ok-bg: rgba(61, 219, 191, 0.10);
+    --ok-bg: rgba(61, 219, 191, 0.1);
     --danger: #ff6b6b;
-    --danger-bg: rgba(255, 107, 107, 0.10);
-    --danger-border: rgba(255, 107, 107, 0.20);
+    --danger-bg: rgba(255, 107, 107, 0.1);
+    --danger-border: rgba(255, 107, 107, 0.2);
 
-    --shadow-panel:
-      0 24px 64px rgba(0, 0, 0, 0.56),
-      0 2px 8px rgba(0, 0, 0, 0.32);
-    --shadow-float:
-      0 18px 48px rgba(0, 0, 0, 0.40),
-      0 4px 12px rgba(0, 0, 0, 0.24);
-    --shadow-card:
-      0 18px 42px rgba(0, 0, 0, 0.36),
-      0 3px 10px rgba(0, 0, 0, 0.20);
+    --shadow-panel: 0 24px 64px rgba(0, 0, 0, 0.56), 0 2px 8px rgba(0, 0, 0, 0.32);
+    --shadow-float: 0 18px 48px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.24);
+    --shadow-card: 0 18px 42px rgba(0, 0, 0, 0.36), 0 3px 10px rgba(0, 0, 0, 0.2);
   }
 }
 
@@ -222,6 +212,7 @@ Replace lines 1–19 of `apps/desktop/src/renderer/src/styles.css` with this exa
 ```bash
 head -5 /Users/zidane/Mauz/.claude/worktrees/hermes-backend/apps/desktop/src/renderer/src/styles.css
 ```
+
 Expected: `@import "tailwindcss";` appears exactly once on line 1.
 
 ---
@@ -229,9 +220,11 @@ Expected: `@import "tailwindcss";` appears exactly once on line 1.
 ### Task 2: Migrate panel and button classes to tokens
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/styles.css` (lines ~63 onward)
 
 **Interfaces:**
+
 - Consumes: all `--*` variables defined in Task 1
 - Produces: updated class families used by all panel TSX components without any TSX changes
 
@@ -239,61 +232,61 @@ This task is a mechanical find-and-replace of hardcoded color values with CSS va
 
 **Color substitution map** (apply across entire file):
 
-| Old value | Replace with |
-|-----------|-------------|
-| `#f4f5f1` | `var(--surface-base)` |
-| `#ffffff` (pure white backgrounds) | `var(--surface-card)` |
-| `rgb(255 255 255 / 72%)`, `rgb(255 255 255 / 76%)`, `rgb(255 255 255 / 74%)`, `rgb(255 255 255 / 70%)`, `rgb(255 255 255 / 97%)` | `var(--surface-card)` |
-| `rgb(248 250 249 / 96%)` | `var(--surface-card)` |
-| `#fbfaf6` | `var(--surface-card)` |
-| `#050505` | `var(--surface-dark)` |
-| `#111312` (pure-dark bg only, e.g. `.submit-button`, `.formatted-answer pre`) | `var(--surface-dark)` |
-| `#171717` (color/text) | `var(--text-primary)` |
-| `#171717` (background, `.desktop-app color`) | `var(--text-primary)` |
-| `#686f6b` | `var(--text-secondary)` |
-| `#686f6b !important` | `var(--text-secondary) !important` |
-| `#777d79`, `#77736b` | `var(--text-tertiary)` |
-| `#8a8f8b` (placeholder) | `var(--text-tertiary)` |
-| `#a8b6af` (code-language) | `var(--text-secondary)` |
-| `#167a6b` | `var(--accent-answer)` |
-| `#167a6b !important` | `var(--accent-answer) !important` |
-| `#174b43` | `var(--accent-answer-text)` |
-| `#174b43 !important` (never appears but guard) | `var(--accent-answer-text) !important` |
-| `rgb(22 122 107 / 7%)`, `rgb(22 122 107 / 8%)`, `rgb(22 122 107 / 9%)` | `var(--accent-answer-bg)` |
-| `rgb(22 122 107 / 6%)` | `var(--accent-answer-bg)` |
-| `rgb(22 122 107 / 10%)`, `rgb(22 122 107 / 11%)`, `rgb(22 122 107 / 12%)` | `var(--accent-answer-bg-strong)` |
+| Old value                                                                                                                                                                                                                                                                         | Replace with                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `#f4f5f1`                                                                                                                                                                                                                                                                         | `var(--surface-base)`                                                                                                     |
+| `#ffffff` (pure white backgrounds)                                                                                                                                                                                                                                                | `var(--surface-card)`                                                                                                     |
+| `rgb(255 255 255 / 72%)`, `rgb(255 255 255 / 76%)`, `rgb(255 255 255 / 74%)`, `rgb(255 255 255 / 70%)`, `rgb(255 255 255 / 97%)`                                                                                                                                                  | `var(--surface-card)`                                                                                                     |
+| `rgb(248 250 249 / 96%)`                                                                                                                                                                                                                                                          | `var(--surface-card)`                                                                                                     |
+| `#fbfaf6`                                                                                                                                                                                                                                                                         | `var(--surface-card)`                                                                                                     |
+| `#050505`                                                                                                                                                                                                                                                                         | `var(--surface-dark)`                                                                                                     |
+| `#111312` (pure-dark bg only, e.g. `.submit-button`, `.formatted-answer pre`)                                                                                                                                                                                                     | `var(--surface-dark)`                                                                                                     |
+| `#171717` (color/text)                                                                                                                                                                                                                                                            | `var(--text-primary)`                                                                                                     |
+| `#171717` (background, `.desktop-app color`)                                                                                                                                                                                                                                      | `var(--text-primary)`                                                                                                     |
+| `#686f6b`                                                                                                                                                                                                                                                                         | `var(--text-secondary)`                                                                                                   |
+| `#686f6b !important`                                                                                                                                                                                                                                                              | `var(--text-secondary) !important`                                                                                        |
+| `#777d79`, `#77736b`                                                                                                                                                                                                                                                              | `var(--text-tertiary)`                                                                                                    |
+| `#8a8f8b` (placeholder)                                                                                                                                                                                                                                                           | `var(--text-tertiary)`                                                                                                    |
+| `#a8b6af` (code-language)                                                                                                                                                                                                                                                         | `var(--text-secondary)`                                                                                                   |
+| `#167a6b`                                                                                                                                                                                                                                                                         | `var(--accent-answer)`                                                                                                    |
+| `#167a6b !important`                                                                                                                                                                                                                                                              | `var(--accent-answer) !important`                                                                                         |
+| `#174b43`                                                                                                                                                                                                                                                                         | `var(--accent-answer-text)`                                                                                               |
+| `#174b43 !important` (never appears but guard)                                                                                                                                                                                                                                    | `var(--accent-answer-text) !important`                                                                                    |
+| `rgb(22 122 107 / 7%)`, `rgb(22 122 107 / 8%)`, `rgb(22 122 107 / 9%)`                                                                                                                                                                                                            | `var(--accent-answer-bg)`                                                                                                 |
+| `rgb(22 122 107 / 6%)`                                                                                                                                                                                                                                                            | `var(--accent-answer-bg)`                                                                                                 |
+| `rgb(22 122 107 / 10%)`, `rgb(22 122 107 / 11%)`, `rgb(22 122 107 / 12%)`                                                                                                                                                                                                         | `var(--accent-answer-bg-strong)`                                                                                          |
 | `rgb(22 122 107 / 14%)`, `rgb(22 122 107 / 15%)`, `rgb(22 122 107 / 16%)`, `rgb(22 122 107 / 18%)`, `rgb(22 122 107 / 20%)`, `rgb(22 122 107 / 22%)`, `rgb(22 122 107 / 24%)`, `rgb(22 122 107 / 26%)`, `rgb(22 122 107 / 28%)`, `rgb(22 122 107 / 36%)`, `rgb(22 122 107 / 48%)` | `var(--accent-answer-border)` (border-color uses) or `var(--accent-answer-bg)` (background uses — judge by property name) |
-| `rgb(23 23 23 / 4%)` | `var(--border-hairline)` |
-| `rgb(23 23 23 / 6%)` | `var(--border-hairline)` |
-| `rgb(23 23 23 / 7%)` | `var(--border-hairline)` |
-| `rgb(23 23 23 / 8%)` | `var(--border-hairline)` |
-| `rgb(23 23 23 / 9%)` | `var(--border-hairline)` |
-| `rgb(23 23 23 / 10%)` | `var(--border-hairline)` |
-| `rgb(23 23 23 / 12%)` | `var(--border-strong)` |
-| `rgb(23 23 23 / 14%)` | `var(--border-strong)` |
-| `rgb(18 24 29 / 15%)` through `rgb(18 24 29 / 18%)` (shadow) | leave as-is OR use `--shadow-float` / `--shadow-card` variable for the `box-shadow` property itself |
-| `rgb(155 44 44 / 8%)`, `rgb(155 44 44 / 9%)` | `var(--danger-bg)` |
-| `rgb(155 44 44 / 14%)` | `var(--danger-bg)` |
-| `rgb(155 44 44 / 16%)`, `rgb(155 44 44 / 18%)`, `rgb(155 44 44 / 30%)` | `var(--danger-border)` |
-| `#8b2424` | `var(--danger)` |
-| `#8b2424` | `var(--danger)` |
-| `#9b2c2c` | `var(--danger)` |
-| `rgb(157 94 31 / 7%)`, `rgb(157 94 31 / 8%)` | `var(--accent-yolo-bg)` |
-| `rgb(157 94 31 / 18%)`, `rgb(157 94 31 / 22%)` | `var(--accent-yolo-border)` |
-| `#6d4b29` | `var(--accent-yolo-text)` |
-| `#5e3615` | `var(--accent-yolo-text)` |
-| `#9d5e1f` | `var(--accent-yolo)` |
-| `rgb(103 76 172 / 7%)`, `rgb(103 76 172 / 8%)` | `var(--accent-agent-bg)` |
-| `rgb(103 76 172 / 15%)`, `rgb(103 76 172 / 18%)` | `var(--accent-agent-border)` |
-| `#513c88` | `var(--accent-agent-text)` |
-| `rgb(46 98 176 / 7%)`, `rgb(46 98 176 / 8%)` | `var(--accent-agent-bg)` |
-| `rgb(46 98 176 / 15%)`, `rgb(46 98 176 / 18%)` | `var(--accent-agent-border)` |
-| `#284d82` | `var(--accent-agent-text)` |
-| `#f5f6f2` (pre text) | keep as-is (it's inside a dark surface and should remain light) |
-| `#26312f`, `#1f2523`, `#111312` (text on light bg) | `var(--text-primary)` |
-| `#31544f`, `#174b43`, `#4d5f5a`, `#53615d` (teal-tint text) | `var(--accent-answer-text)` |
-| `#4b5350`, `#303735`, `#424a47`, `#626a66` (mid-grey text) | `var(--text-secondary)` |
-| `#232826` (cue text) | `var(--text-primary)` |
+| `rgb(23 23 23 / 4%)`                                                                                                                                                                                                                                                              | `var(--border-hairline)`                                                                                                  |
+| `rgb(23 23 23 / 6%)`                                                                                                                                                                                                                                                              | `var(--border-hairline)`                                                                                                  |
+| `rgb(23 23 23 / 7%)`                                                                                                                                                                                                                                                              | `var(--border-hairline)`                                                                                                  |
+| `rgb(23 23 23 / 8%)`                                                                                                                                                                                                                                                              | `var(--border-hairline)`                                                                                                  |
+| `rgb(23 23 23 / 9%)`                                                                                                                                                                                                                                                              | `var(--border-hairline)`                                                                                                  |
+| `rgb(23 23 23 / 10%)`                                                                                                                                                                                                                                                             | `var(--border-hairline)`                                                                                                  |
+| `rgb(23 23 23 / 12%)`                                                                                                                                                                                                                                                             | `var(--border-strong)`                                                                                                    |
+| `rgb(23 23 23 / 14%)`                                                                                                                                                                                                                                                             | `var(--border-strong)`                                                                                                    |
+| `rgb(18 24 29 / 15%)` through `rgb(18 24 29 / 18%)` (shadow)                                                                                                                                                                                                                      | leave as-is OR use `--shadow-float` / `--shadow-card` variable for the `box-shadow` property itself                       |
+| `rgb(155 44 44 / 8%)`, `rgb(155 44 44 / 9%)`                                                                                                                                                                                                                                      | `var(--danger-bg)`                                                                                                        |
+| `rgb(155 44 44 / 14%)`                                                                                                                                                                                                                                                            | `var(--danger-bg)`                                                                                                        |
+| `rgb(155 44 44 / 16%)`, `rgb(155 44 44 / 18%)`, `rgb(155 44 44 / 30%)`                                                                                                                                                                                                            | `var(--danger-border)`                                                                                                    |
+| `#8b2424`                                                                                                                                                                                                                                                                         | `var(--danger)`                                                                                                           |
+| `#8b2424`                                                                                                                                                                                                                                                                         | `var(--danger)`                                                                                                           |
+| `#9b2c2c`                                                                                                                                                                                                                                                                         | `var(--danger)`                                                                                                           |
+| `rgb(157 94 31 / 7%)`, `rgb(157 94 31 / 8%)`                                                                                                                                                                                                                                      | `var(--accent-yolo-bg)`                                                                                                   |
+| `rgb(157 94 31 / 18%)`, `rgb(157 94 31 / 22%)`                                                                                                                                                                                                                                    | `var(--accent-yolo-border)`                                                                                               |
+| `#6d4b29`                                                                                                                                                                                                                                                                         | `var(--accent-yolo-text)`                                                                                                 |
+| `#5e3615`                                                                                                                                                                                                                                                                         | `var(--accent-yolo-text)`                                                                                                 |
+| `#9d5e1f`                                                                                                                                                                                                                                                                         | `var(--accent-yolo)`                                                                                                      |
+| `rgb(103 76 172 / 7%)`, `rgb(103 76 172 / 8%)`                                                                                                                                                                                                                                    | `var(--accent-agent-bg)`                                                                                                  |
+| `rgb(103 76 172 / 15%)`, `rgb(103 76 172 / 18%)`                                                                                                                                                                                                                                  | `var(--accent-agent-border)`                                                                                              |
+| `#513c88`                                                                                                                                                                                                                                                                         | `var(--accent-agent-text)`                                                                                                |
+| `rgb(46 98 176 / 7%)`, `rgb(46 98 176 / 8%)`                                                                                                                                                                                                                                      | `var(--accent-agent-bg)`                                                                                                  |
+| `rgb(46 98 176 / 15%)`, `rgb(46 98 176 / 18%)`                                                                                                                                                                                                                                    | `var(--accent-agent-border)`                                                                                              |
+| `#284d82`                                                                                                                                                                                                                                                                         | `var(--accent-agent-text)`                                                                                                |
+| `#f5f6f2` (pre text)                                                                                                                                                                                                                                                              | keep as-is (it's inside a dark surface and should remain light)                                                           |
+| `#26312f`, `#1f2523`, `#111312` (text on light bg)                                                                                                                                                                                                                                | `var(--text-primary)`                                                                                                     |
+| `#31544f`, `#174b43`, `#4d5f5a`, `#53615d` (teal-tint text)                                                                                                                                                                                                                       | `var(--accent-answer-text)`                                                                                               |
+| `#4b5350`, `#303735`, `#424a47`, `#626a66` (mid-grey text)                                                                                                                                                                                                                        | `var(--text-secondary)`                                                                                                   |
+| `#232826` (cue text)                                                                                                                                                                                                                                                              | `var(--text-primary)`                                                                                                     |
 
 **Key class-specific changes** beyond color:
 
@@ -309,34 +302,51 @@ This task is a mechanical find-and-replace of hardcoded color values with CSS va
 - [ ] **Step 1: Apply color substitutions — desktop-app and desktop-nav classes (lines 63–165)**
 
 Read lines 63–165. For each hardcoded color, apply the substitution map above. Example changes:
+
 ```css
-/* line 70 before: */  background: #f4f5f1;
-/* line 70 after:  */  background: var(--surface-base);
+/* line 70 before: */
+background: #f4f5f1;
+/* line 70 after:  */
+background: var(--surface-base);
 
-/* line 71 before: */  color: #171717;
-/* line 71 after:  */  color: var(--text-primary);
+/* line 71 before: */
+color: #171717;
+/* line 71 after:  */
+color: var(--text-primary);
 
-/* line 80 before: */  background: #ffffff;
-/* line 80 after:  */  background: var(--surface-card);
+/* line 80 before: */
+background: #ffffff;
+/* line 80 after:  */
+background: var(--surface-card);
 
-/* line 95 before: */  background: #050505;
-/* line 95 after:  */  background: var(--surface-dark);
+/* line 95 before: */
+background: #050505;
+/* line 95 after:  */
+background: var(--surface-dark);
 
-/* line 107 before: */  color: #171717;
-/* line 107 after:  */  color: var(--text-primary);
+/* line 107 before: */
+color: #171717;
+/* line 107 after:  */
+color: var(--text-primary);
 
-/* line 116 before: */  color: #686f6b;
-/* line 116 after:  */  color: var(--text-secondary);
+/* line 116 before: */
+color: #686f6b;
+/* line 116 after:  */
+color: var(--text-secondary);
 
-/* line 150 before: */  color: #167a6b;
-/* line 150 after:  */  color: var(--accent-answer);
+/* line 150 before: */
+color: #167a6b;
+/* line 150 after:  */
+color: var(--accent-answer);
 
 /* line 155-156: rgb(22 122 107 / ...) */
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
+border-color: var(--accent-answer-border);
+background: var(--accent-answer-bg);
 
-/* line 164 before: */  color: #174b43;
-/* line 164 after:  */  color: var(--accent-answer-text);
+/* line 164 before: */
+color: #174b43;
+/* line 164 after:  */
+color: var(--accent-answer-text);
 ```
 
 - [ ] **Step 2: Apply substitutions — .mauz-panel, .mauz-header, .mauz-brand, .icon-button (lines 183–258)**
@@ -381,62 +391,68 @@ Read lines 63–165. For each hardcoded color, apply the substitution map above.
 - [ ] **Step 3: Apply substitutions — auth card, lens card, menu commands, mauz-actions, mauz-footer (lines 260–554)**
 
 Key changes (apply the full map; representative examples):
+
 ```css
 /* .mauz-auth-card: */
-  border: 1px solid var(--border-hairline);
-  background: var(--surface-card);
+border: 1px solid var(--border-hairline);
+background: var(--surface-card);
 
 /* .mauz-auth-card[data-status="connected"]: */
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
+border-color: var(--accent-answer-border);
+background: var(--accent-answer-bg);
 
 /* .mauz-auth-card[data-status="disconnected"]: */
-  border-color: var(--accent-yolo-border);
-  background: var(--accent-yolo-bg);
+border-color: var(--accent-yolo-border);
+background: var(--accent-yolo-bg);
 
 /* .menu-lens-card: */
-  border: 1px solid var(--border-hairline);
-  background: var(--surface-card);
+border: 1px solid var(--border-hairline);
+background: var(--surface-card);
 
 /* .menu-command: */
-  border: 1px solid var(--border-hairline);
-  background: var(--surface-card);
-  color: var(--text-primary);
+border: 1px solid var(--border-hairline);
+background: var(--surface-card);
+color: var(--text-primary);
 
-/* .menu-command > svg:first-child: */  color: var(--accent-answer);
-/* .menu-command > svg:last-child: */   color: var(--text-tertiary);
-/* .menu-command small: */             color: var(--text-secondary);
+/* .menu-command > svg:first-child: */
+color: var(--accent-answer);
+/* .menu-command > svg:last-child: */
+color: var(--text-tertiary);
+/* .menu-command small: */
+color: var(--text-secondary);
 
 /* .menu-command:hover,.menu-command:focus-visible: */
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
+border-color: var(--accent-answer-border);
+background: var(--accent-answer-bg);
 
 /* .mauz-auth-status: */
-  border: 1px solid var(--accent-answer-border);
-  background: var(--surface-card);
-  color: var(--accent-answer) !important;
+border: 1px solid var(--accent-answer-border);
+background: var(--surface-card);
+color: var(--accent-answer) !important;
 
 /* .mauz-auth-card[data-status="missing"] .mauz-auth-status,
    .mauz-auth-card[data-status="disconnected"] .mauz-auth-status: */
-  border-color: var(--border-hairline);
-  color: var(--text-secondary) !important;
+border-color: var(--border-hairline);
+color: var(--text-secondary) !important;
 
 /* .menu-auth-button: */
-  border: 1px solid var(--accent-answer-border);
-  background: var(--accent-answer-bg);
-  color: var(--accent-answer-text);
+border: 1px solid var(--accent-answer-border);
+background: var(--accent-answer-bg);
+color: var(--accent-answer-text);
 
 /* .menu-auth-button.danger: */
-  border-color: var(--danger-border);
-  background: var(--danger-bg);
-  color: var(--danger);
+border-color: var(--danger-border);
+background: var(--danger-bg);
+color: var(--danger);
 
-/* .mauz-action svg: */  color: var(--accent-answer);
+/* .mauz-action svg: */
+color: var(--accent-answer);
 /* .mauz-action:hover,.mauz-action:focus-visible: */
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
+border-color: var(--accent-answer-border);
+background: var(--accent-answer-bg);
 
-/* .mauz-footer: */  color: var(--text-muted);
+/* .mauz-footer: */
+color: var(--text-muted);
 ```
 
 - [ ] **Step 4: Apply substitutions — .ask-panel, .lens-panel, panel headers (lines 556–700)**
@@ -481,6 +497,7 @@ Key changes (apply the full map; representative examples):
 - [ ] **Step 5: Apply substitutions — lens body, form, answer area (lines 700–1250)**
 
 Apply the full map. Key items:
+
 ```css
 /* .lens-memory-row: */
   border: 1px solid var(--border-hairline);
@@ -843,11 +860,13 @@ Apply the full map. Key items:
 ```bash
 grep -n "#[0-9a-fA-F]\{6\}" /Users/zidane/Mauz/.claude/worktrees/hermes-backend/apps/desktop/src/renderer/src/styles.css | grep -v "^[0-9]*:.*\(var\|\/\*\|SFMono\|Liberation\|monospace\)"
 ```
+
 Expected: only intentional remnants like `#f5f6f2` (pre code text on dark bg) and the `@keyframes` numeric values should remain.
 
 ```bash
 grep -n "rgb(22 122\|rgb(23 23\|rgb(18 24\|rgb(157 94\|rgb(155 44\|rgb(103 76\|rgb(46 98\|rgb(16 16" /Users/zidane/Mauz/.claude/worktrees/hermes-backend/apps/desktop/src/renderer/src/styles.css
 ```
+
 Expected: zero matches.
 
 ---
@@ -855,9 +874,11 @@ Expected: zero matches.
 ### Task 3: Panel entrance animation
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/styles.css` — add keyframe + apply to panel classes
 
 **Interfaces:**
+
 - Consumes: `--ease-spring`, `--dur-base` from Task 1
 
 - [ ] **Step 1: Add `@keyframes panel-in` block**
@@ -881,9 +902,10 @@ Find the existing `@keyframes transcript-rise` block (around line 1968). Insert 
 - [ ] **Step 2: Apply entrance animation to all floating panels**
 
 For each of `.mauz-panel`, `.ask-panel`, `.lens-panel`, `.history-panel`, `.settings-panel`, `.realtime-panel`, add:
+
 ```css
-  transform-origin: top left;
-  animation: panel-in var(--dur-base) var(--ease-spring) both;
+transform-origin: top left;
+animation: panel-in var(--dur-base) var(--ease-spring) both;
 ```
 
 Do NOT add it to `.desktop-app`, `.desktop-main`, `.desktop-sidebar` (these are the persistent desktop chrome).
@@ -893,9 +915,11 @@ Do NOT add it to `.desktop-app`, `.desktop-main`, `.desktop-sidebar` (these are 
 ### Task 4: Commit 1 — tokens, migration, entrance animation
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/styles.css`
 
 **Interfaces:**
+
 - Produces: a clean git commit with all CSS changes from Tasks 1–3
 
 - [ ] **Step 1: Run the full test suite**
@@ -903,11 +927,13 @@ Do NOT add it to `.desktop-app`, `.desktop-main`, `.desktop-sidebar` (these are 
 ```bash
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm --filter @mauzai/desktop test 2>&1 | tail -20
 ```
+
 Expected: all tests pass (no renderer component tests exist, so this tests main-process code).
 
 ```bash
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm --filter @mauzai/api test 2>&1 | tail -20
 ```
+
 Expected: all tests pass.
 
 - [ ] **Step 2: Run clean build**
@@ -915,6 +941,7 @@ Expected: all tests pass.
 ```bash
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm -r build 2>&1 | tail -30
 ```
+
 Expected: no errors. CSS is bundled by Vite/electron-vite so any invalid CSS property syntax would surface here.
 
 - [ ] **Step 3: Commit**
@@ -928,9 +955,11 @@ cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && git add apps/desktop/s
 ### Task 5: Bubble-cluster CSS classes
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/styles.css` — append new bubble-cluster classes at the end
 
 **Interfaces:**
+
 - Consumes: all `--*` variables from Task 1
 - Produces: `.bubble-cluster`, `.bubble-cluster-backdrop`, `.bubble-hub`, `.bubble`, `.bubble-label`, `.bubble-auth-dot`, `.bubble-auth-pill`, `.bubble-status-toast` — consumed by MauzMenu.tsx in Task 6
 
@@ -952,11 +981,12 @@ The window content area is `330×390`. Bubbles must not clip. Hub is centered at
 }
 
 @keyframes bubble-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 var(--bubble-glow, rgba(22, 122, 107, 0.0));
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--bubble-glow, rgba(22, 122, 107, 0));
   }
   50% {
-    box-shadow: 0 0 0 8px var(--bubble-glow, rgba(22, 122, 107, 0.0));
+    box-shadow: 0 0 0 8px var(--bubble-glow, rgba(22, 122, 107, 0));
   }
 }
 ```
@@ -1016,19 +1046,24 @@ The window content area is `330×390`. Bubbles must not clip. Hub is centered at
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform var(--dur-fast) var(--ease-spring),
-              box-shadow var(--dur-fast) ease;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-fast) ease;
   z-index: 10;
 }
 
 .bubble-hub:hover {
   transform: scale(1.08);
-  box-shadow: var(--shadow-panel), 0 0 0 4px var(--accent-answer-border);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 4px var(--accent-answer-border);
 }
 
 .bubble-hub:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-panel), 0 0 0 3px var(--accent-answer-border);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 3px var(--accent-answer-border);
 }
 
 .bubble-hub-logo {
@@ -1087,9 +1122,10 @@ The 8 option bubbles are absolutely positioned relative to `.bubble-cluster` cen
   justify-content: center;
   gap: 2px;
   cursor: pointer;
-  transition: transform var(--dur-fast) var(--ease-spring),
-              box-shadow var(--dur-fast) ease,
-              border-color var(--dur-fast) ease;
+  transition:
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
   animation: bubble-in var(--dur-base) var(--ease-spring) both;
   animation-delay: var(--delay, 0ms);
   transform-origin: center;
@@ -1099,11 +1135,15 @@ The 8 option bubbles are absolutely positioned relative to `.bubble-cluster` cen
 .bubble:hover {
   transform: scale(1.08);
   border-color: var(--bubble-glow-color, var(--accent-answer-border));
-  box-shadow: var(--shadow-card), 0 0 0 4px var(--bubble-glow-color, var(--accent-answer-border));
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 4px var(--bubble-glow-color, var(--accent-answer-border));
 }
 
 .bubble:focus-visible {
-  box-shadow: var(--shadow-card), 0 0 0 3px var(--bubble-glow-color, var(--accent-answer-border));
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 3px var(--bubble-glow-color, var(--accent-answer-border));
 }
 
 .bubble:disabled {
@@ -1190,6 +1230,7 @@ The 8 option bubbles are absolutely positioned relative to `.bubble-cluster` cen
 - [ ] **Step 7: Add bubble arc position utilities (8 positions)**
 
 Radius = 110px from center. Angles (clockwise from 10 o'clock = -150°):
+
 - Bubble 0 (Ask): -150° → tx=-95px, ty=-55px
 - Bubble 1 (Explain): -90° → tx=0px, ty=-110px
 - Bubble 2 (Transform): -30° → tx=95px, ty=-55px
@@ -1237,7 +1278,9 @@ These are set as inline styles in TSX via `style` props, not as CSS classes, so 
 
 .bubble-auth-pill:focus-visible {
   outline: none;
-  box-shadow: var(--shadow-card), 0 0 0 2px var(--danger-border);
+  box-shadow:
+    var(--shadow-card),
+    0 0 0 2px var(--danger-border);
 }
 
 .bubble-status-toast {
@@ -1272,14 +1315,17 @@ These are set as inline styles in TSX via `style` props, not as CSS classes, so 
 ### Task 6: MauzMenu.tsx bubble-cluster rewrite
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/MauzMenu.tsx`
 
 **Interfaces:**
+
 - Consumes: `.bubble-cluster-root`, `.bubble-cluster-backdrop`, `.bubble-cluster`, `.bubble-hub`, `.bubble-hub-logo`, `.bubble-auth-dot`, `.bubble`, `.bubble-label`, `.bubble-auth-pill`, `.bubble-status-toast` from Task 5
 - Consumes: all existing state/handlers from the current MauzMenu.tsx — do not change them
 - Produces: the new MauzMenu render — a bubble cluster instead of the card layout
 
 **Preservation rule:** The following must remain byte-for-byte identical:
+
 - `LENS_ACTIONS` array (lines 28–64)
 - `useMauzStore()` destructuring
 - `loadSettings` effect (lines 86–112)
@@ -1288,6 +1334,7 @@ These are set as inline styles in TSX via `style` props, not as CSS classes, so 
 - All imports
 
 **Changes:**
+
 - Add three new imports: `MousePointer2` and `Sparkles` are already imported; add `Wand2`, `Pin`, `GitCompareArrows`, `Mic`, `History`, `Settings`, `KeyRound` — verify which are already imported and add only what's missing
 - Replace the `return (...)` JSX in `MauzMenu` with the bubble cluster
 - Replace the `OpenAiAuthMenu` component's `return (...)` with a minimal glass popover
@@ -1306,18 +1353,27 @@ Add this constant just before `export function MauzMenu()`:
 ```typescript
 // Arc positions relative to cluster center (radius ~110px)
 const BUBBLE_POSITIONS: Record<string, { tx: number; ty: number }> = {
-  ask:       { tx: -95, ty: -55 },
-  explain:   { tx:   0, ty: -110 },
-  transform: { tx:  95, ty: -55 },
-  remember:  { tx:  95, ty:  55 },
-  compare:   { tx:  80, ty:  95 },
-  talk:      { tx: -80, ty:  95 },
-  history:   { tx: -95, ty:  55 },
-  settings:  { tx: -110, ty:  0 },
+  ask: { tx: -95, ty: -55 },
+  explain: { tx: 0, ty: -110 },
+  transform: { tx: 95, ty: -55 },
+  remember: { tx: 95, ty: 55 },
+  compare: { tx: 80, ty: 95 },
+  talk: { tx: -80, ty: 95 },
+  history: { tx: -95, ty: 55 },
+  settings: { tx: -110, ty: 0 }
 };
 
 const BUBBLE_STAGGER_MS = 30;
-const BUBBLE_ORDER = ["ask","explain","transform","remember","compare","talk","history","settings"] as const;
+const BUBBLE_ORDER = [
+  "ask",
+  "explain",
+  "transform",
+  "remember",
+  "compare",
+  "talk",
+  "history",
+  "settings"
+] as const;
 ```
 
 - [ ] **Step 3: Replace the `MauzMenu` return JSX**
@@ -1325,144 +1381,144 @@ const BUBBLE_ORDER = ["ask","explain","transform","remember","compare","talk","h
 Replace only the `return (...)` block (lines 229–319). Keep all handlers above it intact.
 
 ```tsx
-  const authState = getOpenAiAuthState(settings);
+const authState = getOpenAiAuthState(settings);
 
-  return (
-    <div className="bubble-cluster-root" aria-label="Mauz menu">
-      <h1 className="sr-only">MauzAI</h1>
+return (
+  <div className="bubble-cluster-root" aria-label="Mauz menu">
+    <h1 className="sr-only">MauzAI</h1>
 
-      {/* Invisible backdrop: clicking outside bubbles dismisses */}
+    {/* Invisible backdrop: clicking outside bubbles dismisses */}
+    <button
+      type="button"
+      className="bubble-cluster-backdrop"
+      aria-label="Close Mauz"
+      onClick={() => void mauzClient.close()}
+      tabIndex={-1}
+    />
+
+    <div className="bubble-cluster">
+      {/* Hub bubble — click goes to Ask */}
       <button
         type="button"
-        className="bubble-cluster-backdrop"
-        aria-label="Close Mauz"
-        onClick={() => void mauzClient.close()}
-        tabIndex={-1}
-      />
+        className="bubble-hub"
+        aria-label="Open Mauz Ask"
+        onClick={() => void handleLensAction("ask")}
+        disabled={pendingAction !== null}
+      >
+        <BrandLogo className="bubble-hub-logo" label="MauzAI" />
+        <span className="bubble-auth-dot" data-status={authState} aria-hidden="true" />
+      </button>
 
-      <div className="bubble-cluster">
-        {/* Hub bubble — click goes to Ask */}
-        <button
-          type="button"
-          className="bubble-hub"
-          aria-label="Open Mauz Ask"
-          onClick={() => void handleLensAction("ask")}
-          disabled={pendingAction !== null}
-        >
-          <BrandLogo className="bubble-hub-logo" label="MauzAI" />
-          <span
-            className="bubble-auth-dot"
-            data-status={authState}
-            aria-hidden="true"
-          />
-        </button>
+      {/* Option bubbles */}
+      {LENS_ACTIONS.map((item, i) => {
+        const Icon = item.icon;
+        const pos = BUBBLE_POSITIONS[item.action];
+        return (
+          <button
+            key={item.action}
+            type="button"
+            className="bubble"
+            data-accent="answer"
+            data-pending={pendingAction === item.action ? "true" : undefined}
+            aria-label={item.label}
+            disabled={pendingAction !== null}
+            onClick={() => void handleLensAction(item.action)}
+            style={{
+              left: `calc(50% - 26px + ${pos.tx}px)`,
+              top: `calc(50% - 26px + ${pos.ty}px)`,
+              ["--delay" as string]: `${i * BUBBLE_STAGGER_MS}ms`
+            }}
+          >
+            <Icon aria-hidden="true" size={18} />
+            <span className="bubble-label" aria-hidden="true">
+              {pendingAction === item.action ? "…" : item.label}
+            </span>
+          </button>
+        );
+      })}
 
-        {/* Option bubbles */}
-        {LENS_ACTIONS.map((item, i) => {
-          const Icon = item.icon;
-          const pos = BUBBLE_POSITIONS[item.action];
-          return (
-            <button
-              key={item.action}
-              type="button"
-              className="bubble"
-              data-accent="answer"
-              data-pending={pendingAction === item.action ? "true" : undefined}
-              aria-label={item.label}
-              disabled={pendingAction !== null}
-              onClick={() => void handleLensAction(item.action)}
-              style={{
-                left: `calc(50% - 26px + ${pos.tx}px)`,
-                top: `calc(50% - 26px + ${pos.ty}px)`,
-                ["--delay" as string]: `${i * BUBBLE_STAGGER_MS}ms`,
-              }}
-            >
-              <Icon aria-hidden="true" size={18} />
-              <span className="bubble-label" aria-hidden="true">
-                {pendingAction === item.action ? "…" : item.label}
-              </span>
-            </button>
-          );
-        })}
+      {/* Talk bubble */}
+      <button
+        type="button"
+        className="bubble"
+        data-pending={pendingAction === "talk" ? "true" : undefined}
+        aria-label="Talk to Mauz"
+        disabled={pendingAction !== null}
+        onClick={() => void handleTalk()}
+        style={{
+          left: `calc(50% - 26px + ${BUBBLE_POSITIONS.talk.tx}px)`,
+          top: `calc(50% - 26px + ${BUBBLE_POSITIONS.talk.ty}px)`,
+          ["--delay" as string]: `${5 * BUBBLE_STAGGER_MS}ms`
+        }}
+      >
+        <Mic aria-hidden="true" size={18} />
+        <span className="bubble-label" aria-hidden="true">
+          {pendingAction === "talk" ? "…" : "Talk"}
+        </span>
+      </button>
 
-        {/* Talk bubble */}
-        <button
-          type="button"
-          className="bubble"
-          data-pending={pendingAction === "talk" ? "true" : undefined}
-          aria-label="Talk to Mauz"
-          disabled={pendingAction !== null}
-          onClick={() => void handleTalk()}
-          style={{
-            left: `calc(50% - 26px + ${BUBBLE_POSITIONS.talk.tx}px)`,
-            top: `calc(50% - 26px + ${BUBBLE_POSITIONS.talk.ty}px)`,
-            ["--delay" as string]: `${5 * BUBBLE_STAGGER_MS}ms`,
-          }}
-        >
-          <Mic aria-hidden="true" size={18} />
-          <span className="bubble-label" aria-hidden="true">
-            {pendingAction === "talk" ? "…" : "Talk"}
-          </span>
-        </button>
+      {/* History bubble */}
+      <button
+        type="button"
+        className="bubble"
+        aria-label="View chat history"
+        disabled={pendingAction !== null}
+        onClick={() => void handleHistory()}
+        style={{
+          left: `calc(50% - 26px + ${BUBBLE_POSITIONS.history.tx}px)`,
+          top: `calc(50% - 26px + ${BUBBLE_POSITIONS.history.ty}px)`,
+          ["--delay" as string]: `${6 * BUBBLE_STAGGER_MS}ms`
+        }}
+      >
+        <History aria-hidden="true" size={18} />
+        <span className="bubble-label" aria-hidden="true">
+          History
+        </span>
+      </button>
 
-        {/* History bubble */}
-        <button
-          type="button"
-          className="bubble"
-          aria-label="View chat history"
-          disabled={pendingAction !== null}
-          onClick={() => void handleHistory()}
-          style={{
-            left: `calc(50% - 26px + ${BUBBLE_POSITIONS.history.tx}px)`,
-            top: `calc(50% - 26px + ${BUBBLE_POSITIONS.history.ty}px)`,
-            ["--delay" as string]: `${6 * BUBBLE_STAGGER_MS}ms`,
-          }}
-        >
-          <History aria-hidden="true" size={18} />
-          <span className="bubble-label" aria-hidden="true">History</span>
-        </button>
-
-        {/* Settings bubble — smaller, lower emphasis */}
-        <button
-          type="button"
-          className="bubble"
-          data-size="sm"
-          aria-label="Open Mauz settings"
-          disabled={pendingAction !== null}
-          onClick={() => void handleSettings()}
-          style={{
-            left: `calc(50% - 20px + ${BUBBLE_POSITIONS.settings.tx}px)`,
-            top: `calc(50% - 20px + ${BUBBLE_POSITIONS.settings.ty}px)`,
-            ["--delay" as string]: `${7 * BUBBLE_STAGGER_MS}ms`,
-          }}
-        >
-          <Settings aria-hidden="true" size={15} />
-          <span className="bubble-label" aria-hidden="true">Settings</span>
-        </button>
-      </div>
-
-      {/* Auth reconnect pill — shown when not connected */}
-      {authState !== "connected" ? (
-        <button
-          type="button"
-          className="bubble-auth-pill"
-          onClick={() => void handleOpenAiReconnect()}
-          disabled={pendingAuthAction !== null}
-          aria-label="Connect OpenAI"
-        >
-          <KeyRound aria-hidden="true" size={11} />
-          {pendingAuthAction === "connect" ? "Connecting…" : "Connect OpenAI"}
-        </button>
-      ) : null}
-
-      {/* Status toast — shown when status is non-null */}
-      {status !== null ? (
-        <div className="bubble-status-toast" role="status" aria-live="polite">
-          {status}
-        </div>
-      ) : null}
+      {/* Settings bubble — smaller, lower emphasis */}
+      <button
+        type="button"
+        className="bubble"
+        data-size="sm"
+        aria-label="Open Mauz settings"
+        disabled={pendingAction !== null}
+        onClick={() => void handleSettings()}
+        style={{
+          left: `calc(50% - 20px + ${BUBBLE_POSITIONS.settings.tx}px)`,
+          top: `calc(50% - 20px + ${BUBBLE_POSITIONS.settings.ty}px)`,
+          ["--delay" as string]: `${7 * BUBBLE_STAGGER_MS}ms`
+        }}
+      >
+        <Settings aria-hidden="true" size={15} />
+        <span className="bubble-label" aria-hidden="true">
+          Settings
+        </span>
+      </button>
     </div>
-  );
+
+    {/* Auth reconnect pill — shown when not connected */}
+    {authState !== "connected" ? (
+      <button
+        type="button"
+        className="bubble-auth-pill"
+        onClick={() => void handleOpenAiReconnect()}
+        disabled={pendingAuthAction !== null}
+        aria-label="Connect OpenAI"
+      >
+        <KeyRound aria-hidden="true" size={11} />
+        {pendingAuthAction === "connect" ? "Connecting…" : "Connect OpenAI"}
+      </button>
+    ) : null}
+
+    {/* Status toast — shown when status is non-null */}
+    {status !== null ? (
+      <div className="bubble-status-toast" role="status" aria-live="polite">
+        {status}
+      </div>
+    ) : null}
+  </div>
+);
 ```
 
 - [ ] **Step 4: Update `OpenAiAuthMenu` — keep it but simplify render**
@@ -1495,6 +1551,7 @@ import {
 ```bash
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm --filter @mauzai/desktop exec tsc --noEmit 2>&1 | tail -30
 ```
+
 Expected: 0 errors. If `["--delay" as string]` syntax causes a TS error, use `style={{ "--delay": "..." } as React.CSSProperties}` instead.
 
 - [ ] **Step 6: Run tests and build**
@@ -1504,6 +1561,7 @@ cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm --filter @mauzai/
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm --filter @mauzai/api test 2>&1 | tail -20
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm -r build 2>&1 | tail -30
 ```
+
 Expected: tests pass, build succeeds.
 
 - [ ] **Step 7: Commit**
@@ -1517,9 +1575,11 @@ cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && git add apps/desktop/s
 ### Task 7: Report + final verification
 
 **Files:**
+
 - Create: `/Users/zidane/Mauz/.claude/worktrees/hermes-backend/.superpowers/sdd/ui-refresh-a-report.md`
 
 **Interfaces:**
+
 - Consumes: results of all previous tasks
 
 - [ ] **Step 1: Create `.superpowers/sdd/` directory if needed**
@@ -1531,8 +1591,9 @@ mkdir -p /Users/zidane/Mauz/.claude/worktrees/hermes-backend/.superpowers/sdd
 - [ ] **Step 2: Write the report**
 
 Create `/Users/zidane/Mauz/.claude/worktrees/hermes-backend/.superpowers/sdd/ui-refresh-a-report.md` with:
+
 - What changed (CSS token block summary, class families migrated, MauzMenu structure)
-- Class families migrated (list all: desktop-*, mauz-panel, ask-panel, lens-panel, history-panel, settings-panel, realtime-panel, lens-task-panel, agent-approval, agent-mode-toggle, agent-stop-button, submit-button, secondary-button, danger-button, menu-auth-button, etc.)
+- Class families migrated (list all: desktop-\*, mauz-panel, ask-panel, lens-panel, history-panel, settings-panel, realtime-panel, lens-task-panel, agent-approval, agent-mode-toggle, agent-stop-button, submit-button, secondary-button, danger-button, menu-auth-button, etc.)
 - Any TSX beyond MauzMenu.tsx touched (none expected)
 - Build/test one-liner result
 - Commit SHAs
@@ -1542,6 +1603,7 @@ Create `/Users/zidane/Mauz/.claude/worktrees/hermes-backend/.superpowers/sdd/ui-
 ```bash
 cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && pnpm --filter @mauzai/desktop test && pnpm --filter @mauzai/api test && pnpm -r build && echo "ALL CLEAR"
 ```
+
 Expected: `ALL CLEAR` at the end.
 
 - [ ] **Step 4: Commit the report**
@@ -1556,49 +1618,50 @@ cd /Users/zidane/Mauz/.claude/worktrees/hermes-backend && git add .superpowers/s
 
 **Spec coverage check:**
 
-| Spec requirement | Task |
-|-----------------|------|
-| `color-scheme: light dark` | Task 1 |
-| Glass surfaces with backdrop-filter | Tasks 1+2 |
-| Light/dark surface tokens | Task 1 |
-| Hairline borders | Task 1 |
-| Text primary/secondary/tertiary | Task 1 |
-| `--accent-answer` teal channel | Task 1 |
-| `--accent-agent` violet channel | Task 1 |
-| `--accent-yolo` amber channel | Task 1 |
-| `--ok` green / `--danger` red | Task 1 |
-| Radii scale | Task 1 |
-| Shadow scale including `--shadow-panel` | Task 1 |
-| `--ease-spring` | Task 1 |
-| Duration vars | Task 1 |
-| `prefers-reduced-motion` disables animations | Task 1 |
-| Migrate `.mauz-panel` | Task 2 |
-| Migrate `.ask-panel` | Task 2 |
-| Migrate `.lens-panel` | Task 2 |
-| Migrate `.settings-panel` | Task 2 |
-| Migrate `.history-panel` | Task 2 |
-| Migrate `.agent-approval` | Task 2 |
-| Migrate `.agent-mode-toggle` | Task 2 |
-| Migrate `.agent-stop-button` | Task 2 |
-| `panel-in` entrance animation | Task 3 |
-| Hub bubble 64px | Task 5+6 |
-| Option bubbles arc | Task 5+6 |
-| Staggered pop-in with CSS delay | Task 5+6 |
-| Hover scale 1.08 + glow ring | Task 5 |
-| Pending state pulse | Task 5 |
-| Auth state dot on hub | Task 6 |
-| `OpenAiAuthMenu` logic preserved (reconnect handler kept) | Task 6 |
-| Disconnect handler preserved | Task 6 |
-| Full-window backdrop dismiss | Task 6 |
-| Status toast at bottom | Task 6 |
-| `aria-label` on all bubbles | Task 6 |
-| `sr-only` h1 stays | Task 6 |
-| No main-process changes | All tasks |
-| Tests green | Task 4+6 |
-| `pnpm -r build` clean | Task 4+6 |
-| Report at specified path | Task 7 |
+| Spec requirement                                          | Task      |
+| --------------------------------------------------------- | --------- |
+| `color-scheme: light dark`                                | Task 1    |
+| Glass surfaces with backdrop-filter                       | Tasks 1+2 |
+| Light/dark surface tokens                                 | Task 1    |
+| Hairline borders                                          | Task 1    |
+| Text primary/secondary/tertiary                           | Task 1    |
+| `--accent-answer` teal channel                            | Task 1    |
+| `--accent-agent` violet channel                           | Task 1    |
+| `--accent-yolo` amber channel                             | Task 1    |
+| `--ok` green / `--danger` red                             | Task 1    |
+| Radii scale                                               | Task 1    |
+| Shadow scale including `--shadow-panel`                   | Task 1    |
+| `--ease-spring`                                           | Task 1    |
+| Duration vars                                             | Task 1    |
+| `prefers-reduced-motion` disables animations              | Task 1    |
+| Migrate `.mauz-panel`                                     | Task 2    |
+| Migrate `.ask-panel`                                      | Task 2    |
+| Migrate `.lens-panel`                                     | Task 2    |
+| Migrate `.settings-panel`                                 | Task 2    |
+| Migrate `.history-panel`                                  | Task 2    |
+| Migrate `.agent-approval`                                 | Task 2    |
+| Migrate `.agent-mode-toggle`                              | Task 2    |
+| Migrate `.agent-stop-button`                              | Task 2    |
+| `panel-in` entrance animation                             | Task 3    |
+| Hub bubble 64px                                           | Task 5+6  |
+| Option bubbles arc                                        | Task 5+6  |
+| Staggered pop-in with CSS delay                           | Task 5+6  |
+| Hover scale 1.08 + glow ring                              | Task 5    |
+| Pending state pulse                                       | Task 5    |
+| Auth state dot on hub                                     | Task 6    |
+| `OpenAiAuthMenu` logic preserved (reconnect handler kept) | Task 6    |
+| Disconnect handler preserved                              | Task 6    |
+| Full-window backdrop dismiss                              | Task 6    |
+| Status toast at bottom                                    | Task 6    |
+| `aria-label` on all bubbles                               | Task 6    |
+| `sr-only` h1 stays                                        | Task 6    |
+| No main-process changes                                   | All tasks |
+| Tests green                                               | Task 4+6  |
+| `pnpm -r build` clean                                     | Task 4+6  |
+| Report at specified path                                  | Task 7    |
 
 **Known edge cases to watch:**
+
 1. `bubble-in` keyframe uses `translate` CSS properties in the `from` clause with CSS vars. Make sure the `transform` in `.bubble:hover` (scale) doesn't conflict — hover applies `transform: scale(1.08)` which replaces the animated translateX/Y. Since the animation ends with `translateX(0) translateY(0)` (no tx/ty by default — tx/ty are for the old approach). Actually, I used position: absolute + left/top inline styles for positioning rather than transforms. The animation just does scale + fade. Hover just does scale. These are consistent and don't conflict.
 2. The `--delay` CSS custom property on `.bubble` style prop: TypeScript's `React.CSSProperties` does not include arbitrary `--*` props. Use `style={{ "--delay": `${n}ms` } as React.CSSProperties}` to satisfy the compiler.
 3. Settings bubble uses `data-size="sm"` with `width: 40px` — its absolute position left/top calculation uses `calc(50% - 20px + tx)` (half of 40) instead of `calc(50% - 26px + tx)` (half of 52). Note this in Task 6 Step 3 inline comments.

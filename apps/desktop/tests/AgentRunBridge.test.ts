@@ -39,9 +39,9 @@ describe("AgentRunBridge", () => {
 
   it("denies when no popover window is available", async () => {
     const bridge = new AgentRunBridge({ getPopoverWebContents: () => null });
-    await expect(
-      bridge.runHooks.onApprovalRequest!({ runId: "r", description: "x", raw: {} })
-    ).resolves.toBe("deny");
+    await expect(bridge.runHooks.onApprovalRequest!({ runId: "r", description: "x", raw: {} })).resolves.toBe(
+      "deny"
+    );
   });
 
   it("settles outstanding pending approvals to 'deny' when the run finishes", async () => {
@@ -71,16 +71,26 @@ describe("AgentRunBridge", () => {
   it("forwards run activity to the popover on the run-activity channel", () => {
     const webContents = createWebContentsStub();
     const bridge = new AgentRunBridge({ getPopoverWebContents: () => webContents as never });
-    const activity = { runId: "run_1", kind: "tool.started" as const, tool: "terminal", label: "terminal — ls ~" };
+    const activity = {
+      runId: "run_1",
+      kind: "tool.started" as const,
+      tool: "terminal",
+      label: "terminal — ls ~"
+    };
     bridge.runHooks.onRunActivity!(activity);
     expect(webContents.send).toHaveBeenCalledWith("mauz:agent:run-activity", activity);
   });
 
   it("silently skips run activity when no popover window is available", () => {
     const bridge = new AgentRunBridge({ getPopoverWebContents: () => null });
-    expect(() => bridge.runHooks.onRunActivity!({
-      runId: "run_1", kind: "tool.completed" as const, tool: "terminal", label: "terminal done"
-    })).not.toThrow();
+    expect(() =>
+      bridge.runHooks.onRunActivity!({
+        runId: "run_1",
+        kind: "tool.completed" as const,
+        tool: "terminal",
+        label: "terminal done"
+      })
+    ).not.toThrow();
   });
 
   it("clears currentRunId even when no baseUrl is configured", async () => {
@@ -131,12 +141,10 @@ describe("AgentRunBridge", () => {
     await expect(approvalForRunA).resolves.toBe("deny");
 
     // run_B's approval should still be pending — manually resolve it
-    const sentCalls = webContents.send.mock.calls.filter(
-      ([ch]) => ch === "mauz:agent:approval-request"
-    );
-    const runBPayload = sentCalls.find(
-      ([, p]) => (p as { runId: string }).runId === "run_B"
-    )?.[1] as { approvalId: string } | undefined;
+    const sentCalls = webContents.send.mock.calls.filter(([ch]) => ch === "mauz:agent:approval-request");
+    const runBPayload = sentCalls.find(([, p]) => (p as { runId: string }).runId === "run_B")?.[1] as
+      | { approvalId: string }
+      | undefined;
     expect(runBPayload).toBeDefined();
     bridge.respondToApproval(runBPayload!.approvalId, "once");
     await expect(approvalForRunB).resolves.toBe("once");

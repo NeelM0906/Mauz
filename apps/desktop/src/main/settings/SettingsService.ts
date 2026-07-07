@@ -245,7 +245,10 @@ function getDefaultSettings(): StoredMauzSettings {
         ? process.env.OPENAI_REALTIME_REASONING_EFFORT
         : DEFAULT_REALTIME_REASONING_EFFORT,
     includeFullScreenshot: readBooleanEnv(process.env.OPENAI_INCLUDE_FULL_SCREENSHOT, false),
-    assistantMode: process.env.MAUZ_BACKEND_PRESET === "hermes" ? ("agentic" as AssistantMode) : ("simple" as AssistantMode),
+    assistantMode:
+      process.env.MAUZ_BACKEND_PRESET === "hermes"
+        ? ("agentic" as AssistantMode)
+        : ("simple" as AssistantMode),
     backendBaseUrl: process.env.MAUZ_BACKEND_BASE_URL?.trim() ?? "",
     agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? ("yolo" as AgentMode) : "approve",
     installId: randomUUID()
@@ -430,7 +433,8 @@ async function ensureDirectoryExists(path: string): Promise<void> {
   });
 }
 
-const INSTALL_ID_PATTERN = /"installId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i;
+const INSTALL_ID_PATTERN =
+  /"installId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i;
 
 function salvageInstallId(raw: string): string | null {
   return INSTALL_ID_PATTERN.exec(raw)?.[1] ?? null;

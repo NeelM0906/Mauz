@@ -36,7 +36,7 @@ approval plumbing.
 
 ## 2. Owner decisions
 
-1. **Backend:** support both the Hermes gateway *and* any plain OpenAI-compatible
+1. **Backend:** support both the Hermes gateway _and_ any plain OpenAI-compatible
    endpoint, selected in settings. OpenAI direct remains the default.
 2. **Depth:** minimal swap — no streaming answer text, no tool timeline. The only new
    popover UI is the mode toggle, approval prompts, and a stop button.

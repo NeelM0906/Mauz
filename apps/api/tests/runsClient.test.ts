@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { getRunStatus, resolveRunApproval, startRun, stopRun, streamRunEvents } from "../src/backend/runsClient";
+import {
+  getRunStatus,
+  resolveRunApproval,
+  startRun,
+  stopRun,
+  streamRunEvents
+} from "../src/backend/runsClient";
 
 function sseResponse(chunks: string[]): Response {
   const stream = new ReadableStream<Uint8Array>({
@@ -15,9 +21,11 @@ function sseResponse(chunks: string[]): Response {
 
 describe("runsClient", () => {
   it("starts a run with session id, key and auth", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ run_id: "run_abc", status: "started" }), { status: 202 })
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ run_id: "run_abc", status: "started" }), { status: 202 })
+      );
     const result = await startRun({
       baseUrl: "http://localhost:8642/v1",
       apiKey: "gw",
@@ -42,9 +50,9 @@ describe("runsClient", () => {
   });
 
   it("uses custom sessionKeyHeader when provided", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ run_id: "run_abc" }), { status: 202 })
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ run_id: "run_abc" }), { status: 202 }));
     await startRun({
       baseUrl: "http://localhost:8642/v1",
       apiKey: "gw",
@@ -59,14 +67,16 @@ describe("runsClient", () => {
   });
 
   it("parses SSE events and ignores keepalive comments", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseResponse([
-        ": keepalive\n\n",
-        'data: {"event":"tool.started","run_id":"r","tool":"terminal"}\n\n',
-        'data: {"event":"run.completed","run_id":"r","output":"done",',
-        '"usage":{"total_tokens":5}}\n\n'
-      ])
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        sseResponse([
+          ": keepalive\n\n",
+          'data: {"event":"tool.started","run_id":"r","tool":"terminal"}\n\n',
+          'data: {"event":"run.completed","run_id":"r","output":"done",',
+          '"usage":{"total_tokens":5}}\n\n'
+        ])
+      );
     const events = [];
     for await (const event of streamRunEvents({ baseUrl: "http://x/v1", runId: "r", fetchImpl: fetchMock })) {
       events.push(event);
@@ -79,11 +89,11 @@ describe("runsClient", () => {
     // JSON split across two data: lines; joining with "" would produce invalid JSON
     // (the continuation has no comma prefix), but joining with "\n" is the spec-correct
     // behaviour and parseable for JSON that allows whitespace between tokens.
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseResponse([
-        'data: {"event":"run.completed","run_id":"r",\ndata: "output":"done"}\n\n'
-      ])
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        sseResponse(['data: {"event":"run.completed","run_id":"r",\ndata: "output":"done"}\n\n'])
+      );
     const events = [];
     for await (const event of streamRunEvents({ baseUrl: "http://x/v1", runId: "r", fetchImpl: fetchMock })) {
       events.push(event);
@@ -93,11 +103,9 @@ describe("runsClient", () => {
   });
 
   it("falls back to SSE event: field when JSON lacks an event key", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseResponse([
-        'event: run.completed\ndata: {"run_id":"r","output":"done"}\n\n'
-      ])
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(sseResponse(['event: run.completed\ndata: {"run_id":"r","output":"done"}\n\n']));
     const events = [];
     for await (const event of streamRunEvents({ baseUrl: "http://x/v1", runId: "r", fetchImpl: fetchMock })) {
       events.push(event);
@@ -143,9 +151,11 @@ describe("runsClient", () => {
   });
 
   it("returns run status and null for unknown runs", async () => {
-    const okMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: "completed", output: "done" }), { status: 200 })
-    );
+    const okMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: "completed", output: "done" }), { status: 200 })
+      );
     expect(await getRunStatus({ baseUrl: "http://x/v1", runId: "r", fetchImpl: okMock })).toMatchObject({
       status: "completed",
       output: "done"
@@ -162,7 +172,9 @@ describe("runsClient", () => {
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode('data: {"event":"tool.started","run_id":"r"}\n\n'));
-          controller.enqueue(new TextEncoder().encode('data: {"event":"run.completed","run_id":"r","output":"x"}\n\n'));
+          controller.enqueue(
+            new TextEncoder().encode('data: {"event":"run.completed","run_id":"r","output":"x"}\n\n')
+          );
           controller.close();
         },
         cancel: cancelSpy as unknown as (reason?: unknown) => void
@@ -188,8 +200,8 @@ describe("runsClient", () => {
     expect(stopMock.mock.calls[0]![0]).toBe("http://x/v1/runs/r/stop");
 
     const failMock = vi.fn().mockResolvedValue(new Response("busy", { status: 429 }));
-    await expect(
-      startRun({ baseUrl: "http://x/v1", input: "hi", fetchImpl: failMock })
-    ).rejects.toThrow(/429/);
+    await expect(startRun({ baseUrl: "http://x/v1", input: "hi", fetchImpl: failMock })).rejects.toThrow(
+      /429/
+    );
   });
 });

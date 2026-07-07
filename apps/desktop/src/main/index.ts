@@ -3,7 +3,13 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_HERMES_BASE_URL, IPC_CHANNELS, type MauzSettings, type MauzSettingsUpdate, type PermissionError } from "@mauzai/shared";
+import {
+  DEFAULT_HERMES_BASE_URL,
+  IPC_CHANNELS,
+  type MauzSettings,
+  type MauzSettingsUpdate,
+  type PermissionError
+} from "@mauzai/shared";
 import { AgentRunBridge } from "./agent/AgentRunBridge";
 import { ChatHistoryService } from "./chat/ChatHistoryService";
 import { ContextCollector } from "./context/ContextCollector";

@@ -37,8 +37,8 @@ export async function askMauz(
     options.client ??
     (baseUrl === undefined
       ? new OpenAI({ apiKey })
-      // maxRetries: 0 is intentional — fail fast so a down local backend surfaces BackendUnreachableError immediately instead of retrying.
-      : new OpenAI({ apiKey: backendApiKey || "mauz-local-backend", baseURL: baseUrl, maxRetries: 0 }));
+      : // maxRetries: 0 is intentional — fail fast so a down local backend surfaces BackendUnreachableError immediately instead of retrying.
+        new OpenAI({ apiKey: backendApiKey || "mauz-local-backend", baseURL: baseUrl, maxRetries: 0 }));
 
   const capabilities =
     baseUrl === undefined ? null : await detectBackendCapabilities(baseUrl, options.fetchImpl ?? fetch);

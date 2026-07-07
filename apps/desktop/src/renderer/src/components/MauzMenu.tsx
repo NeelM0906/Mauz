@@ -343,9 +343,7 @@ export function MauzMenu(): React.JSX.Element {
           onClick={() => void handleOpenAiReconnect()}
         >
           <KeyRound aria-hidden="true" size={11} />
-          {pendingAuthAction === "connect"
-            ? "Opening..."
-            : `${getOpenAiAuthActionLabel(settings)} OpenAI`}
+          {pendingAuthAction === "connect" ? "Opening..." : `${getOpenAiAuthActionLabel(settings)} OpenAI`}
         </button>
       ) : null}
 

@@ -226,7 +226,9 @@ describe("askMauz with configurable backend", () => {
   });
 
   it("raises BackendUnreachableError when the backend connection fails", async () => {
-    const create = vi.fn().mockRejectedValue(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
+    const create = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
     const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
     await expect(
       askMauz(buildRequest(), {

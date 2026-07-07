@@ -17,7 +17,11 @@ type ChildProcessLike = {
   once(event: "error", listener: (error: Error) => void): unknown;
 };
 
-type SpawnLike = (command: string, args?: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => ChildProcessLike;
+type SpawnLike = (
+  command: string,
+  args?: readonly string[],
+  options?: { env?: NodeJS.ProcessEnv }
+) => ChildProcessLike;
 
 type ShakeDetectorLike = {
   push(sample: { x: number; y: number; ts: number; buttons?: number | undefined }): ShakeDetectorResult;
@@ -70,8 +74,7 @@ export class MacInputAgentProvider implements InputProvider {
     this.pathExists = options.pathExists ?? existsSync;
     this.spawnHelper =
       options.spawn ??
-      ((command, args, opts) =>
-        spawn(command, args ?? [], opts?.env !== undefined ? { env: opts.env } : {}));
+      ((command, args, opts) => spawn(command, args ?? [], opts?.env !== undefined ? { env: opts.env } : {}));
     this.platform = options.platform ?? process.platform;
     this.helperPath = options.helperPath ?? findDefaultHelperPath();
   }
@@ -357,4 +360,3 @@ function findDefaultHelperPath(): string {
 
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }
-

@@ -30,8 +30,7 @@ export async function startRun(
       ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
       ...(options.sessionId === undefined ? {} : { session_id: options.sessionId })
     },
-    extraHeaders:
-      options.sessionKey === undefined ? {} : { [sessionKeyHeader]: options.sessionKey },
+    extraHeaders: options.sessionKey === undefined ? {} : { [sessionKeyHeader]: options.sessionKey },
     signal: AbortSignal.timeout(requestTimeoutMs)
   });
   const body = (await response.json()) as { run_id?: string };
@@ -172,9 +171,7 @@ async function request(
 
 function parseSseEvent(rawEvent: string): RunEvent | null {
   const lines = rawEvent.split("\n");
-  const dataLines = lines
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trim());
+  const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
 
   if (dataLines.length === 0) {
     return null;

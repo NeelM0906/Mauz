@@ -376,11 +376,7 @@ export function LensPanel(): React.JSX.Element {
 
       {activeRunId !== null ? (
         <>
-          <button
-            type="button"
-            className="agent-stop-button"
-            onClick={() => void mauzClient.stopAgentRun()}
-          >
+          <button type="button" className="agent-stop-button" onClick={() => void mauzClient.stopAgentRun()}>
             <Square aria-hidden="true" size={12} /> Stop
           </button>
           <div className="agent-activity">
@@ -444,12 +440,7 @@ function ApprovalCard({ description, onChoice }: ApprovalCardProps): React.JSX.E
   const risk = classifyApprovalRisk(description);
 
   return (
-    <div
-      className="agent-approval"
-      role="alertdialog"
-      aria-label="Agent approval request"
-      data-risk={risk}
-    >
+    <div className="agent-approval" role="alertdialog" aria-label="Agent approval request" data-risk={risk}>
       <p className="agent-approval-description">
         <ShieldAlert aria-hidden="true" size={14} />
         {description}

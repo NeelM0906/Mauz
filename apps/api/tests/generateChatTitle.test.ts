@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import OpenAI from "openai";
-import { buildFallbackChatTitle, generateChatTitle, normalizeChatTitle } from "../src/openai/generateChatTitle";
+import {
+  buildFallbackChatTitle,
+  generateChatTitle,
+  normalizeChatTitle
+} from "../src/openai/generateChatTitle";
 import { MissingOpenAIKeyError } from "../src/errors";
 
 vi.mock("openai", () => {
@@ -42,18 +46,16 @@ describe("chat title generation helpers", () => {
 
 describe("generateChatTitle", () => {
   it("throws MissingOpenAIKeyError when no OPENAI_API_KEY and no MAUZ_BACKEND_BASE_URL", async () => {
-    await expect(
-      generateChatTitle({ question: "Q", answer: "A" })
-    ).rejects.toBeInstanceOf(MissingOpenAIKeyError);
+    await expect(generateChatTitle({ question: "Q", answer: "A" })).rejects.toBeInstanceOf(
+      MissingOpenAIKeyError
+    );
   });
 
   it("uses OPENAI_API_KEY when set and no backend URL", async () => {
     process.env.OPENAI_API_KEY = "sk-test";
     const result = await generateChatTitle({ question: "Q", answer: "A" });
     expect(result.title).toBeDefined();
-    expect(vi.mocked(OpenAI)).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: "sk-test" })
-    );
+    expect(vi.mocked(OpenAI)).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "sk-test" }));
     // Should NOT have baseURL set to a backend
     const callArgs = vi.mocked(OpenAI).mock.calls[0]![0] as Record<string, unknown>;
     expect(callArgs.baseURL).toBeUndefined();
@@ -81,9 +83,7 @@ describe("generateChatTitle", () => {
   it("uses mauz-local-backend placeholder key when MAUZ_BACKEND_BASE_URL set and no API key", async () => {
     process.env.MAUZ_BACKEND_BASE_URL = "http://localhost:8642/v1";
     await generateChatTitle({ question: "Q", answer: "A" });
-    expect(vi.mocked(OpenAI)).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: "mauz-local-backend" })
-    );
+    expect(vi.mocked(OpenAI)).toHaveBeenCalledWith(expect.objectContaining({ apiKey: "mauz-local-backend" }));
   });
 
   it("prefers options.client over env-based construction", async () => {

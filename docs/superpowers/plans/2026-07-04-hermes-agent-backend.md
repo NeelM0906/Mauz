@@ -31,12 +31,14 @@
 ### Task 1: Shared schemas — backend settings, sessionId, constants
 
 **Files:**
+
 - Modify: `packages/shared/src/schemas.ts`
 - Modify: `packages/shared/src/constants.ts`
 - Modify: `packages/shared/src/types.ts` (only if it declares explicit `z.infer` exports — mirror the existing pattern for the two new enums)
 - Test: `apps/api/tests/askPayload.test.ts`
 
 **Interfaces:**
+
 - Produces: `BackendPresetSchema` (`"openai" | "hermes-gateway" | "custom"`), `AgentModeSchema` (`"approve" | "yolo"`), `MauzSettingsSchema` fields `backendPreset`, `backendBaseUrl`, `agentMode`; `AskMauzRequestSchema.sessionId?: string`; `DEFAULT_HERMES_GATEWAY_BASE_URL`.
 
 - [ ] **Step 1: Write failing tests** — append to `apps/api/tests/askPayload.test.ts`:
@@ -98,7 +100,7 @@ Extend `MauzSettingsSchema` (inside the object, after `apiKeyConfigured`):
 Extend `AskMauzRequestSchema` (after `conversationMessages`):
 
 ```typescript
-  sessionId: z.string().trim().min(1).max(128).optional()
+sessionId: z.string().trim().min(1).max(128).optional();
 ```
 
 In `packages/shared/src/constants.ts` append:
@@ -120,10 +122,12 @@ export type AgentMode = z.infer<typeof AgentModeSchema>;
 ### Task 2: SettingsService — backend fields + stable install id
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/settings/SettingsService.ts`
 - Test: `apps/desktop/tests/SettingsService.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1 schema fields.
 - Produces: `StoredMauzSettings`/`MauzRuntimeSettings` gain `backendPreset`, `backendBaseUrl`, `agentMode`, `installId: string`. `installId` is storage-only (not in the public `MauzSettings`), surfaces through `getRuntime()`.
 
@@ -183,10 +187,9 @@ it("updates backend settings", async () => {
   - `update()`: add three `applyDefinedSetting` lines for `backendPreset`, `backendBaseUrl`, `agentMode` after the `includeFullScreenshot` line.
   - `parseStoredSettings()`: copy the three public fields from `publicSettings.data`; preserve stored `installId` when it is a non-empty string, else keep the generated default:
     ```typescript
-    installId:
-      typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
-        ? parsedRecord.installId.trim()
-        : getDefaultSettings().installId
+    installId: typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
+      ? parsedRecord.installId.trim()
+      : getDefaultSettings().installId;
     ```
     (Bind `getDefaultSettings()` once at the top of the function to avoid generating two different UUIDs in one parse.)
   - `shouldSanitizeStoredSettings()`: also return `true` when `!("installId" in parsed)` so pre-existing installs persist their id on first launch.
@@ -197,11 +200,14 @@ it("updates backend settings", async () => {
 ### Task 3: Backend capability detection module
 
 **Files:**
+
 - Create: `apps/api/src/backend/capabilities.ts`
 - Test: `apps/api/tests/backendCapabilities.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   ```typescript
   export type BackendCapabilities = {
     sessionIdHeader: string;
@@ -219,10 +225,7 @@ it("updates backend settings", async () => {
 
 ```typescript
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  clearBackendCapabilitiesCache,
-  detectBackendCapabilities
-} from "../src/backend/capabilities";
+import { clearBackendCapabilitiesCache, detectBackendCapabilities } from "../src/backend/capabilities";
 
 const GATEWAY_CAPABILITIES = {
   object: "hermes.api_server.capabilities",
@@ -273,7 +276,12 @@ describe("detectBackendCapabilities", () => {
 
   it("does not treat missing run features as runs support", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      okJson({ features: { session_continuity_header: "X-Hermes-Session-Id", session_key_header: "X-Hermes-Session-Key" } })
+      okJson({
+        features: {
+          session_continuity_header: "X-Hermes-Session-Id",
+          session_key_header: "X-Hermes-Session-Key"
+        }
+      })
     );
     const caps = await detectBackendCapabilities("http://localhost:8642/v1", fetchMock);
     expect(caps).toEqual({
@@ -374,12 +382,14 @@ function parseCapabilities(body: unknown): BackendCapabilities | null {
 ### Task 4: askMauz — baseURL, session headers, backend-aware errors
 
 **Files:**
+
 - Modify: `apps/api/src/openai/askMauz.ts`
 - Modify: `apps/api/src/errors.ts`
 - Modify: `apps/api/src/routes/ask.ts`
 - Test: `apps/api/tests/askMauz.test.ts`
 
 **Interfaces:**
+
 - Consumes: `detectBackendCapabilities` (Task 3), `AskMauzRequest.sessionId` (Task 1).
 - Produces: `AskMauzOptions` gains `baseUrl?: string`, `backendApiKey?: string`, `installId?: string`, `fetchImpl?: typeof fetch`. New `BackendUnreachableError` in `errors.ts`. Route maps it to 503 with the backend-named message.
 
@@ -459,7 +469,9 @@ it("does not require an OpenAI key when a custom backend is configured", async (
 });
 
 it("raises BackendUnreachableError when the backend connection fails", async () => {
-  const create = vi.fn().mockRejectedValue(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
+  const create = vi
+    .fn()
+    .mockRejectedValue(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
   const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
   await expect(
     askMauz(buildRequest(), {
@@ -476,6 +488,7 @@ Remember `clearBackendCapabilitiesCache()` in this file's `afterEach`.
 - [ ] **Step 2: Run to verify failure** — `pnpm --filter @mauzai/api test -- askMauz` → FAIL.
 - [ ] **Step 3: Implement.**
   - `apps/api/src/errors.ts`:
+
     ```typescript
     export class BackendUnreachableError extends Error {
       constructor(baseUrl: string, options: { cause?: unknown } = {}) {
@@ -495,7 +508,9 @@ Remember `clearBackendCapabilitiesCache()` in this file's `afterEach`.
       }
     }
     ```
+
   - `apps/api/src/openai/askMauz.ts`:
+
     ```typescript
     export type AskMauzOptions = {
       apiKey?: string;
@@ -507,7 +522,9 @@ Remember `clearBackendCapabilitiesCache()` in this file's `afterEach`.
       fetchImpl?: typeof fetch;
     };
     ```
+
     In the function body, replace the key/client bootstrap:
+
     ```typescript
     const baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.MAUZ_BACKEND_BASE_URL);
     const backendApiKey = options.backendApiKey ?? process.env.MAUZ_BACKEND_API_KEY?.trim() ?? undefined;
@@ -526,14 +543,22 @@ Remember `clearBackendCapabilitiesCache()` in this file's `afterEach`.
 
     const capabilities =
       baseUrl === undefined ? null : await detectBackendCapabilities(baseUrl, options.fetchImpl ?? fetch);
-    const headers = buildBackendHeaders(capabilities, request.sessionId, backendApiKey ? installId : undefined);
+    const headers = buildBackendHeaders(
+      capabilities,
+      request.sessionId,
+      backendApiKey ? installId : undefined
+    );
     ```
+
     Wrap the `client.responses.create` call:
+
     ```typescript
     let response;
     try {
       response = await client.responses.create(
-        { /* unchanged payload */ },
+        {
+          /* unchanged payload */
+        },
         Object.keys(headers).length > 0 ? { headers } : undefined
       );
     } catch (error) {
@@ -543,7 +568,9 @@ Remember `clearBackendCapabilitiesCache()` in this file's `afterEach`.
       throw error;
     }
     ```
+
     New helpers at the bottom of the file:
+
     ```typescript
     function normalizeBaseUrl(value: string | undefined): string | undefined {
       const trimmed = value?.trim() ?? "";
@@ -574,23 +601,27 @@ Remember `clearBackendCapabilitiesCache()` in this file's `afterEach`.
       return "cause" in error && isConnectionError(error.cause);
     }
     ```
+
   - `apps/api/src/routes/ask.ts`: import `BackendUnreachableError`; in the catch block, before the generic 502:
     ```typescript
     if (error instanceof BackendUnreachableError) {
       return reply.status(503).send({ error: error.message });
     }
     ```
+
 - [ ] **Step 4: Run tests** — `pnpm --filter @mauzai/api test` (full API suite) → PASS.
 - [ ] **Step 5: Commit** — `git commit -am "feat: route asks through a configurable backend with gateway session headers"`
 
 ### Task 5: Desktop env plumbing + sessionId forwarding
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/index.ts:132-145` (`applyRuntimeEnvironment`)
 - Modify: `apps/desktop/src/main/ipc/registerIpcHandlers.ts:169-173` (`chatHistoryContinue`)
 - Test: `apps/desktop/tests/registerIpcHandlers.test.ts`
 
 **Interfaces:**
+
 - Consumes: `MauzRuntimeSettings.backendPreset/backendBaseUrl/agentMode/installId` (Task 2), `DEFAULT_HERMES_GATEWAY_BASE_URL` (Task 1).
 - Produces: env vars per Global Constraints; continue-chat asks carry `sessionId`.
 
@@ -617,6 +648,7 @@ it("forwards the conversation id as sessionId when continuing a chat", async () 
     });
     ```
   - `index.ts` `applyRuntimeEnvironment` — append (import `DEFAULT_HERMES_GATEWAY_BASE_URL` from `@mauzai/shared`):
+
     ```typescript
     const backendBaseUrl = resolveBackendBaseUrl(settings);
 
@@ -629,7 +661,9 @@ it("forwards the conversation id as sessionId when continuing a chat", async () 
     process.env.MAUZ_AGENT_MODE = settings.agentMode;
     process.env.MAUZ_INSTALL_ID = settings.installId;
     ```
+
     New function below `applyRuntimeEnvironment`:
+
     ```typescript
     function resolveBackendBaseUrl(settings: MauzRuntimeSettings): string | undefined {
       if (settings.backendPreset === "openai") {
@@ -645,17 +679,21 @@ it("forwards the conversation id as sessionId when continuing a chat", async () 
       return settings.backendPreset === "hermes-gateway" ? DEFAULT_HERMES_GATEWAY_BASE_URL : undefined;
     }
     ```
+
     Note: `MAUZ_BACKEND_API_KEY` is intentionally env-only in this build (set it before launching Mauz when the gateway requires auth); do not plumb it through settings.
+
 - [ ] **Step 4: Run tests** — `pnpm --filter @mauzai/desktop test` → PASS.
 - [ ] **Step 5: Commit** — `git commit -am "feat: plumb backend env vars and continue-chat session ids"`
 
 ### Task 6: Settings UI — Backend section
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/SettingsPanel.tsx`
 - Test: none automated (the repo has no renderer component tests); verified in Task 7.
 
 **Interfaces:**
+
 - Consumes: settings fields from Task 1/2 (already in the `MauzSettings` draft object), `DEFAULT_HERMES_GATEWAY_BASE_URL`.
 
 - [ ] **Step 1: Add draft plumbing.** The panel edits a `draft: MauzSettings` object via `updateDraft(key, value)`; the new fields are already part of `MauzSettings`, so no state changes are needed.
@@ -671,9 +709,7 @@ it("forwards the conversation id as sessionId when continuing a chat", async () 
     label="Provider"
     value={draft.backendPreset}
     options={["openai", "hermes-gateway", "custom"]}
-    onChange={(backendPreset) =>
-      updateDraft("backendPreset", backendPreset as MauzSettings["backendPreset"])
-    }
+    onChange={(backendPreset) => updateDraft("backendPreset", backendPreset as MauzSettings["backendPreset"])}
   />
   {draft.backendPreset !== "openai" ? (
     <>
@@ -682,7 +718,9 @@ it("forwards the conversation id as sessionId when continuing a chat", async () 
         <input
           type="text"
           value={draft.backendBaseUrl}
-          placeholder={draft.backendPreset === "hermes-gateway" ? DEFAULT_HERMES_GATEWAY_BASE_URL : "https://host/v1"}
+          placeholder={
+            draft.backendPreset === "hermes-gateway" ? DEFAULT_HERMES_GATEWAY_BASE_URL : "https://host/v1"
+          }
           onChange={(event) => updateDraft("backendBaseUrl", event.target.value)}
         />
       </label>
@@ -713,6 +751,7 @@ agentMode: draft.agentMode
 ### Task 7: Phase 1 E2E verification + setup docs
 
 **Files:**
+
 - Modify: `setup.md` (new "Hermes agent backend" section)
 - No code changes.
 
@@ -731,11 +770,14 @@ agentMode: draft.agentMode
 ### Task 8: Runs API client
 
 **Files:**
+
 - Create: `apps/api/src/backend/runsClient.ts`
 - Test: `apps/api/tests/runsClient.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   ```typescript
   export type RunEvent = { event: string; run_id?: string } & Record<string, unknown>;
   export type RunsClientOptions = { baseUrl: string; apiKey?: string; fetchImpl?: typeof fetch };
@@ -755,7 +797,13 @@ agentMode: draft.agentMode
 
 ```typescript
 import { describe, expect, it, vi } from "vitest";
-import { getRunStatus, resolveRunApproval, startRun, stopRun, streamRunEvents } from "../src/backend/runsClient";
+import {
+  getRunStatus,
+  resolveRunApproval,
+  startRun,
+  stopRun,
+  streamRunEvents
+} from "../src/backend/runsClient";
 
 function sseResponse(chunks: string[]): Response {
   const stream = new ReadableStream<Uint8Array>({
@@ -771,9 +819,11 @@ function sseResponse(chunks: string[]): Response {
 
 describe("runsClient", () => {
   it("starts a run with session id, key and auth", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ run_id: "run_abc", status: "started" }), { status: 202 })
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ run_id: "run_abc", status: "started" }), { status: 202 })
+      );
     const result = await startRun({
       baseUrl: "http://localhost:8642/v1",
       apiKey: "gw",
@@ -798,14 +848,16 @@ describe("runsClient", () => {
   });
 
   it("parses SSE events and ignores keepalive comments", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      sseResponse([
-        ": keepalive\n\n",
-        'data: {"event":"tool.started","run_id":"r","tool":"terminal"}\n\n',
-        'data: {"event":"run.completed","run_id":"r","output":"done",',
-        '"usage":{"total_tokens":5}}\n\n'
-      ])
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        sseResponse([
+          ": keepalive\n\n",
+          'data: {"event":"tool.started","run_id":"r","tool":"terminal"}\n\n',
+          'data: {"event":"run.completed","run_id":"r","output":"done",',
+          '"usage":{"total_tokens":5}}\n\n'
+        ])
+      );
     const events = [];
     for await (const event of streamRunEvents({ baseUrl: "http://x/v1", runId: "r", fetchImpl: fetchMock })) {
       events.push(event);
@@ -823,9 +875,11 @@ describe("runsClient", () => {
   });
 
   it("returns run status and null for unknown runs", async () => {
-    const okMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: "completed", output: "done" }), { status: 200 })
-    );
+    const okMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: "completed", output: "done" }), { status: 200 })
+      );
     expect(await getRunStatus({ baseUrl: "http://x/v1", runId: "r", fetchImpl: okMock })).toMatchObject({
       status: "completed",
       output: "done"
@@ -841,9 +895,9 @@ describe("runsClient", () => {
     expect(stopMock.mock.calls[0]![0]).toBe("http://x/v1/runs/r/stop");
 
     const failMock = vi.fn().mockResolvedValue(new Response("busy", { status: 429 }));
-    await expect(
-      startRun({ baseUrl: "http://x/v1", input: "hi", fetchImpl: failMock })
-    ).rejects.toThrow(/429/);
+    await expect(startRun({ baseUrl: "http://x/v1", input: "hi", fetchImpl: failMock })).rejects.toThrow(
+      /429/
+    );
   });
 });
 ```
@@ -874,8 +928,7 @@ export async function startRun(
       ...(options.instructions === undefined ? {} : { instructions: options.instructions }),
       ...(options.sessionId === undefined ? {} : { session_id: options.sessionId })
     },
-    extraHeaders:
-      options.sessionKey === undefined ? {} : { [sessionKeyHeader]: options.sessionKey }
+    extraHeaders: options.sessionKey === undefined ? {} : { [sessionKeyHeader]: options.sessionKey }
   });
   const body = (await response.json()) as { run_id?: string };
 
@@ -1012,6 +1065,7 @@ function parseSseEvent(rawEvent: string): RunEvent | null {
 ### Task 9: askViaRuns orchestration + ask dispatch
 
 **Files:**
+
 - Create: `apps/api/src/backend/askViaRuns.ts`
 - Modify: `apps/api/src/routes/ask.ts` (dispatch + new options)
 - Modify: `apps/api/src/server.ts` (thread options through)
@@ -1019,8 +1073,10 @@ function parseSseEvent(rawEvent: string): RunEvent | null {
 - Test: `apps/api/tests/askViaRuns.test.ts`
 
 **Interfaces:**
+
 - Consumes: `startRun`/`streamRunEvents`/`resolveRunApproval` (Task 8), `buildResponseContent` + `MAUZ_SYSTEM_PROMPT` (existing `askMauz.ts` exports — `buildResponseContent` is already exported), `detectBackendCapabilities` (Task 3).
 - Produces:
+
   ```typescript
   export type AgentApprovalChoice = "once" | "session" | "always" | "deny";
   export type AgentApprovalRequest = { runId: string; description: string; raw: Record<string, unknown> };
@@ -1033,11 +1089,16 @@ function parseSseEvent(rawEvent: string): RunEvent | null {
   export async function askViaRuns(
     request: AskMauzRequest,
     options: {
-      baseUrl: string; model: string; agentMode: "approve" | "yolo";
-      apiKey?: string; installId?: string; fetchImpl?: typeof fetch;
+      baseUrl: string;
+      model: string;
+      agentMode: "approve" | "yolo";
+      apiKey?: string;
+      installId?: string;
+      fetchImpl?: typeof fetch;
     } & RunLifecycleHooks
   ): Promise<AskMauzResponse>;
   ```
+
   `CreateMauzApiServerOptions` and `RegisterAskRouteOptions` both gain `runHooks?: RunLifecycleHooks`.
 
 - [ ] **Step 1: Write failing tests** in `apps/api/tests/askViaRuns.test.ts`:
@@ -1049,7 +1110,9 @@ import { askViaRuns } from "../src/backend/askViaRuns";
 function runsFetchMock(events: string[]): ReturnType<typeof vi.fn> {
   return vi.fn().mockImplementation((url: string) => {
     if (url.endsWith("/runs")) {
-      return Promise.resolve(new Response(JSON.stringify({ run_id: "run_1", status: "started" }), { status: 202 }));
+      return Promise.resolve(
+        new Response(JSON.stringify({ run_id: "run_1", status: "started" }), { status: 202 })
+      );
     }
     if (url.endsWith("/events")) {
       const stream = new ReadableStream<Uint8Array>({
@@ -1074,7 +1137,9 @@ const BASE_OPTIONS = {
 
 describe("askViaRuns", () => {
   it("returns the run output as the answer", async () => {
-    const fetchImpl = runsFetchMock(['{"event":"run.completed","run_id":"run_1","output":"answer text","usage":{"total_tokens":9}}']);
+    const fetchImpl = runsFetchMock([
+      '{"event":"run.completed","run_id":"run_1","output":"answer text","usage":{"total_tokens":9}}'
+    ]);
     const response = await askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl });
     expect(response).toMatchObject({ answer: "answer text", model: "hermes-agent" });
   });
@@ -1108,7 +1173,9 @@ describe("askViaRuns", () => {
 
   it("throws on run.failed and on run.cancelled", async () => {
     const failed = runsFetchMock(['{"event":"run.failed","run_id":"run_1","error":"boom"}']);
-    await expect(askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl: failed })).rejects.toThrow("boom");
+    await expect(
+      askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl: failed })
+    ).rejects.toThrow("boom");
 
     const cancelled = runsFetchMock(['{"event":"run.cancelled","run_id":"run_1"}']);
     await expect(
@@ -1218,7 +1285,11 @@ export async function askViaRuns(
     // SSE stream dropped without a terminal event (spec §3.6): poll status once.
     const status = await getRunStatus({ ...clientOptions, runId });
 
-    if (status?.status === "completed" && typeof status.output === "string" && status.output.trim().length > 0) {
+    if (
+      status?.status === "completed" &&
+      typeof status.output === "string" &&
+      status.output.trim().length > 0
+    ) {
       return {
         answer: status.output.trim(),
         model: options.model,
@@ -1241,53 +1312,58 @@ async function denyByDefault(): Promise<AgentApprovalChoice> {
 }
 ```
 
-  - `apps/api/src/errors.ts` addition:
-    ```typescript
-    export class AgentRunStoppedError extends Error {
-      constructor() {
-        super("The agent run was stopped.");
-        this.name = "AgentRunStoppedError";
-      }
+- `apps/api/src/errors.ts` addition:
+  ```typescript
+  export class AgentRunStoppedError extends Error {
+    constructor() {
+      super("The agent run was stopped.");
+      this.name = "AgentRunStoppedError";
     }
-    ```
-  - `apps/api/src/routes/ask.ts` — replace the fixed default handler with a dispatcher. `RegisterAskRouteOptions` gains `runHooks?: RunLifecycleHooks`. Default handler:
-    ```typescript
-    const askHandler = options.askHandler ?? createDefaultAskHandler(options.runHooks);
-    ```
-    ```typescript
-    function createDefaultAskHandler(runHooks: RunLifecycleHooks | undefined): AskMauzHandler {
-      return async (request) => {
-        const baseUrl = process.env.MAUZ_BACKEND_BASE_URL?.trim();
+  }
+  ```
+- `apps/api/src/routes/ask.ts` — replace the fixed default handler with a dispatcher. `RegisterAskRouteOptions` gains `runHooks?: RunLifecycleHooks`. Default handler:
 
-        if (baseUrl) {
-          const capabilities = await detectBackendCapabilities(baseUrl);
+  ```typescript
+  const askHandler = options.askHandler ?? createDefaultAskHandler(options.runHooks);
+  ```
 
-          if (capabilities?.supportsRuns) {
-            const backendApiKey = process.env.MAUZ_BACKEND_API_KEY?.trim();
+  ```typescript
+  function createDefaultAskHandler(runHooks: RunLifecycleHooks | undefined): AskMauzHandler {
+    return async (request) => {
+      const baseUrl = process.env.MAUZ_BACKEND_BASE_URL?.trim();
 
-            return askViaRuns(request, {
-              baseUrl,
-              model: process.env.OPENAI_ASK_MODEL?.trim() || "hermes-agent",
-              agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? "yolo" : "approve",
-              ...(backendApiKey ? { apiKey: backendApiKey } : {}),
-              ...(process.env.MAUZ_INSTALL_ID ? { installId: process.env.MAUZ_INSTALL_ID } : {}),
-              ...runHooks
-            });
-          }
+      if (baseUrl) {
+        const capabilities = await detectBackendCapabilities(baseUrl);
+
+        if (capabilities?.supportsRuns) {
+          const backendApiKey = process.env.MAUZ_BACKEND_API_KEY?.trim();
+
+          return askViaRuns(request, {
+            baseUrl,
+            model: process.env.OPENAI_ASK_MODEL?.trim() || "hermes-agent",
+            agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? "yolo" : "approve",
+            ...(backendApiKey ? { apiKey: backendApiKey } : {}),
+            ...(process.env.MAUZ_INSTALL_ID ? { installId: process.env.MAUZ_INSTALL_ID } : {}),
+            ...runHooks
+          });
         }
+      }
 
-        return askMauz(request);
-      };
-    }
-    ```
-    Error mapping in the route's catch: `AgentRunStoppedError` → `reply.status(499).send({ error: error.message })` (add before the generic 502; also add a test asserting the 499 in `apps/api/tests/askMauz.test.ts`'s route section or a new route test).
-  - `apps/api/src/server.ts`: `CreateMauzApiServerOptions` gains `runHooks?: RunLifecycleHooks`; pass through to `registerAskRoute` like the existing options.
+      return askMauz(request);
+    };
+  }
+  ```
+
+  Error mapping in the route's catch: `AgentRunStoppedError` → `reply.status(499).send({ error: error.message })` (add before the generic 502; also add a test asserting the 499 in `apps/api/tests/askMauz.test.ts`'s route section or a new route test).
+
+- `apps/api/src/server.ts`: `CreateMauzApiServerOptions` gains `runHooks?: RunLifecycleHooks`; pass through to `registerAskRoute` like the existing options.
 - [ ] **Step 4: Run tests** — `pnpm --filter @mauzai/api test` → PASS.
 - [ ] **Step 5: Commit** — `git commit -am "feat: run asks through the agent runs API with approval and yolo modes"`
 
 ### Task 10: Desktop approval bridge — IPC, preload, stop
 
 **Files:**
+
 - Modify: `packages/shared/src/constants.ts` (`IPC_CHANNELS` additions)
 - Create: `apps/desktop/src/main/agent/AgentRunBridge.ts`
 - Modify: `apps/desktop/src/main/ipc/registerIpcHandlers.ts`
@@ -1297,6 +1373,7 @@ async function denyByDefault(): Promise<AgentApprovalChoice> {
 - Test: `apps/desktop/tests/AgentRunBridge.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RunLifecycleHooks`, `AgentApprovalRequest`, `AgentApprovalChoice` (import type from `@mauzai/api/server` re-export — add `export type { RunLifecycleHooks, AgentApprovalRequest, AgentApprovalChoice } from "./backend/askViaRuns";` to `apps/api/src/server.ts`), `stopRun` (re-export `stopRun` and `RunsClientOptions` from `server.ts` the same way).
 - Produces:
   - `IPC_CHANNELS` additions: `agentApprovalRequest: "mauz:agent:approval-request"` (main→renderer push), `agentApprovalRespond: "mauz:agent:approval-respond"`, `agentRunState: "mauz:agent:run-state"` (main→renderer push `{ runId: string | null }`), `agentStop: "mauz:agent:stop"`.
@@ -1304,9 +1381,9 @@ async function denyByDefault(): Promise<AgentApprovalChoice> {
     ```typescript
     export class AgentRunBridge {
       constructor(options: { getPopoverWebContents(): Electron.WebContents | null });
-      readonly runHooks: RunLifecycleHooks;            // wire into launchLocalApi
-      respondToApproval(approvalId: string, choice: AgentApprovalChoice): void;  // from IPC
-      async stopActiveRun(): Promise<void>;            // from IPC and popover close
+      readonly runHooks: RunLifecycleHooks; // wire into launchLocalApi
+      respondToApproval(approvalId: string, choice: AgentApprovalChoice): void; // from IPC
+      async stopActiveRun(): Promise<void>; // from IPC and popover close
       get activeRunId(): string | null;
     }
     ```
@@ -1342,9 +1419,9 @@ describe("AgentRunBridge", () => {
 
   it("denies when no popover window is available", async () => {
     const bridge = new AgentRunBridge({ getPopoverWebContents: () => null });
-    await expect(
-      bridge.runHooks.onApprovalRequest!({ runId: "r", description: "x", raw: {} })
-    ).resolves.toBe("deny");
+    await expect(bridge.runHooks.onApprovalRequest!({ runId: "r", description: "x", raw: {} })).resolves.toBe(
+      "deny"
+    );
   });
 
   it("tracks the active run id and pushes run state", () => {
@@ -1369,6 +1446,7 @@ describe("AgentRunBridge", () => {
     agentStop: "mauz:agent:stop",
     ```
   - `apps/desktop/src/main/agent/AgentRunBridge.ts`:
+
     ```typescript
     import { randomUUID } from "node:crypto";
     import type { WebContents } from "electron";
@@ -1457,10 +1535,12 @@ describe("AgentRunBridge", () => {
       }
     }
     ```
+
   - `apps/api/src/server.ts` — add the type/function re-exports listed in Interfaces.
   - `apps/desktop/src/main/server/launchLocalApi.ts` — `LaunchLocalApiOptions` gains `runHooks?: RunLifecycleHooks` (type import from `@mauzai/api/server`); pass into `createMauzApiServer`.
   - `apps/desktop/src/main/index.ts` — construct `const agentRunBridge = new AgentRunBridge({ getPopoverWebContents: () => popover?.window?.webContents ?? null })` (adapt to how the popover controller exposes its `BrowserWindow` — see `PopoverWindowController`); pass `runHooks: agentRunBridge.runHooks` to `launchLocalApi`; pass the bridge into `registerIpcHandlers`. Also wire popover close to run containment (spec §3.6): where the popover hide/close is handled (`PopoverWindowController` or its call site in `index.ts`), call `void agentRunBridge.stopActiveRun()` so closing the popover stops any in-flight agent run.
   - `registerIpcHandlers.ts` — new handlers:
+
     ```typescript
     ipcMain.handle(IPC_CHANNELS.agentApprovalRespond, (event, payload: unknown) => {
       assertTrustedSurface(event, ["popover"]);
@@ -1473,13 +1553,16 @@ describe("AgentRunBridge", () => {
       await agentRunBridge.stopActiveRun();
     });
     ```
+
     Add to `packages/shared/src/schemas.ts`:
+
     ```typescript
     export const AgentApprovalResponseSchema = z.object({
       approvalId: z.string().min(1),
       choice: z.enum(["once", "session", "always", "deny"])
     });
     ```
+
   - `apps/desktop/src/preload/index.ts` — expose (following the existing bridge namespace pattern):
     ```typescript
     agent: {
@@ -1498,17 +1581,20 @@ describe("AgentRunBridge", () => {
     }
     ```
     Mirror the shape in `global.d.ts` and add the four `mauzClient` methods delegating to `getBridge().agent.*`.
+
 - [ ] **Step 4: Run tests** — `pnpm --filter @mauzai/desktop test` → PASS; `pnpm -r build` type-checks the cross-package imports.
 - [ ] **Step 5: Commit** — `git commit -am "feat: bridge agent approval requests and stop control to the popover"`
 
 ### Task 11: Popover UI — approval prompt, stop button, mode toggle
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/src/components/AskPanel.tsx`
 - Modify: `apps/desktop/src/renderer/src/styles.css` (minimal styles for the new elements, following existing class conventions)
 - Test: manual (no renderer test harness); covered by Task 12.
 
 **Interfaces:**
+
 - Consumes: `mauzClient.onAgentApprovalRequest` / `respondAgentApproval` / `onAgentRunState` / `stopAgentRun` / `updateSettings` (Task 10), `settings.agentMode`.
 
 - [ ] **Step 1: Add state + subscriptions** inside the `AskPanel` component:
@@ -1548,19 +1634,29 @@ const handleApprovalChoice = (choice: "once" | "session" | "always" | "deny"): v
 - [ ] **Step 2: Render the approval card** inside the answer area (above the answer/loading display):
 
 ```tsx
-{approvalRequest !== null ? (
-  <div className="agent-approval" role="alertdialog" aria-label="Agent approval request">
-    <p className="agent-approval-description">
-      <ShieldAlert aria-hidden="true" size={14} /> {approvalRequest.description}
-    </p>
-    <div className="agent-approval-actions">
-      <button type="button" onClick={() => handleApprovalChoice("once")}>Allow once</button>
-      <button type="button" onClick={() => handleApprovalChoice("session")}>Allow for session</button>
-      <button type="button" onClick={() => handleApprovalChoice("always")}>Always allow</button>
-      <button type="button" className="agent-approval-deny" onClick={() => handleApprovalChoice("deny")}>Deny</button>
+{
+  approvalRequest !== null ? (
+    <div className="agent-approval" role="alertdialog" aria-label="Agent approval request">
+      <p className="agent-approval-description">
+        <ShieldAlert aria-hidden="true" size={14} /> {approvalRequest.description}
+      </p>
+      <div className="agent-approval-actions">
+        <button type="button" onClick={() => handleApprovalChoice("once")}>
+          Allow once
+        </button>
+        <button type="button" onClick={() => handleApprovalChoice("session")}>
+          Allow for session
+        </button>
+        <button type="button" onClick={() => handleApprovalChoice("always")}>
+          Always allow
+        </button>
+        <button type="button" className="agent-approval-deny" onClick={() => handleApprovalChoice("deny")}>
+          Deny
+        </button>
+      </div>
     </div>
-  </div>
-) : null}
+  ) : null;
+}
 ```
 
 - [ ] **Step 3: Stop button** — while `askLoading && activeRunId !== null`, render next to the loading indicator:
@@ -1575,8 +1671,16 @@ const handleApprovalChoice = (choice: "once" | "session" | "always" | "deny"): v
 
 ```tsx
 <div className="agent-mode-toggle" role="radiogroup" aria-label="Agent mode">
-  <button type="button" aria-pressed={agentMode === "approve"} onClick={() => void handleModeChange("approve")}>Approve</button>
-  <button type="button" aria-pressed={agentMode === "yolo"} onClick={() => void handleModeChange("yolo")}>YOLO</button>
+  <button
+    type="button"
+    aria-pressed={agentMode === "approve"}
+    onClick={() => void handleModeChange("approve")}
+  >
+    Approve
+  </button>
+  <button type="button" aria-pressed={agentMode === "yolo"} onClick={() => void handleModeChange("yolo")}>
+    YOLO
+  </button>
 </div>
 ```
 
@@ -1589,6 +1693,7 @@ with `handleModeChange` calling `mauzClient.updateSettings({ agentMode: mode })`
 ### Task 12: Phase 2 E2E verification + docs
 
 **Files:**
+
 - Modify: `setup.md`, `README.md` (short "Agent backends" paragraph)
 
 - [ ] **Step 1: Approvals mode E2E** — Hermes gateway running; preset `hermes`, mode Approve. Ask something requiring a gated tool ("create a file named mauz-test.txt on my Desktop"). Expect: approval card appears in the popover → Allow once → file exists → answer arrives.

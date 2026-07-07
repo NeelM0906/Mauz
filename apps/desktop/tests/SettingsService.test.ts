@@ -147,7 +147,6 @@ describe("SettingsService", () => {
     expect(writes.at(-1)).not.toContain("backendPreset");
   });
 
-
   it("removes legacy plaintext API keys from stored settings", async () => {
     const { service, writes } = createSettingsService({
       settingsJson: JSON.stringify({
@@ -296,13 +295,16 @@ describe("SettingsService", () => {
 
   it("serializes concurrent updates so neither change is lost", async () => {
     const files = new Map<string, string>();
-    files.set(SHARED_SETTINGS_PATH, JSON.stringify({
-      ...DEFAULT_SETTINGS,
-      assistantMode: "simple",
-      backendBaseUrl: "",
-      agentMode: "approve",
-      installId: "aabbccdd-1122-3344-5566-778899aabbcc"
-    }));
+    files.set(
+      SHARED_SETTINGS_PATH,
+      JSON.stringify({
+        ...DEFAULT_SETTINGS,
+        assistantMode: "simple",
+        backendBaseUrl: "",
+        agentMode: "approve",
+        installId: "aabbccdd-1122-3344-5566-778899aabbcc"
+      })
+    );
 
     const service = createServiceWithFiles(files);
 

@@ -323,9 +323,7 @@ describe("ScreenshotService", () => {
       })
     );
 
-    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(
-      ScreenshotCaptureError
-    );
+    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(ScreenshotCaptureError);
     expect(getSourcesSpy).not.toHaveBeenCalled();
   });
 
@@ -338,9 +336,7 @@ describe("ScreenshotService", () => {
       })
     );
 
-    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(
-      ScreenshotCaptureError
-    );
+    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(ScreenshotCaptureError);
     expect(getSourcesSpy).not.toHaveBeenCalled();
   });
 

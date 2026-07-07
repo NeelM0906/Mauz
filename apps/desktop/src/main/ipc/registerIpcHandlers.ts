@@ -316,4 +316,3 @@ function buildFallbackChatTitle(question: string): string {
 
   return words.length > 0 ? words.join(" ") : "Untitled Mauz Chat";
 }
-
