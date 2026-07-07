@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AgentApprovalPayload,
+  AgentRunActivityPayload,
+  AgentRunStatePayload,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -85,6 +88,32 @@ const mauzApi: MauzBridge = {
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.permissionError, listener);
       };
+    }
+  },
+  agent: {
+    respondApproval: (payload: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentApprovalRespond, payload) as Promise<void>,
+    stop: () => ipcRenderer.invoke(IPC_CHANNELS.agentStop) as Promise<void>,
+    onApprovalRequest: (callback: (payload: AgentApprovalPayload) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: AgentApprovalPayload): void => {
+        callback(payload);
+      };
+      ipcRenderer.on(IPC_CHANNELS.agentApprovalRequest, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentApprovalRequest, listener);
+    },
+    onRunState: (callback: (payload: AgentRunStatePayload) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: AgentRunStatePayload): void => {
+        callback(payload);
+      };
+      ipcRenderer.on(IPC_CHANNELS.agentRunState, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentRunState, listener);
+    },
+    onRunActivity: (callback: (payload: AgentRunActivityPayload) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: AgentRunActivityPayload): void => {
+        callback(payload);
+      };
+      ipcRenderer.on(IPC_CHANNELS.agentRunActivity, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentRunActivity, listener);
     }
   }
 };

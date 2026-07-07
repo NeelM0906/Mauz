@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -83,6 +84,26 @@ describe("ChatHistoryService", () => {
       id: saved.id,
       messages: updated.messages
     });
+  });
+
+  it("backs up a corrupt history file and returns empty history", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mauz-history-"));
+    tempDirs.push(dir);
+    const historyPath = join(dir, "history.json");
+
+    await writeFile(historyPath, "{ not valid json at all", "utf8");
+
+    const service = new ChatHistoryService(historyPath);
+    const history = await service.list();
+
+    expect(history.groups).toHaveLength(0);
+
+    // Original path should be gone (renamed to backup)
+    expect(existsSync(historyPath)).toBe(false);
+
+    // A backup file with ".corrupt-" in its name should exist
+    const files = await readdir(dir);
+    expect(files.some((f) => f.includes(".corrupt-"))).toBe(true);
   });
 
   it("serializes concurrent history writes so saved conversations are not lost", async () => {

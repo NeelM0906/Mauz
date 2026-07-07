@@ -1,4 +1,7 @@
 import type {
+  AgentApprovalPayload,
+  AgentRunActivityPayload,
+  AgentRunStatePayload,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -80,7 +83,10 @@ const browserPreviewBridge: MauzBridge = {
       realtimeVoice: "marin",
       realtimeReasoningEffort: "low",
       includeFullScreenshot: false,
-      apiKeyConfigured: false
+      apiKeyConfigured: false,
+      assistantMode: "simple",
+      backendBaseUrl: "",
+      agentMode: "approve"
     }),
     update: async (payload: MauzSettingsUpdate) => {
       const openAiAuthDisconnected = payload.openAiAuthDisconnected ?? false;
@@ -101,13 +107,23 @@ const browserPreviewBridge: MauzBridge = {
         realtimeVoice: payload.realtimeVoice ?? "marin",
         realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
         includeFullScreenshot: payload.includeFullScreenshot ?? false,
-        apiKeyConfigured: openAiCredentialSource !== "none"
+        apiKeyConfigured: openAiCredentialSource !== "none",
+        assistantMode: payload.assistantMode ?? "simple",
+        backendBaseUrl: payload.backendBaseUrl ?? "",
+        agentMode: payload.agentMode ?? "approve"
       };
     }
   },
   events: {
     onActivation: () => () => {},
     onPermissionError: () => () => {}
+  },
+  agent: {
+    respondApproval: async (_payload: unknown) => {},
+    stop: async () => {},
+    onApprovalRequest: (_callback: (payload: AgentApprovalPayload) => void) => () => {},
+    onRunState: (_callback: (payload: AgentRunStatePayload) => void) => () => {},
+    onRunActivity: (_callback: (payload: AgentRunActivityPayload) => void) => () => {}
   }
 };
 
@@ -205,5 +221,20 @@ export const mauzClient = {
   },
   onPermissionError(callback: (error: PermissionError) => void): () => void {
     return getBridge().events.onPermissionError(callback);
+  },
+  onAgentApprovalRequest(callback: (payload: AgentApprovalPayload) => void): () => void {
+    return getBridge().agent.onApprovalRequest(callback);
+  },
+  respondAgentApproval(payload: { approvalId: string; choice: string }): Promise<void> {
+    return getBridge().agent.respondApproval(payload);
+  },
+  onAgentRunState(callback: (payload: AgentRunStatePayload) => void): () => void {
+    return getBridge().agent.onRunState(callback);
+  },
+  onAgentRunActivity(callback: (payload: AgentRunActivityPayload) => void): () => void {
+    return getBridge().agent.onRunActivity(callback);
+  },
+  stopAgentRun(): Promise<void> {
+    return getBridge().agent.stop();
   }
 };

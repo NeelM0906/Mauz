@@ -17,7 +17,7 @@ type ChildProcessLike = {
   once(event: "error", listener: (error: Error) => void): unknown;
 };
 
-type SpawnLike = (command: string, args?: readonly string[]) => ChildProcessLike;
+type SpawnLike = (command: string, args?: readonly string[], options?: { env?: NodeJS.ProcessEnv }) => ChildProcessLike;
 
 type ShakeDetectorLike = {
   push(sample: { x: number; y: number; ts: number; buttons?: number | undefined }): ShakeDetectorResult;
@@ -32,6 +32,7 @@ export type MacInputAgentProviderOptions = {
   detector?: ShakeDetectorLike;
   maxRestarts?: number;
   restartDelayMs?: number;
+  permissionRetryDelayMs?: number;
 };
 
 const ACCESSIBILITY_PERMISSION_MESSAGE =
@@ -40,6 +41,7 @@ const HELPER_NOT_FOUND_MESSAGE =
   "Mauz native input helper is not built. Run native/macos/MauzInputAgent/build.sh, then restart Mauz.";
 const DEFAULT_MAX_RESTARTS = 2;
 const DEFAULT_RESTART_DELAY_MS = 750;
+const DEFAULT_PERMISSION_RETRY_DELAY_MS = 15_000;
 
 export class MacInputAgentProvider implements InputProvider {
   private readonly activationListeners = new Set<(event: ActivationEvent) => void>();
@@ -47,6 +49,7 @@ export class MacInputAgentProvider implements InputProvider {
   private readonly detector: ShakeDetectorLike;
   private readonly maxRestarts: number;
   private readonly restartDelayMs: number;
+  private readonly permissionRetryDelayMs: number;
   private readonly pathExists: (path: string) => boolean;
   private readonly spawnHelper: SpawnLike;
   private readonly platform: NodeJS.Platform;
@@ -57,13 +60,18 @@ export class MacInputAgentProvider implements InputProvider {
   private restartAttempts = 0;
   private restartTimer: NodeJS.Timeout | null = null;
   private permissionFailure = false;
+  private permissionRetryTimer: NodeJS.Timeout | null = null;
 
   constructor(options: MacInputAgentProviderOptions = {}) {
     this.detector = options.detector ?? new ShakeDetector();
     this.maxRestarts = options.maxRestarts ?? DEFAULT_MAX_RESTARTS;
     this.restartDelayMs = options.restartDelayMs ?? DEFAULT_RESTART_DELAY_MS;
+    this.permissionRetryDelayMs = options.permissionRetryDelayMs ?? DEFAULT_PERMISSION_RETRY_DELAY_MS;
     this.pathExists = options.pathExists ?? existsSync;
-    this.spawnHelper = options.spawn ?? ((command, args) => spawn(command, args ?? []));
+    this.spawnHelper =
+      options.spawn ??
+      ((command, args, opts) =>
+        spawn(command, args ?? [], opts?.env !== undefined ? { env: opts.env } : {}));
     this.platform = options.platform ?? process.platform;
     this.helperPath = options.helperPath ?? findDefaultHelperPath();
   }
@@ -77,6 +85,12 @@ export class MacInputAgentProvider implements InputProvider {
 
     this.stopping = false;
     this.permissionFailure = false;
+
+    // Cancel any pending permission retry so a fresh start takes effect immediately.
+    if (this.permissionRetryTimer !== null) {
+      clearTimeout(this.permissionRetryTimer);
+      this.permissionRetryTimer = null;
+    }
 
     if (this.platform !== "darwin") {
       this.emitPermissionError({
@@ -105,6 +119,11 @@ export class MacInputAgentProvider implements InputProvider {
       this.restartTimer = null;
     }
 
+    if (this.permissionRetryTimer !== null) {
+      clearTimeout(this.permissionRetryTimer);
+      this.permissionRetryTimer = null;
+    }
+
     const child = this.child;
     this.child = null;
     this.stdoutBuffer = "";
@@ -130,8 +149,8 @@ export class MacInputAgentProvider implements InputProvider {
     };
   }
 
-  private startExecutableChild(): void {
-    const child = this.spawnHelper(this.helperPath, []);
+  private startExecutableChild(env?: NodeJS.ProcessEnv): void {
+    const child = this.spawnHelper(this.helperPath, [], env !== undefined ? { env } : undefined);
     this.child = child;
 
     child.stdout?.on("data", (chunk: Buffer | string) => {
@@ -159,7 +178,13 @@ export class MacInputAgentProvider implements InputProvider {
       }
 
       this.flushStdout();
-      this.scheduleRestartIfNeeded();
+
+      if (this.permissionFailure) {
+        // Normal restart is blocked in permission-failure state; use the retry timer instead.
+        this.schedulePermissionRetry();
+      } else {
+        this.scheduleRestartIfNeeded();
+      }
     });
   }
 
@@ -206,7 +231,24 @@ export class MacInputAgentProvider implements InputProvider {
         permission: parsedEvent.data.permission,
         message: parsedEvent.data.message || ACCESSIBILITY_PERMISSION_MESSAGE
       });
+      this.schedulePermissionRetry();
       return;
+    }
+
+    // Fix 2: Reset restart budget on the first valid sample so two crashes hours apart
+    // don't permanently exhaust the lifetime cap.
+    if (this.restartAttempts > 0) {
+      this.restartAttempts = 0;
+    }
+
+    // Fix 3: Clear permission-failure state when a valid sample arrives — the user
+    // must have granted Accessibility while we were retrying.
+    if (this.permissionFailure) {
+      this.permissionFailure = false;
+      if (this.permissionRetryTimer !== null) {
+        clearTimeout(this.permissionRetryTimer);
+        this.permissionRetryTimer = null;
+      }
     }
 
     const result = this.detector.push({
@@ -236,6 +278,22 @@ export class MacInputAgentProvider implements InputProvider {
       this.restartTimer = null;
       this.start();
     }, this.restartDelayMs);
+  }
+
+  // Fix 3: Retry spawning every permissionRetryDelayMs while in permission-failure state.
+  // Uses MAUZ_AX_PROMPT=0 so the user is not repeatedly prompted — they already saw the
+  // prompt on first launch; the retry is purely to pick up a newly granted permission.
+  private schedulePermissionRetry(): void {
+    if (this.stopping || this.permissionRetryTimer !== null) {
+      return;
+    }
+
+    this.permissionRetryTimer = setTimeout(() => {
+      this.permissionRetryTimer = null;
+      if (!this.stopping && this.permissionFailure) {
+        this.startExecutableChild({ ...process.env, MAUZ_AX_PROMPT: "0" });
+      }
+    }, this.permissionRetryDelayMs);
   }
 
   private emitActivation(event: ActivationEvent): void {
@@ -300,13 +358,3 @@ function findDefaultHelperPath(): string {
   return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }
 
-function getAppBundlePathForExecutable(executablePath: string): string | undefined {
-  const marker = ".app/Contents/MacOS/";
-  const markerIndex = executablePath.indexOf(marker);
-
-  if (markerIndex < 0) {
-    return undefined;
-  }
-
-  return executablePath.slice(0, markerIndex + ".app".length);
-}

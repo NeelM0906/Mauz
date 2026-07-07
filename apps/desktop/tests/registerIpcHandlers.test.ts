@@ -14,6 +14,7 @@ vi.mock("electron", () => ({
 vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
 
 import { IPC_CHANNELS, type MauzDesktopContext, type RealtimeConnectRequest } from "@mauzai/shared";
+import type { AgentRunBridge } from "../src/main/agent/AgentRunBridge";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
@@ -34,7 +35,9 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.chatHistoryDelete,
   IPC_CHANNELS.chatHistoryClear,
   IPC_CHANNELS.realtimeCreateSession,
-  IPC_CHANNELS.realtimeConnect
+  IPC_CHANNELS.realtimeConnect,
+  IPC_CHANNELS.agentApprovalRespond,
+  IPC_CHANNELS.agentStop
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -42,6 +45,7 @@ describe("registerIpcHandlers", () => {
     ipcMainMock.handle.mockClear();
     ipcMainMock.removeHandler.mockClear();
     realtimeApiClientMock.connectRealtimeToLocalApi.mockReset();
+    vi.unstubAllGlobals();
   });
 
   it("removes owned invoke handlers before registering them", () => {
@@ -272,6 +276,64 @@ describe("registerIpcHandlers", () => {
     );
     expect(options.chatHistory.list).not.toHaveBeenCalled();
   });
+
+  it("passes assistantMode and agentMode through to updateSettings without stripping them", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsUpdate);
+
+    await handler(createInvokeEvent("popover"), {
+      assistantMode: "agentic",
+      agentMode: "yolo"
+    });
+
+    expect(options.updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ assistantMode: "agentic", agentMode: "yolo" })
+    );
+  });
+
+  it("forwards the conversation id as sessionId when continuing a chat", async () => {
+    let capturedAskBody: Record<string, unknown> = {};
+
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      capturedAskBody = JSON.parse(init.body as string) as Record<string, unknown>;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ answer: "mocked answer", model: "test-model" })
+      };
+    });
+
+    const options = createOptions();
+    const conversation: import("@mauzai/shared").ChatConversation = {
+      id: "conv-42",
+      title: "Test conversation",
+      createdAt: "2026-05-14T12:00:00.000Z",
+      updatedAt: "2026-05-14T12:00:00.000Z",
+      messages: []
+    };
+
+    vi.mocked(options.chatHistory.get).mockResolvedValueOnce(conversation);
+    vi.mocked(options.chatHistory.appendAskTurn).mockResolvedValueOnce(conversation);
+    vi.mocked(options.contextCollector.collectForAsk).mockResolvedValueOnce({
+      timestamp: "2026-05-14T12:00:00.000Z",
+      platform: "darwin",
+      cursor: { x: 0, y: 0 }
+    });
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryContinue);
+
+    await handler(createInvokeEvent("desktop"), {
+      id: "conv-42",
+      question: "What does this mean?"
+    });
+
+    expect(capturedAskBody.sessionId).toBe("conv-42");
+  });
 });
 
 function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
@@ -380,6 +442,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     } as never,
     api,
     localApiToken: "test-token",
+    agentRunBridge: {
+      respondToApproval: vi.fn(),
+      stopActiveRun: vi.fn(async () => {})
+    } as unknown as AgentRunBridge,
     getSettings: vi.fn(async () => ({
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
@@ -393,7 +459,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeVoice: "marin",
       realtimeReasoningEffort: "low" as const,
       includeFullScreenshot: false,
-      apiKeyConfigured: false
+      apiKeyConfigured: false,
+      assistantMode: "simple" as const,
+      backendBaseUrl: "",
+      agentMode: "approve" as const
     })),
     updateSettings: vi.fn(async (update) => ({
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
@@ -408,7 +477,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeVoice: update.realtimeVoice ?? "marin",
       realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
       includeFullScreenshot: update.includeFullScreenshot ?? false,
-      apiKeyConfigured: false
+      apiKeyConfigured: false,
+      assistantMode: update.assistantMode ?? ("simple" as const),
+      backendBaseUrl: update.backendBaseUrl ?? "",
+      agentMode: update.agentMode ?? ("approve" as const)
     }))
   };
 }

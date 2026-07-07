@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ScreenshotCaptureError,
   ScreenshotService,
@@ -312,6 +312,46 @@ describe("ScreenshotService", () => {
       width: 768,
       height: 576
     });
+  });
+
+  it("throws ScreenshotCaptureError before calling getSources when permission is denied", async () => {
+    const getSourcesSpy = vi.fn().mockResolvedValue([]);
+    const service = new ScreenshotService(
+      createDeps({
+        desktopCapturer: { getSources: getSourcesSpy },
+        systemPreferences: { getMediaAccessStatus: () => "denied" }
+      })
+    );
+
+    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(
+      ScreenshotCaptureError
+    );
+    expect(getSourcesSpy).not.toHaveBeenCalled();
+  });
+
+  it("throws ScreenshotCaptureError before calling getSources when permission is restricted", async () => {
+    const getSourcesSpy = vi.fn().mockResolvedValue([]);
+    const service = new ScreenshotService(
+      createDeps({
+        desktopCapturer: { getSources: getSourcesSpy },
+        systemPreferences: { getMediaAccessStatus: () => "restricted" }
+      })
+    );
+
+    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(
+      ScreenshotCaptureError
+    );
+    expect(getSourcesSpy).not.toHaveBeenCalled();
+  });
+
+  it("proceeds with capture when systemPreferences reports permission granted", async () => {
+    const service = new ScreenshotService(
+      createDeps({
+        systemPreferences: { getMediaAccessStatus: () => "granted" }
+      })
+    );
+
+    await expect(service.captureDisplayNear({ x: 10, y: 20 })).resolves.toBeDefined();
   });
 
   it("clamps the cursor crop at the bottom-right display edge", async () => {

@@ -15,14 +15,27 @@ export async function generateChatTitle(
   request: ChatTitleRequest,
   options: GenerateChatTitleOptions = {}
 ): Promise<ChatTitleResponse> {
-  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
   const model = options.model ?? process.env.OPENAI_CHAT_TITLE_MODEL ?? DEFAULT_CHAT_TITLE_MODEL;
 
-  if (!apiKey && options.client === undefined) {
-    throw new MissingOpenAIKeyError();
+  let client: OpenAI;
+  if (options.client !== undefined) {
+    client = options.client;
+  } else {
+    const backendBaseUrl = process.env.MAUZ_BACKEND_BASE_URL?.trim() || undefined;
+    if (backendBaseUrl !== undefined) {
+      client = new OpenAI({
+        apiKey: process.env.MAUZ_BACKEND_API_KEY?.trim() || "mauz-local-backend",
+        baseURL: backendBaseUrl
+      });
+    } else {
+      const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        throw new MissingOpenAIKeyError();
+      }
+      client = new OpenAI({ apiKey });
+    }
   }
 
-  const client = options.client ?? new OpenAI({ apiKey });
   const response = await client.responses.create({
     model,
     store: false,

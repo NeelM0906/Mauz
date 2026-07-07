@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const electronMock = vi.hoisted(() => {
   class FakeBrowserWindow {
@@ -78,6 +78,48 @@ vi.mock("electron", () => ({
 import { PopoverWindowController } from "../src/main/windows/PopoverWindowController";
 
 describe("PopoverWindowController", () => {
+  beforeEach(() => {
+    electronMock.FakeBrowserWindow.instances = [];
+  });
+
+  it("calls onHide with 'blur' reason when the window loses focus", async () => {
+    const existingCount = electronMock.FakeBrowserWindow.instances.length;
+    const onHide = vi.fn();
+    const controller = new PopoverWindowController({
+      preloadPath: "/tmp/preload.js",
+      iconPath: "/tmp/mauzai.icns",
+      rendererFile: "/tmp/index.html",
+      onHide
+    });
+
+    await controller.showAt({ x: 100, y: 100 });
+
+    const popoverWin = electronMock.FakeBrowserWindow.instances[existingCount]!;
+    const blurHandler = popoverWin.on.mock.calls.find(([event]) => event === "blur")?.[1] as
+      | (() => void)
+      | undefined;
+    blurHandler?.();
+
+    expect(onHide).toHaveBeenCalledWith("blur");
+  });
+
+  it("calls onHide with 'explicit' reason when hide() is called without a reason", async () => {
+    const existingCount = electronMock.FakeBrowserWindow.instances.length;
+    const onHide = vi.fn();
+    const controller = new PopoverWindowController({
+      preloadPath: "/tmp/preload.js",
+      iconPath: "/tmp/mauzai.icns",
+      rendererFile: "/tmp/index.html",
+      onHide
+    });
+
+    await controller.showAt({ x: 100, y: 100 });
+    // Instance at existingCount is the popover, next is the cue — just show/hide popover
+    controller.hide();
+
+    expect(onHide).toHaveBeenCalledWith("explicit");
+  });
+
   it("hides the target cue before screenshot capture", async () => {
     const controller = new PopoverWindowController({
       preloadPath: "/tmp/preload.js",

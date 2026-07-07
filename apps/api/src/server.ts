@@ -3,9 +3,14 @@ import { config as loadDotenv } from "dotenv";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { registerAskRoute, type AskMauzHandler } from "./routes/ask";
+import type { RunLifecycleHooks } from "./backend/askViaRuns";
 import { registerChatTitleRoute, type ChatTitleHandler } from "./routes/chatTitle";
 import { registerHealthzRoute } from "./routes/healthz";
 import { registerRealtimeRoute, type RealtimeConnectHandler } from "./routes/realtime";
+
+export type { RunLifecycleHooks, AgentApprovalRequest, AgentApprovalChoice, RunActivityEvent } from "./backend/askViaRuns";
+export { stopRun } from "./backend/runsClient";
+export type { RunsClientOptions } from "./backend/runsClient";
 
 export type CreateMauzApiServerOptions = {
   askHandler?: AskMauzHandler;
@@ -14,6 +19,7 @@ export type CreateMauzApiServerOptions = {
   authToken?: string;
   logger?: boolean;
   loadEnv?: boolean;
+  runHooks?: RunLifecycleHooks;
 };
 
 export async function createMauzApiServer(
@@ -24,13 +30,15 @@ export async function createMauzApiServer(
   }
 
   const app = Fastify({
-    logger: options.logger ?? false
+    logger: options.logger ?? false,
+    bodyLimit: 32 * 1024 * 1024
   });
 
   await registerHealthzRoute(app);
   await registerAskRoute(app, {
     ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
-    ...(options.authToken === undefined ? {} : { authToken: options.authToken })
+    ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
+    ...(options.runHooks === undefined ? {} : { runHooks: options.runHooks })
   });
   await registerChatTitleRoute(app, {
     ...(options.chatTitleHandler === undefined ? {} : { chatTitleHandler: options.chatTitleHandler }),

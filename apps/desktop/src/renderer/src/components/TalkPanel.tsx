@@ -162,7 +162,7 @@ export function TalkPanel(): React.JSX.Element {
         <div className="panel-title">
           <BrandLogo className="panel-title-logo" />
           <div>
-            <h1>Talk to Mauz</h1>
+            <h1 tabIndex={-1}>Talk to Mauz</h1>
             <p>Voice is connected to Mauz.</p>
           </div>
         </div>

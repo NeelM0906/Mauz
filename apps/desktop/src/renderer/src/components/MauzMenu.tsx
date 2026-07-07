@@ -1,18 +1,13 @@
 import {
-  ChevronRight,
-  Check,
   GitCompareArrows,
   History,
   KeyRound,
-  Lock,
   Mic,
-  MousePointer2,
   Pin,
   ScanSearch,
   Settings,
   Sparkles,
-  Wand2,
-  X
+  Wand2
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MauzSettings } from "@mauzai/shared";
@@ -62,6 +57,33 @@ const LENS_ACTIONS: Array<{
     icon: GitCompareArrows
   }
 ];
+
+type BubbleKey = LensAction | "talk" | "history" | "settings";
+
+// Bubble offsets from the cluster center (arc radius ~110px).
+const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
+  ask: { tx: -95, ty: -55 },
+  explain: { tx: 0, ty: -110 },
+  transform: { tx: 95, ty: -55 },
+  remember: { tx: 95, ty: 55 },
+  compare: { tx: 80, ty: 107 },
+  talk: { tx: -80, ty: 107 },
+  history: { tx: -95, ty: 55 },
+  settings: { tx: -110, ty: 0 }
+};
+
+const BUBBLE_STAGGER_MS = 30;
+
+function bubbleStyle(key: BubbleKey, order: number, size = 52): React.CSSProperties {
+  const position = BUBBLE_POSITIONS[key];
+  const half = size / 2;
+
+  return {
+    left: `calc(50% - ${half}px + ${position.tx}px)`,
+    top: `calc(50% - ${half}px + ${position.ty}px)`,
+    "--delay": `${order * BUBBLE_STAGGER_MS}ms`
+  } as React.CSSProperties;
+}
 
 export function MauzMenu(): React.JSX.Element {
   const {
@@ -162,24 +184,6 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  const handleOpenAiDisconnect = async (): Promise<void> => {
-    setPendingAuthAction("disconnect");
-    setStatus(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({
-        openAiAuthDisconnected: true
-      });
-
-      setSettings(nextSettings);
-      setStatus("OpenAI disconnected.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "OpenAI disconnect failed.");
-    } finally {
-      setPendingAuthAction(null);
-    }
-  };
-
   const handleLensAction = async (action: LensAction): Promise<void> => {
     setPendingAction(action);
     setStatus(null);
@@ -197,7 +201,6 @@ export function MauzMenu(): React.JSX.Element {
 
       if (action === "remember") {
         setPinnedLensObject(toLensMemory(lensObject));
-        setStatus(`Pinned ${lensObject.label} as this.`);
       }
 
       await mauzClient.setLensExpanded({
@@ -226,156 +229,132 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  return (
-    <section className="mauz-panel" aria-label="Mauz menu">
-      <header className="mauz-header">
-        <div className="mauz-brand">
-          <BrandLogo className="mauz-brand-logo" />
-          <h1 className="sr-only">MauzAI</h1>
-          <p>Desktop help, on demand.</p>
-        </div>
-        <div className="mauz-header-actions">
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Open Mauz settings"
-            onClick={() => void handleSettings()}
-          >
-            <Settings aria-hidden="true" size={15} />
-          </button>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Close Mauz"
-            onClick={() => void mauzClient.close()}
-          >
-            <X aria-hidden="true" size={16} />
-          </button>
-        </div>
-      </header>
+  const authState = getOpenAiAuthState(settings);
 
-      <OpenAiAuthMenu
-        settings={settings}
-        pendingAuthAction={pendingAuthAction}
-        onReconnect={handleOpenAiReconnect}
-        onDisconnect={handleOpenAiDisconnect}
+  return (
+    <section className="bubble-cluster-root" aria-label="Mauz menu">
+      <h1 className="sr-only">MauzAI</h1>
+
+      <button
+        type="button"
+        className="bubble-cluster-backdrop"
+        aria-label="Close Mauz"
+        tabIndex={-1}
+        onClick={() => void mauzClient.close()}
       />
 
-      <div className="menu-lens-card" aria-label="Mauz Lens actions">
-        <div className="menu-lens-heading">
-          <span>
-            <MousePointer2 aria-hidden="true" size={13} />
-            Mauz Lens
-          </span>
-          <small>Point first, choose next</small>
-        </div>
-        <div className="menu-command-list">
-          {LENS_ACTIONS.map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <button
-                key={item.action}
-                type="button"
-                className="menu-command"
-                onClick={() => void handleLensAction(item.action)}
-                disabled={pendingAction !== null}
-              >
-                <Icon aria-hidden="true" size={14} />
-                <span>{pendingAction === item.action ? "Capturing..." : item.label}</span>
-                <small>{item.detail}</small>
-                <ChevronRight aria-hidden="true" size={13} />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mauz-actions secondary-actions">
+      <div className="bubble-cluster">
         <button
           type="button"
-          className="mauz-action"
-          onClick={() => void handleTalk()}
+          className="bubble-hub"
+          aria-label="Open Mauz Ask"
           disabled={pendingAction !== null}
+          onClick={() => void handleLensAction("ask")}
+        >
+          <BrandLogo className="bubble-hub-logo" label="MauzAI" />
+          <span
+            className="bubble-auth-dot"
+            data-status={authState}
+            role="img"
+            aria-label={
+              authState === "connected"
+                ? "OpenAI connected"
+                : authState === "disconnected"
+                  ? "OpenAI disconnected"
+                  : "OpenAI not configured"
+            }
+          />
+        </button>
+
+        {LENS_ACTIONS.map((item, index) => {
+          const Icon = item.icon;
+
+          return (
+            <button
+              key={item.action}
+              type="button"
+              className="bubble"
+              data-accent="answer"
+              data-pending={pendingAction === item.action ? "true" : undefined}
+              aria-label={item.detail}
+              disabled={pendingAction !== null}
+              onClick={() => void handleLensAction(item.action)}
+              style={bubbleStyle(item.action, index)}
+            >
+              <Icon aria-hidden="true" size={18} />
+              <span className="bubble-label" aria-hidden="true">
+                {pendingAction === item.action ? "Capturing..." : item.label}
+              </span>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          className="bubble"
+          data-pending={pendingAction === "talk" ? "true" : undefined}
+          aria-label="Talk to Mauz"
+          disabled={pendingAction !== null}
+          onClick={() => void handleTalk()}
+          style={bubbleStyle("talk", 5)}
         >
           <Mic aria-hidden="true" size={18} />
-          <span>{pendingAction === "talk" ? "Opening voice..." : "Talk to Mauz"}</span>
+          <span className="bubble-label" aria-hidden="true">
+            {pendingAction === "talk" ? "Opening voice..." : "Talk"}
+          </span>
         </button>
+
         <button
           type="button"
-          className="mauz-action"
-          onClick={() => void handleHistory()}
+          className="bubble"
+          aria-label="Previous chats"
           disabled={pendingAction !== null}
+          onClick={() => void handleHistory()}
+          style={bubbleStyle("history", 6)}
         >
           <History aria-hidden="true" size={18} />
-          <span>Prev chats</span>
+          <span className="bubble-label" aria-hidden="true">
+            History
+          </span>
         </button>
-      </div>
 
-      <footer className="mauz-footer">
-        <span>{status ?? "Point first. Gesture next. Mauz acts only after you choose."}</span>
-      </footer>
-    </section>
-  );
-}
-
-function OpenAiAuthMenu({
-  settings,
-  pendingAuthAction,
-  onReconnect,
-  onDisconnect
-}: {
-  settings: MauzSettings | null;
-  pendingAuthAction: AuthAction | null;
-  onReconnect(): Promise<void>;
-  onDisconnect(): Promise<void>;
-}): React.JSX.Element {
-  const authState = getOpenAiAuthState(settings);
-  const canDisconnect = settings?.apiKeyConfigured === true;
-
-  return (
-    <div className="mauz-auth-card" data-status={authState} aria-label="OpenAI login controls">
-      <div className="mauz-auth-summary">
-        <KeyRound aria-hidden="true" size={14} />
-        <div>
-          <strong>OpenAI login</strong>
-          <span>{getOpenAiAuthDescription(settings)}</span>
-        </div>
-        <span className="mauz-auth-status">
-          {authState === "connected" ? (
-            <>
-              <Check aria-hidden="true" size={11} />
-              Connected
-            </>
-          ) : (
-            <>
-              <Lock aria-hidden="true" size={11} />
-              {authState === "disconnected" ? "Disconnected" : "Missing key"}
-            </>
-          )}
-        </span>
-      </div>
-      <div className="mauz-auth-actions">
         <button
           type="button"
-          className="menu-auth-button"
-          disabled={pendingAuthAction !== null}
-          onClick={() => void onReconnect()}
+          className="bubble"
+          data-size="sm"
+          aria-label="Open Mauz settings"
+          disabled={pendingAction !== null}
+          onClick={() => void handleSettings()}
+          style={bubbleStyle("settings", 7, 40)}
         >
-          {pendingAuthAction === "connect" ? "Opening..." : getOpenAiAuthActionLabel(settings)}
+          <Settings aria-hidden="true" size={15} />
+          <span className="bubble-label" aria-hidden="true">
+            Settings
+          </span>
         </button>
-        {canDisconnect ? (
-          <button
-            type="button"
-            className="menu-auth-button danger"
-            disabled={pendingAuthAction !== null}
-            onClick={() => void onDisconnect()}
-          >
-            {pendingAuthAction === "disconnect" ? "Disconnecting..." : "Disconnect"}
-          </button>
-        ) : null}
       </div>
-    </div>
+
+      {authState !== "connected" ? (
+        <button
+          type="button"
+          className="bubble-auth-pill"
+          aria-label="Connect OpenAI"
+          disabled={pendingAuthAction !== null}
+          onClick={() => void handleOpenAiReconnect()}
+        >
+          <KeyRound aria-hidden="true" size={11} />
+          {pendingAuthAction === "connect"
+            ? "Opening..."
+            : `${getOpenAiAuthActionLabel(settings)} OpenAI`}
+        </button>
+      ) : null}
+
+      {status !== null ? (
+        <p className="bubble-status-toast" role="status" aria-live="polite">
+          {status}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -389,26 +368,6 @@ function getOpenAiAuthState(settings: MauzSettings | null): "connected" | "disco
   }
 
   return "missing";
-}
-
-function getOpenAiAuthDescription(settings: MauzSettings | null): string {
-  if (settings === null) {
-    return "Checking login status.";
-  }
-
-  if (settings.openAiAuthDisconnected) {
-    return "Reconnect saved or launch credentials.";
-  }
-
-  if (settings.openAiCredentialSource === "saved") {
-    return "Using encrypted saved key.";
-  }
-
-  if (settings.openAiCredentialSource === "environment") {
-    return "Using launch environment key.";
-  }
-
-  return "Connect from this menu.";
 }
 
 function getOpenAiAuthActionLabel(settings: MauzSettings | null): string {

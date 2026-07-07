@@ -55,6 +55,9 @@ export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
 export const OpenAiAuthModeSchema = z.preprocess(() => "api-key", z.literal("api-key"));
 export const OpenAiCredentialSourceSchema = z.enum(["none", "environment", "saved"]);
 
+export const AssistantModeSchema = z.enum(["simple", "agentic"]);
+export const AgentModeSchema = z.enum(["approve", "yolo"]);
+
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
@@ -68,7 +71,10 @@ export const MauzSettingsSchema = z.object({
   realtimeVoice: VoiceNameSchema,
   realtimeReasoningEffort: RealtimeReasoningEffortSchema,
   includeFullScreenshot: z.boolean(),
-  apiKeyConfigured: z.boolean()
+  apiKeyConfigured: z.boolean(),
+  assistantMode: AssistantModeSchema,
+  backendBaseUrl: z.string().trim().max(400),
+  agentMode: AgentModeSchema
 });
 
 export const MauzSettingsUpdateSchema = MauzSettingsSchema.omit({
@@ -170,7 +176,8 @@ export const ChatMessageSchema = z.object({
 export const AskMauzRequestSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   context: MauzDesktopContextSchema,
-  conversationMessages: z.array(ChatMessageSchema).max(MAX_CONVERSATION_MESSAGES).optional()
+  conversationMessages: z.array(ChatMessageSchema).max(MAX_CONVERSATION_MESSAGES).optional(),
+  sessionId: z.string().trim().min(1).max(128).optional()
 });
 
 export const AskMauzResponseSchema = z.object({
@@ -256,4 +263,9 @@ export const RealtimeConnectRequestSchema = z.object({
 export const RealtimeConnectResponseSchema = z.object({
   answerSdp: z.string().min(1),
   model: ModelNameSchema
+});
+
+export const AgentApprovalResponseSchema = z.object({
+  approvalId: z.string().min(1),
+  choice: z.enum(["once", "session", "always", "deny"])
 });

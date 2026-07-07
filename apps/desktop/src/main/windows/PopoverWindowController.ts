@@ -11,11 +11,14 @@ import {
 import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosition";
 import { hardenRendererWindow } from "./WindowSecurity";
 
+export type HideReason = "blur" | "explicit";
+
 type PopoverWindowControllerOptions = {
   preloadPath: string;
   iconPath: string;
   rendererUrl?: string;
   rendererFile: string;
+  onHide?: (reason: HideReason) => void;
 };
 
 type ShowOptions = {
@@ -79,14 +82,7 @@ export class PopoverWindowController {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
     win.on("blur", () => {
-      this.hide();
-    });
-
-    win.webContents.on("before-input-event", (event, input) => {
-      if (input.type === "keyDown" && input.key === "Escape") {
-        event.preventDefault();
-        this.hide();
-      }
+      this.hide("blur");
     });
 
     this.window = win;
@@ -153,12 +149,21 @@ export class PopoverWindowController {
     this.repositionAtLastAnchor();
   }
 
-  hide(): void {
+  hide(reason: HideReason = "explicit"): void {
     if (this.window?.isDestroyed() === false && this.window.isVisible()) {
       this.window.hide();
+      this.options.onHide?.(reason);
     }
 
     this.hideTargetCue();
+  }
+
+  getWebContents(): Electron.WebContents | null {
+    if (this.window === null || this.window.isDestroyed()) {
+      return null;
+    }
+
+    return this.window.webContents;
   }
 
   async hideDuringCapture<T>(operation: () => Promise<T>): Promise<T> {

@@ -113,15 +113,16 @@ export function getLensActionQuestion(
   const trimmedQuestion = customQuestion.trim();
 
   if (trimmedQuestion.length > 0) {
-    return appendPinnedObject(trimmedQuestion, pinnedObject);
+    // Only inject the pinned object context for the compare action
+    return action === "compare" ? appendPinnedObject(trimmedQuestion, pinnedObject) : trimmedQuestion;
   }
 
   if (action === "explain") {
-    return appendPinnedObject("Explain this clearly and tell me what matters.", pinnedObject);
+    return "Explain this clearly and tell me what matters.";
   }
 
   if (action === "transform") {
-    return appendPinnedObject("Transform this into the most useful next-step output.", pinnedObject);
+    return "Transform this into the most useful next-step output.";
   }
 
   if (action === "compare") {
@@ -130,7 +131,7 @@ export function getLensActionQuestion(
       : `Compare this current object with the pinned object: ${pinnedObject.label}. Pinned summary: ${pinnedObject.summary}`;
   }
 
-  return appendPinnedObject(`Help me with this ${lensObject.type.replace("-", " ")}.`, pinnedObject);
+  return `Help me with this ${lensObject.type.replace("-", " ")}.`;
 }
 
 function appendPinnedObject(question: string, pinnedObject: LensMemory | null): string {

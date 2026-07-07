@@ -6,12 +6,14 @@ import {
   Lock,
   MousePointerClick,
   Save,
+  Server,
   Settings2,
   Trash2,
   Zap
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { MauzSettings, MauzSettingsUpdate, ShakeSensitivity } from "@mauzai/shared";
+import { DEFAULT_HERMES_BASE_URL } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -208,7 +210,10 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         realtimeModel: draft.realtimeModel,
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
-        includeFullScreenshot: draft.includeFullScreenshot
+        includeFullScreenshot: draft.includeFullScreenshot,
+        assistantMode: draft.assistantMode,
+        backendBaseUrl: draft.backendBaseUrl,
+        agentMode: draft.agentMode
       };
       const trimmedApiKeyDraft = openAiApiKeyDraft.trim();
 
@@ -361,6 +366,53 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         </div>
 
         <div className="settings-section">
+          <div className="settings-label">
+            <Server aria-hidden="true" size={15} />
+            <span>Mode</span>
+          </div>
+          <div className="segmented-control" role="group" aria-label="Assistant mode">
+            <button
+              type="button"
+              aria-pressed={draft.assistantMode === "simple"}
+              onClick={() => updateDraft("assistantMode", "simple")}
+            >
+              Simple
+            </button>
+            <button
+              type="button"
+              aria-pressed={draft.assistantMode === "agentic"}
+              onClick={() => updateDraft("assistantMode", "agentic")}
+            >
+              Agentic
+            </button>
+          </div>
+          <p className="settings-helper">
+            {draft.assistantMode === "simple"
+              ? "Quick answers about what you're looking at."
+              : "Hermes agent with memory, tools, and computer use."}
+          </p>
+          {draft.assistantMode === "agentic" ? (
+            <>
+              <label className="settings-field">
+                <span>Gateway URL</span>
+                <input
+                  type="text"
+                  value={draft.backendBaseUrl}
+                  placeholder={DEFAULT_HERMES_BASE_URL}
+                  onChange={(event) => updateDraft("backendBaseUrl", event.target.value)}
+                />
+              </label>
+              <SettingsSelect
+                label="Agent mode"
+                value={draft.agentMode}
+                options={["approve", "yolo"]}
+                onChange={(agentMode) => updateDraft("agentMode", agentMode as MauzSettings["agentMode"])}
+              />
+            </>
+          ) : null}
+        </div>
+
+        <div className="settings-section">
           <div className="settings-row">
             <MousePointerClick aria-hidden="true" size={16} />
             <div>
@@ -487,7 +539,7 @@ function SettingsHeader({
       <div className="panel-title">
         <BrandLogo className="panel-title-logo" />
         <div>
-          <h1>Settings</h1>
+          <h1 tabIndex={-1}>Settings</h1>
           <p>Models and activation.</p>
         </div>
       </div>

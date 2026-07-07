@@ -85,10 +85,12 @@ describe("ShakeDetector", () => {
     expect(feed(detector, samples)).toBe(false);
   });
 
-  it("ignores drag/button-held movement", () => {
+  it("activates when buttons field is set (buttons field is ignored by detector)", () => {
     const detector = new ShakeDetector();
 
-    expect(feed(detector, verticalShake(1_000, { buttons: 1 }))).toBe(false);
+    // Swift only taps .mouseMoved — the buttons field is never populated in production.
+    // The detector does not use it; a valid shake pattern activates regardless.
+    expect(feed(detector, verticalShake(1_000, { buttons: 1 }))).toBe(true);
   });
 
   it("tolerates some horizontal drift", () => {

@@ -60,11 +60,6 @@ export class ShakeDetector {
   }
 
   push(sample: MouseMoveSample): ShakeDetectorResult {
-    if ((sample.buttons ?? 0) !== 0) {
-      this.reset();
-      return { activated: false, reason: "button-held" };
-    }
-
     if (sample.ts - this.lastActivationAt < this.config.cooldownMs) {
       return { activated: false, reason: "cooldown" };
     }

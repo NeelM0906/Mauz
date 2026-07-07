@@ -34,6 +34,11 @@ export const IPC_CHANNELS = {
   settingsOpen: "mauz:settings:open",
   settingsUpdate: "mauz:settings:update",
   askSubmit: "mauz:ask:submit",
+  agentApprovalRequest: "mauz:agent:approval-request",
+  agentApprovalRespond: "mauz:agent:approval-respond",
+  agentRunState: "mauz:agent:run-state",
+  agentRunActivity: "mauz:agent:run-activity",
+  agentStop: "mauz:agent:stop",
   chatHistoryList: "mauz:chat-history:list",
   chatHistoryGet: "mauz:chat-history:get",
   chatHistoryContinue: "mauz:chat-history:continue",
@@ -46,3 +51,5 @@ export const IPC_CHANNELS = {
 } as const;
 
 export const DEFAULT_MAUZ_API_PORT = 47891;
+
+export const DEFAULT_HERMES_BASE_URL = "http://localhost:8642/v1";
