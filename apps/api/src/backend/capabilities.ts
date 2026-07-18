@@ -1,3 +1,5 @@
+import type { AssistantMode, GatewayReadinessResult } from "@mauzai/shared";
+
 export type BackendCapabilities = {
   sessionIdHeader: string;
   sessionKeyHeader: string;
@@ -41,6 +43,34 @@ export async function detectBackendCapabilities(
 
 export function clearBackendCapabilitiesCache(): void {
   capabilitiesCache.clear();
+}
+
+export async function getGatewayReadinessStatus(
+  assistantMode: AssistantMode,
+  baseUrl: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<GatewayReadinessResult> {
+  if (assistantMode === "simple") {
+    return { status: "simple", message: "Using the fast simple answer flow." };
+  }
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+
+  if (normalizedBaseUrl.length === 0) {
+    return { status: "unavailable", message: "No gateway URL is configured." };
+  }
+
+  const capabilities = await detectBackendCapabilities(normalizedBaseUrl, fetchImpl);
+
+  if (capabilities === null) {
+    return { status: "unavailable", message: "The configured gateway is not reachable." };
+  }
+
+  if (!capabilities.supportsRuns) {
+    return { status: "unsupported", message: "The gateway does not support supervised runs." };
+  }
+
+  return { status: "ready", message: "Gateway is ready for supervised Work tasks." };
 }
 
 async function probeCapabilities(

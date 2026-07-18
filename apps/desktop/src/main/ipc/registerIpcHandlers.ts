@@ -5,12 +5,15 @@ import {
   ChatHistoryContinueRequestSchema,
   ChatHistoryDeleteRequestSchema,
   ChatHistoryGetRequestSchema,
+  DEFAULT_HERMES_BASE_URL,
+  GatewayReadinessResultSchema,
   IPC_CHANNELS,
   MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
+import { getGatewayReadinessStatus } from "@mauzai/api/server";
 import type { AgentRunBridge } from "../agent/AgentRunBridge";
 import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
@@ -48,7 +51,8 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.agentApprovalRespond,
-  IPC_CHANNELS.agentStop
+  IPC_CHANNELS.agentStop,
+  IPC_CHANNELS.agentGatewayReadinessStatus
 ] as const;
 
 export function registerIpcHandlers({
@@ -224,6 +228,15 @@ export function registerIpcHandlers({
   ipcMain.handle(IPC_CHANNELS.agentStop, async (event) => {
     assertTrustedSurface(event, ["popover"]);
     await agentRunBridge.stopActiveRun();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentGatewayReadinessStatus, async (event) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const settings = await getSettings();
+    const baseUrl =
+      settings.assistantMode === "agentic" ? settings.backendBaseUrl.trim() || DEFAULT_HERMES_BASE_URL : "";
+    const result = await getGatewayReadinessStatus(settings.assistantMode, baseUrl);
+    return GatewayReadinessResultSchema.parse(result);
   });
 }
 

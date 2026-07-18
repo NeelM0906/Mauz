@@ -39,6 +39,7 @@ export const IPC_CHANNELS = {
   agentRunState: "mauz:agent:run-state",
   agentRunActivity: "mauz:agent:run-activity",
   agentStop: "mauz:agent:stop",
+  agentGatewayReadinessStatus: "mauz:agent:gateway-readiness-status",
   chatHistoryList: "mauz:chat-history:list",
   chatHistoryGet: "mauz:chat-history:get",
   chatHistoryContinue: "mauz:chat-history:continue",

@@ -1321,6 +1321,39 @@ button {
   padding: 10px;
 }
 
+.task-readiness {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.task-readiness strong {
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.task-readiness[data-status="ready"] {
+  border-color: var(--accent-agent-border);
+  background: var(--accent-agent-bg);
+  color: var(--accent-agent-text);
+}
+
+.task-readiness[data-status="unavailable"],
+.task-readiness[data-status="unsupported"],
+.task-readiness[data-status="simple"] {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 .context-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2644,56 +2677,6 @@ button {
   border-color: var(--danger-border);
   background: var(--danger-bg);
   outline: none;
-}
-
-.agent-mode-toggle {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-}
-
-.agent-mode-toggle button {
-  min-width: 0;
-  height: 28px;
-  border: 1px solid var(--border-hairline);
-  border-radius: 7px;
-  background: var(--surface-card);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 680;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.agent-mode-toggle button[aria-pressed="true"] {
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg-strong);
-  color: var(--accent-answer-text);
-}
-
-.agent-mode-toggle button:hover,
-.agent-mode-toggle button:focus-visible {
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
-  outline: none;
-}
-
-/* YOLO mode — amber active state for the YOLO button */
-
-.agent-mode-toggle button:last-child[aria-pressed="true"] {
-  border-color: var(--accent-yolo-border);
-  background: var(--accent-yolo-bg);
-  color: var(--accent-yolo-text);
-}
-
-/* YOLO ambient ring */
-
-.ask-panel[data-agent-mode="yolo"],
-.lens-panel[data-agent-mode="yolo"] {
-  box-shadow:
-    inset 0 0 0 1.5px color-mix(in srgb, var(--accent-yolo) 65%, transparent),
-    var(--shadow-float);
 }
 
 /* Activity ticker */

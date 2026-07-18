@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearBackendCapabilitiesCache, detectBackendCapabilities } from "../src/backend/capabilities";
+import { GatewayReadinessResultSchema } from "@mauzai/shared";
+import {
+  clearBackendCapabilitiesCache,
+  detectBackendCapabilities,
+  getGatewayReadinessStatus
+} from "../src/backend/capabilities";
 
 const GATEWAY_CAPABILITIES = {
   object: "hermes.api_server.capabilities",
@@ -95,5 +100,53 @@ describe("detectBackendCapabilities", () => {
       sessionKeyHeader: "X-Custom-Session-Key",
       supportsRuns: false
     });
+  });
+});
+
+describe("getGatewayReadinessStatus", () => {
+  it("returns simple when assistantMode is simple", async () => {
+    const result = await getGatewayReadinessStatus("simple", "http://localhost:8642/v1");
+    expect(result).toEqual({
+      status: "simple",
+      message: "Using the fast simple answer flow."
+    });
+    expect(() => GatewayReadinessResultSchema.parse(result)).not.toThrow();
+  });
+
+  it("returns ready when assistantMode is agentic and gateway supports full runs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okJson(GATEWAY_CAPABILITIES));
+    const result = await getGatewayReadinessStatus("agentic", "http://localhost:8642/v1", fetchMock);
+    expect(result.status).toBe("ready");
+    expect(result.message.length).toBeGreaterThan(0);
+    expect(() => GatewayReadinessResultSchema.parse(result)).not.toThrow();
+  });
+
+  it("returns unavailable when the gateway is unreachable", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
+    const result = await getGatewayReadinessStatus("agentic", "http://localhost:9/v1", fetchMock);
+    expect(result.status).toBe("unavailable");
+    expect(result.message.length).toBeGreaterThan(0);
+    expect(() => GatewayReadinessResultSchema.parse(result)).not.toThrow();
+  });
+
+  it("returns unsupported when the gateway does not support runs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okJson({
+        features: {
+          session_continuity_header: "X-Session-Id",
+          session_key_header: "X-Session-Key"
+        }
+      })
+    );
+    const result = await getGatewayReadinessStatus("agentic", "http://localhost:8642/v1", fetchMock);
+    expect(result.status).toBe("unsupported");
+    expect(result.message.length).toBeGreaterThan(0);
+    expect(() => GatewayReadinessResultSchema.parse(result)).not.toThrow();
+  });
+
+  it("returns unavailable when agentic but no base URL is configured", async () => {
+    const result = await getGatewayReadinessStatus("agentic", "");
+    expect(result.status).toBe("unavailable");
+    expect(result.message).toMatch(/no gateway/i);
   });
 });

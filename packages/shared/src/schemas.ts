@@ -269,3 +269,27 @@ export const AgentApprovalResponseSchema = z.object({
   approvalId: z.string().min(1),
   choice: z.enum(["once", "session", "always", "deny"])
 });
+
+export const AgentApprovalPayloadSchema = z.object({
+  approvalId: z.string(),
+  runId: z.string(),
+  description: z.string()
+});
+
+export const AgentRunStatePayloadSchema = z.object({
+  runId: z.string().nullable()
+});
+
+export const AgentRunActivityPayloadSchema = z.object({
+  runId: z.string(),
+  kind: z.enum(["tool.started", "tool.completed", "reasoning"]),
+  tool: z.string().optional(),
+  label: z.string()
+});
+
+export const GatewayReadinessStatusSchema = z.enum(["simple", "ready", "unavailable", "unsupported"]);
+
+export const GatewayReadinessResultSchema = z.object({
+  status: GatewayReadinessStatusSchema,
+  message: z.string().min(1).max(200)
+});

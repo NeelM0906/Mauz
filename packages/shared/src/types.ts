@@ -247,6 +247,13 @@ export type AgentRunActivityPayload = {
   label: string;
 };
 
+export type GatewayReadinessStatus = "simple" | "ready" | "unavailable" | "unsupported";
+
+export type GatewayReadinessResult = {
+  status: GatewayReadinessStatus;
+  message: string;
+};
+
 export type MauzBridge = {
   menu: {
     showMenu(): Promise<void>;
@@ -278,6 +285,7 @@ export type MauzBridge = {
     onPermissionError(callback: (error: PermissionError) => void): () => void;
   };
   agent: {
+    getGatewayReadinessStatus(): Promise<GatewayReadinessResult>;
     respondApproval(payload: unknown): Promise<void>;
     stop(): Promise<void>;
     onApprovalRequest(callback: (payload: AgentApprovalPayload) => void): () => void;

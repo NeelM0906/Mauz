@@ -16,7 +16,7 @@ export type LensMemory = {
   createdAt: string;
 };
 
-type MauzMode = "menu" | "lens" | "talk" | "settings" | "history";
+type MauzMode = "menu" | "lens" | "task" | "talk" | "settings" | "history";
 
 type MauzStore = {
   mode: MauzMode;

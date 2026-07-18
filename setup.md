@@ -10,19 +10,17 @@ This guide covers the local macOS preview setup for MauzAI.
 - Xcode Command Line Tools for the native mouse-shake helper. Install with `xcode-select --install`.
 - An OpenAI API key for Ask, Talk, title generation, and Realtime voice.
 
-## Install
+## Install from a clone
 
-From the repository root:
-
-```bash
-pnpm install
-```
-
-Build the native macOS input helper if you want mouse-shake activation:
+Clone Mauz, then run the installer from the repository root:
 
 ```bash
-native/macos/MauzInputAgent/build.sh
+git clone https://github.com/NeelM0906/Mauz.git
+cd Mauz
+./install-macos.sh
 ```
+
+The installer uses the locked pnpm version, builds Mauz, installs it at `~/Applications/MauzAI.app`, and launches it. It does not require an administrator password. Re-run `./install-macos.sh` after pulling updates.
 
 ## OpenAI Login
 
@@ -42,42 +40,43 @@ export OPENAI_CHAT_TITLE_MODEL="gpt-5.4-nano"
 export OPENAI_REALTIME_MODEL="gpt-realtime-2"
 ```
 
-## Hermes Agent Backend
+## Agent gateway and Work on this
 
-Mauz has two modes, chosen in Settings under **Mode**:
+Mauz uses **Simple** mode by default for quick contextual answers. To use tools for a longer task, choose **Agentic** under **Settings → Mode**, configure the Gateway URL, save, and check the gateway readiness message shown there.
 
-- **Simple** (default): direct OpenAI answering. No gateway needed.
-- **Agentic**: routes Ask through the [Hermes](https://github.com/NousResearch/hermes-agent) agent gateway, adding persistent memory, session continuity, and tools (web, browser, code execution, MCP, computer use). When Agentic mode is selected, a Gateway URL field appears (default `http://localhost:8642/v1`); enter a custom OpenAI-compatible URL there to use a different gateway.
+Gateway readiness can report:
 
-To run the Hermes gateway, enable the API server platform in your hermes-agent install and start its gateway:
+- **Ready**: **Work on this** can start a supervised, tool-enabled task.
+- **Unavailable**: Mauz cannot reach or recognize the configured gateway. Check that the gateway is running and that its URL is correct.
+- **Unsupported**: the gateway is reachable but does not support supervised runs. Use a gateway with run support.
+
+The default Gateway URL is `http://localhost:8642/v1`. To run the supported [Hermes](https://github.com/NousResearch/hermes-agent) gateway locally, enable its API server platform and start the gateway:
 
 ```bash
 export API_SERVER_ENABLED=true    # serves http://127.0.0.1:8642/v1
 ```
 
-Mauz detects gateway capabilities via `GET {base}/capabilities` and then sends session headers automatically: a per-conversation session id (conversation continuity) and, when a backend API key is configured, a per-install session key for long-term memory scoping. Plain OpenAI-compatible endpoints without a capabilities route keep the exact non-agentic behavior.
-
 Optional environment settings:
 
 ```bash
-export MAUZ_BACKEND_BASE_URL="http://localhost:8642/v1"  # overrides the default for the selected preset
-export MAUZ_BACKEND_API_KEY="..."   # only needed when the gateway has API-key auth; also enables memory scoping
+export MAUZ_BACKEND_BASE_URL="http://localhost:8642/v1"
+export MAUZ_BACKEND_API_KEY="..."   # only needed when the gateway requires API-key authentication
 ```
 
-### Agent modes
+### Supervised tool use
 
-When the connected gateway advertises run support, Ask runs through the gateway's agent-run lifecycle and the popover exposes two modes plus a Stop control:
+Choose **Work on this** when you want Mauz to investigate an outcome and use gateway tools. Work starts only when gateway readiness is **Ready**, shows activity while it runs, asks for approval before gated actions, and provides a Stop control.
 
-- **Approve**: each tool action the gateway gates surfaces an approval card in the popover with four choices — Allow once, Allow for session, Always allow, Deny. Closing the popover stops the in-flight run.
-- **YOLO**: Mauz auto-approves every gated action (no card). The gateway's own hard floor of never-allowed destructive patterns still applies server-side.
+The advanced **Agent mode** setting remains available in Settings:
 
-Switch modes from the toggle in the Ask panel (shown only in Agentic mode) or set the default with:
+- **Approve**: gated actions show a card with Allow once, Allow for session, Always allow, and Deny choices.
+- **YOLO**: automatically approves gated actions. Use it only when you trust the task and gateway.
+
+You can set the default advanced mode with:
 
 ```bash
 export MAUZ_AGENT_MODE="approve"   # or "yolo"
 ```
-
-Note: the gateway may also gate actions through its own `approvals.mode` config; Mauz's Approve/YOLO choice governs how the client responds to the approval requests the gateway raises.
 
 ## macOS Permissions
 
@@ -137,40 +136,18 @@ The full repo check is:
 pnpm check
 ```
 
-## Package for macOS
+## Update or stop the macOS app
 
-Install the packaged macOS app into `/Applications` for normal double-click use:
+After pulling updates, rerun the installer:
 
 ```bash
-pnpm install:mac
+./install-macos.sh
 ```
 
-This stops any running MauzAI processes, rebuilds `/Applications/MauzAI.app`, and replaces `dist/mac/MauzAI.app` plus `~/Applications/MauzAI.app` with symlinks to the installed app. The next launch uses the new renderer assets even if you previously double-clicked a local packaged app.
-
-Stop the installed app without reinstalling:
+Stop MauzAI without reinstalling:
 
 ```bash
 pnpm stop:mac
 ```
 
-Create the packaged macOS app in `~/Applications/MauzAI.app`:
-
-```bash
-pnpm --filter @mauzai/desktop package:mac
-```
-
-Create a downloadable DMG in `dist/`:
-
-```bash
-pnpm package:dmg:mac
-```
-
-Then launch the packaged app:
-
-```bash
-pnpm --filter @mauzai/desktop launch:mac
-```
-
 If permissions were previously granted to Electron during development, macOS may ask again for the packaged MauzAI app.
-
-Release DMGs built without an Apple Developer ID certificate are ad-hoc signed. They are usable, but macOS Gatekeeper may require users to right-click Open the first time. For fully silent public distribution, sign with a Developer ID Application certificate and notarize the DMG before publishing it.

@@ -7,13 +7,22 @@ const ipcMainMock = vi.hoisted(() => ({
 const realtimeApiClientMock = vi.hoisted(() => ({
   connectRealtimeToLocalApi: vi.fn()
 }));
+const getGatewayReadinessStatusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
 vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
+vi.mock("@mauzai/api/server", () => ({
+  getGatewayReadinessStatus: getGatewayReadinessStatusMock
+}));
 
-import { IPC_CHANNELS, type MauzDesktopContext, type RealtimeConnectRequest } from "@mauzai/shared";
+import {
+  DEFAULT_HERMES_BASE_URL,
+  IPC_CHANNELS,
+  type MauzDesktopContext,
+  type RealtimeConnectRequest
+} from "@mauzai/shared";
 import type { AgentRunBridge } from "../src/main/agent/AgentRunBridge";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
@@ -37,7 +46,8 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.agentApprovalRespond,
-  IPC_CHANNELS.agentStop
+  IPC_CHANNELS.agentStop,
+  IPC_CHANNELS.agentGatewayReadinessStatus
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -45,6 +55,7 @@ describe("registerIpcHandlers", () => {
     ipcMainMock.handle.mockClear();
     ipcMainMock.removeHandler.mockClear();
     realtimeApiClientMock.connectRealtimeToLocalApi.mockReset();
+    getGatewayReadinessStatusMock.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -333,6 +344,101 @@ describe("registerIpcHandlers", () => {
     });
 
     expect(capturedAskBody.sessionId).toBe("conv-42");
+  });
+
+  it("returns gateway readiness status for simple mode", async () => {
+    const options = createOptions();
+
+    getGatewayReadinessStatusMock.mockResolvedValueOnce({
+      status: "simple",
+      message: "Using the fast simple answer flow."
+    });
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.agentGatewayReadinessStatus);
+
+    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual({
+      status: "simple",
+      message: "Using the fast simple answer flow."
+    });
+    expect(getGatewayReadinessStatusMock).toHaveBeenCalledWith("simple", "");
+  });
+
+  it("probes the configured gateway for agentic mode", async () => {
+    const options = createOptions();
+
+    vi.mocked(options.getSettings).mockResolvedValueOnce({
+      nativeShakeEnabled: false,
+      devHotkeyEnabled: true,
+      shakeSensitivity: "normal",
+      openAiAuthMode: "api-key",
+      openAiAuthDisconnected: false,
+      openAiCredentialSource: "none",
+      askModel: "gpt-5.4-mini",
+      chatTitleModel: "gpt-5.4-nano",
+      realtimeModel: "gpt-realtime-2",
+      realtimeVoice: "marin",
+      realtimeReasoningEffort: "low",
+      includeFullScreenshot: false,
+      apiKeyConfigured: false,
+      assistantMode: "agentic",
+      backendBaseUrl: "http://gateway.test/v1",
+      agentMode: "approve"
+    });
+
+    getGatewayReadinessStatusMock.mockResolvedValueOnce({
+      status: "ready",
+      message: "Gateway is ready for supervised Work tasks."
+    });
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.agentGatewayReadinessStatus);
+
+    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual({
+      status: "ready",
+      message: "Gateway is ready for supervised Work tasks."
+    });
+    expect(getGatewayReadinessStatusMock).toHaveBeenCalledWith("agentic", "http://gateway.test/v1");
+  });
+
+  it("falls back to the default Hermes base URL when agentic with no configured URL", async () => {
+    const options = createOptions();
+
+    vi.mocked(options.getSettings).mockResolvedValueOnce({
+      nativeShakeEnabled: false,
+      devHotkeyEnabled: true,
+      shakeSensitivity: "normal",
+      openAiAuthMode: "api-key",
+      openAiAuthDisconnected: false,
+      openAiCredentialSource: "none",
+      askModel: "gpt-5.4-mini",
+      chatTitleModel: "gpt-5.4-nano",
+      realtimeModel: "gpt-realtime-2",
+      realtimeVoice: "marin",
+      realtimeReasoningEffort: "low",
+      includeFullScreenshot: false,
+      apiKeyConfigured: false,
+      assistantMode: "agentic",
+      backendBaseUrl: "",
+      agentMode: "approve"
+    });
+
+    getGatewayReadinessStatusMock.mockResolvedValueOnce({
+      status: "unavailable",
+      message: "The configured gateway is not reachable."
+    });
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.agentGatewayReadinessStatus);
+
+    await expect(handler(createInvokeEvent("desktop"))).resolves.toEqual({
+      status: "unavailable",
+      message: "The configured gateway is not reachable."
+    });
+    expect(getGatewayReadinessStatusMock).toHaveBeenCalledWith("agentic", DEFAULT_HERMES_BASE_URL);
   });
 });
 

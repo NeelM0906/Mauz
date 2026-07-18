@@ -1,4 +1,5 @@
 import {
+  BriefcaseBusiness,
   GitCompareArrows,
   History,
   KeyRound,
@@ -17,7 +18,7 @@ import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = LensAction | "talk";
+type MenuAction = LensAction | "task" | "talk";
 type AuthAction = "connect" | "disconnect";
 
 const LENS_ACTIONS: Array<{
@@ -58,7 +59,7 @@ const LENS_ACTIONS: Array<{
   }
 ];
 
-type BubbleKey = LensAction | "talk" | "history" | "settings";
+type BubbleKey = LensAction | "task" | "talk" | "history" | "settings";
 
 // Bubble offsets from the cluster center (arc radius ~110px).
 const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
@@ -67,6 +68,7 @@ const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
   transform: { tx: 95, ty: -55 },
   remember: { tx: 95, ty: 55 },
   compare: { tx: 80, ty: 107 },
+  task: { tx: 0, ty: 118 },
   talk: { tx: -80, ty: 107 },
   history: { tx: -95, ty: 55 },
   settings: { tx: -110, ty: 0 }
@@ -214,6 +216,26 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
+  const handleTask = async (): Promise<void> => {
+    setPendingAction("task");
+    setStatus(null);
+    setAskAnswer(null);
+    setAskConversationTitle(null);
+    setAskError(null);
+    setAskLoading(false);
+
+    try {
+      const context = await mauzClient.startAsk();
+      setCurrentContext(context);
+      await mauzClient.setLensExpanded({ expanded: true });
+      setMode("task");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Mauz action failed.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   const handleTalk = async (): Promise<void> => {
     setPendingAction("talk");
     setStatus(null);
@@ -288,6 +310,22 @@ export function MauzMenu(): React.JSX.Element {
             </button>
           );
         })}
+
+        <button
+          type="button"
+          className="bubble"
+          data-accent="agent"
+          data-pending={pendingAction === "task" ? "true" : undefined}
+          aria-label="Work on this"
+          disabled={pendingAction !== null}
+          onClick={() => void handleTask()}
+          style={bubbleStyle("task", 5)}
+        >
+          <BriefcaseBusiness aria-hidden="true" size={18} />
+          <span className="bubble-label" aria-hidden="true">
+            {pendingAction === "task" ? "Capturing..." : "Work on this"}
+          </span>
+        </button>
 
         <button
           type="button"

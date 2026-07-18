@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const maxScannedBytes = 1024 * 1024;
 const patterns = [
@@ -18,7 +18,7 @@ const patterns = [
 ];
 const findings = [];
 
-for (const file of getTrackedFiles()) {
+for (const file of getTrackedFiles().filter(existsSync)) {
   const buffer = readFileSync(file);
 
   if (buffer.length > maxScannedBytes || buffer.includes(0)) {

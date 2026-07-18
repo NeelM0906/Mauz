@@ -1,92 +1,32 @@
 import {
   AppWindow,
   ArrowLeft,
+  BriefcaseBusiness,
   Camera,
-  Check,
-  GitCompareArrows,
   LoaderCircle,
   MousePointer2,
-  Pin,
-  ScanSearch,
   Send,
   ShieldAlert,
-  Sparkles,
   Square,
   TextCursorInput,
-  Wand2,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AgentApprovalPayload, AgentRunActivityPayload } from "@mauzai/shared";
-import type { LensAction } from "@renderer/state/useMauzStore";
+import type { AgentApprovalPayload, AgentRunActivityPayload, GatewayReadinessResult } from "@mauzai/shared";
 import { classifyApprovalRisk } from "@renderer/lib/approvalRisk";
+import { buildTaskPrompt, canSubmitTask } from "@renderer/lib/taskPrompt";
+import { detectLensObject } from "@renderer/lib/lensObject";
 import { mauzClient } from "@renderer/lib/mauzClient";
-import { detectLensObject, getLensActionQuestion, toLensMemory } from "@renderer/lib/lensObject";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 import { FormattedAnswer } from "./FormattedAnswer";
 
-const ACTION_UI: Record<
-  LensAction,
-  {
-    title: string;
-    subtitle: string;
-    buttonLabel: string;
-    placeholder: string;
-    emptyState: string;
-    icon: typeof ScanSearch;
-  }
-> = {
-  ask: {
-    title: "Ask Mauz",
-    subtitle: "Cursor prompt",
-    buttonLabel: "Ask",
-    placeholder: "Ask about this object",
-    emptyState: "Ask anything about what is under the cursor. The response stays in this popup.",
-    icon: ScanSearch
-  },
-  explain: {
-    title: "Explain",
-    subtitle: "Plain read",
-    buttonLabel: "Explain",
-    placeholder: "Optional: explain it for a specific goal",
-    emptyState: "Press Explain for a clear read of the current cursor context.",
-    icon: Sparkles
-  },
-  transform: {
-    title: "Transform",
-    subtitle: "Make useful",
-    buttonLabel: "Transform",
-    placeholder: "Optional: say how to transform this",
-    emptyState: "Press Transform to turn the current object into a useful next-step output.",
-    icon: Wand2
-  },
-  remember: {
-    title: "Remember",
-    subtitle: "Pin as this",
-    buttonLabel: "Pin",
-    placeholder: "Pin this cursor object",
-    emptyState: "This object is pinned for Compare until you clear or replace it.",
-    icon: Pin
-  },
-  compare: {
-    title: "Compare",
-    subtitle: "Use this and that",
-    buttonLabel: "Compare",
-    placeholder: "Optional: add what to compare",
-    emptyState:
-      "Compare the current cursor object with the pinned object. Pin something first for a stronger comparison.",
-    icon: GitCompareArrows
-  }
-};
-
+type ReadinessState = GatewayReadinessResult | { status: "loading"; message: string };
 type ActivityEntry = AgentRunActivityPayload & { seq: number };
 
-export function LensPanel(): React.JSX.Element {
+export function TaskPanel(): React.JSX.Element {
   const {
     currentContext,
-    selectedLensAction,
-    pinnedLensObject,
     askAnswer,
     askConversationTitle,
     askError,
@@ -95,70 +35,67 @@ export function LensPanel(): React.JSX.Element {
     setAskAnswer,
     setAskConversationTitle,
     setAskError,
-    setAskLoading,
-    setPinnedLensObject
+    setAskLoading
   } = useMauzStore();
-
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
-  const [question, setQuestion] = useState("");
-  const [approvalRequest, setApprovalRequest] = useState<AgentApprovalPayload | null>(null);
+  const [outcome, setOutcome] = useState("");
+  const [readiness, setReadiness] = useState<ReadinessState>({
+    status: "loading",
+    message: "Checking gateway readiness…"
+  });
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [approvalRequest, setApprovalRequest] = useState<AgentApprovalPayload | null>(null);
   const [runActivities, setRunActivities] = useState<ActivityEntry[]>([]);
   const [activityExpanded, setActivityExpanded] = useState(false);
   const activeRunIdRef = useRef<string | null>(null);
-  const activitySeqRef = useRef(0);
+  const activitySequenceRef = useRef(0);
 
-  const action = ACTION_UI[selectedLensAction];
-  const ActionIcon = action.icon;
-  const isRemembering = selectedLensAction === "remember";
-
-  // Agent event subscriptions
   useEffect(() => {
-    const unsubApproval = mauzClient.onAgentApprovalRequest((payload) => {
-      // Only accept approvals that belong to the currently active run
-      if (payload.runId === activeRunIdRef.current) {
-        setApprovalRequest(payload);
-      }
-    });
+    let disposed = false;
 
-    const unsubRunState = mauzClient.onAgentRunState(({ runId }) => {
+    void mauzClient.getGatewayReadinessStatus().then(
+      (result) => {
+        if (!disposed) setReadiness(result);
+      },
+      () => {
+        if (!disposed) {
+          setReadiness({ status: "unavailable", message: "Gateway readiness could not be checked." });
+        }
+      }
+    );
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubscribeApproval = mauzClient.onAgentApprovalRequest((payload) => {
+      if (payload.runId === activeRunIdRef.current) setApprovalRequest(payload);
+    });
+    const unsubscribeRunState = mauzClient.onAgentRunState(({ runId }) => {
       activeRunIdRef.current = runId;
       setActiveRunId(runId);
-
-      if (runId === null) {
-        // Run ended: clear approval and activities
-        setApprovalRequest(null);
-        setRunActivities([]);
-        setActivityExpanded(false);
-      } else {
-        // New run started: reset activity list
-        setRunActivities([]);
-        setActivityExpanded(false);
-      }
+      setApprovalRequest(null);
+      setRunActivities([]);
+      setActivityExpanded(false);
     });
-
-    const unsubActivity = mauzClient.onAgentRunActivity((payload) => {
-      const seq = activitySeqRef.current++;
-      setRunActivities((prev) => {
-        const entry: ActivityEntry = { ...payload, seq };
-        const next = [...prev, entry];
-        // Cap at last 50 entries
+    const unsubscribeActivity = mauzClient.onAgentRunActivity((payload) => {
+      setRunActivities((activities) => {
+        const next = [...activities, { ...payload, seq: activitySequenceRef.current++ }];
         return next.length > 50 ? next.slice(-50) : next;
       });
     });
 
     return () => {
-      unsubApproval();
-      unsubRunState();
-      unsubActivity();
+      unsubscribeApproval();
+      unsubscribeRunState();
+      unsubscribeActivity();
     };
   }, []);
 
   const handleApprovalChoice = (choice: "once" | "session" | "always" | "deny"): void => {
-    if (approvalRequest === null) {
-      return;
-    }
-
+    if (approvalRequest === null) return;
     void mauzClient.respondAgentApproval({ approvalId: approvalRequest.approvalId, choice });
     setApprovalRequest(null);
   };
@@ -168,51 +105,54 @@ export function LensPanel(): React.JSX.Element {
     backToMenu();
   };
 
-  const handlePin = (): void => {
-    setPinnedLensObject(toLensMemory(lensObject));
-    setAskError(null);
-    setAskAnswer(null);
-    setAskConversationTitle(null);
-  };
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
 
     if (currentContext === null) {
-      setAskError("Mauz Lens does not have cursor context yet.");
+      setAskError("Mauz does not have cursor context yet.");
       return;
     }
 
-    if (isRemembering) {
-      handlePin();
-      return;
-    }
-
-    const prompt = getLensActionQuestion(selectedLensAction, lensObject, pinnedLensObject, question);
-
-    setAskLoading(true);
-    setAskError(null);
-    setAskAnswer(null);
-    setAskConversationTitle(null);
+    let currentReadiness: GatewayReadinessResult;
 
     try {
-      const response = await mauzClient.submitAsk({
-        question: prompt,
-        context: currentContext
-      });
+      currentReadiness = await mauzClient.getGatewayReadinessStatus();
+    } catch {
+      currentReadiness = { status: "unavailable", message: "Gateway readiness could not be checked." };
+    }
 
+    setReadiness(currentReadiness);
+
+    if (currentReadiness.status !== "ready") {
+      setAskError(currentReadiness.message);
+      return;
+    }
+
+    try {
+      const prompt = buildTaskPrompt(outcome);
+      setAskLoading(true);
+      setAskError(null);
+      setAskAnswer(null);
+      setAskConversationTitle(null);
+      const response = await mauzClient.submitAsk({ question: prompt, context: currentContext });
       setAskAnswer(response.answer);
       setAskConversationTitle(response.conversationTitle ?? null);
-      setQuestion("");
+      setOutcome("");
     } catch (error) {
-      setAskError(error instanceof Error ? error.message : "Mauz Lens failed.");
+      setAskError(error instanceof Error ? error.message : "Mauz task failed.");
     } finally {
       setAskLoading(false);
     }
   };
 
+  const canSubmit = canSubmitTask(
+    outcome,
+    readiness.status === "loading" ? "unavailable" : readiness.status,
+    askLoading
+  );
+
   return (
-    <section className="lens-panel lens-task-panel" aria-label={action.title}>
+    <section className="lens-panel lens-task-panel task-panel" aria-label="Work on this">
       <header className="lens-header lens-task-header">
         <button
           className="icon-button"
@@ -225,8 +165,8 @@ export function LensPanel(): React.JSX.Element {
         <div className="panel-title">
           <BrandLogo className="panel-title-logo" />
           <div>
-            <h1 tabIndex={-1}>{action.title}</h1>
-            <p>{lensObject.label}</p>
+            <h1 tabIndex={-1}>Work on this</h1>
+            <p>Supervised task</p>
           </div>
         </div>
         <button
@@ -239,13 +179,13 @@ export function LensPanel(): React.JSX.Element {
         </button>
       </header>
 
-      <section className="lens-task-summary" aria-label="Current cursor context">
+      <section className="lens-task-summary" aria-label="Selected cursor context">
         <div className="lens-task-summary-icon">
-          <ActionIcon aria-hidden="true" size={17} />
+          <BriefcaseBusiness aria-hidden="true" size={17} />
         </div>
         <div>
           <div className="lens-task-eyebrow">
-            <span>{action.subtitle}</span>
+            <span>Selected scope</span>
             <span>{lensObject.confidence}%</span>
           </div>
           <h2>{lensObject.label}</h2>
@@ -253,7 +193,7 @@ export function LensPanel(): React.JSX.Element {
         </div>
       </section>
 
-      <div className="lens-task-context" aria-label="Lens context status">
+      <div className="lens-task-context" aria-label="Task context scope">
         <span>
           <Camera aria-hidden="true" size={14} />
           {lensObject.privacyMode}
@@ -270,52 +210,30 @@ export function LensPanel(): React.JSX.Element {
         </span>
         <span>
           <MousePointer2 aria-hidden="true" size={14} />
-          No autonomous actions
+          Approval required for mutations
         </span>
       </div>
 
-      {currentContext?.screenshotError !== undefined ? (
-        <div className="permission-note" role="status">
-          <strong>{currentContext.screenshotError.message}</strong>
-          <span>You can still use Lens with selected text, window metadata, or a typed prompt.</span>
-        </div>
-      ) : null}
-
-      {isRemembering ? (
-        <div className="lens-remember-card" role="status">
-          <Check aria-hidden="true" size={17} />
-          <div>
-            <strong>Remembered as this.</strong>
-            <span>{pinnedLensObject?.label ?? lensObject.label}</span>
-          </div>
-          <div style={{ display: "flex", gap: "6px" }}>
-            <button type="button" onClick={handlePin}>
-              Refresh pin
-            </button>
-            <button type="button" onClick={() => setPinnedLensObject(null)}>
-              Clear pin
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <p className="task-readiness" data-status={readiness.status} role="status">
+        <strong>Gateway: {readiness.status === "loading" ? "checking" : readiness.status}</strong>
+        <span>{readiness.message}</span>
+      </p>
 
       <form className="lens-task-form" onSubmit={(event) => void handleSubmit(event)}>
         <textarea
-          aria-label="Question for Mauz Lens"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          placeholder={action.placeholder}
-          disabled={askLoading || isRemembering}
+          aria-label="Desired outcome"
+          value={outcome}
+          onChange={(event) => setOutcome(event.target.value)}
+          placeholder="Describe the outcome you want"
+          disabled={askLoading}
         />
-        <button className="submit-button" type="submit" disabled={askLoading}>
+        <button className="submit-button" type="submit" disabled={!canSubmit}>
           {askLoading ? (
             <LoaderCircle aria-hidden="true" className="spin" size={16} />
-          ) : isRemembering ? (
-            <Pin aria-hidden="true" size={16} />
           ) : (
             <Send aria-hidden="true" size={16} />
           )}
-          <span>{askLoading ? "Working" : action.buttonLabel}</span>
+          <span>{askLoading ? "Working" : "Start work"}</span>
         </button>
       </form>
 
@@ -326,15 +244,13 @@ export function LensPanel(): React.JSX.Element {
           </button>
           <div className="agent-activity">
             <span className="agent-activity-dot" aria-hidden="true" />
-            <span className="agent-activity-label">
-              {runActivities[runActivities.length - 1]?.label ?? "Working…"}
-            </span>
+            <span className="agent-activity-label">{runActivities.at(-1)?.label ?? "Working…"}</span>
             {runActivities.length > 0 ? (
               <button
                 type="button"
                 className="agent-activity-count"
                 aria-expanded={activityExpanded}
-                onClick={() => setActivityExpanded((v) => !v)}
+                onClick={() => setActivityExpanded((value) => !value)}
               >
                 {runActivities.length} {runActivities.length === 1 ? "step" : "steps"}
               </button>
@@ -369,7 +285,7 @@ export function LensPanel(): React.JSX.Element {
           </>
         ) : null}
         {askError === null && askAnswer === null && !askLoading ? (
-          <p className="ask-empty">{action.emptyState}</p>
+          <p className="ask-empty">Describe one outcome to start a supervised task.</p>
         ) : null}
       </div>
     </section>

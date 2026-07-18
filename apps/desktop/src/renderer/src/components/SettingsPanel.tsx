@@ -12,7 +12,12 @@ import {
   Zap
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { MauzSettings, MauzSettingsUpdate, ShakeSensitivity } from "@mauzai/shared";
+import type {
+  GatewayReadinessResult,
+  MauzSettings,
+  MauzSettingsUpdate,
+  ShakeSensitivity
+} from "@mauzai/shared";
 import { DEFAULT_HERMES_BASE_URL } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -66,8 +71,11 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+  const [gatewayReadiness, setGatewayReadiness] = useState<GatewayReadinessResult | null>(null);
+  const [gatewayReadinessLoading, setGatewayReadinessLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const openAiApiKeyInputRef = useRef<HTMLInputElement | null>(null);
+  const gatewayReadinessRequestRef = useRef(0);
 
   useEffect(() => {
     setDraft(settings);
@@ -103,6 +111,39 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
       disposed = true;
     };
   }, [setSettings, settings]);
+
+  useEffect(() => {
+    const requestId = gatewayReadinessRequestRef.current + 1;
+    gatewayReadinessRequestRef.current = requestId;
+    setGatewayReadinessLoading(true);
+
+    void mauzClient
+      .getGatewayReadinessStatus()
+      .then((result) => {
+        if (gatewayReadinessRequestRef.current === requestId) {
+          setGatewayReadiness(result);
+        }
+      })
+      .catch(() => {
+        if (gatewayReadinessRequestRef.current === requestId) {
+          setGatewayReadiness({
+            status: "unavailable",
+            message: "Gateway readiness could not be checked."
+          });
+        }
+      })
+      .finally(() => {
+        if (gatewayReadinessRequestRef.current === requestId) {
+          setGatewayReadinessLoading(false);
+        }
+      });
+
+    return () => {
+      if (gatewayReadinessRequestRef.current === requestId) {
+        gatewayReadinessRequestRef.current += 1;
+      }
+    };
+  }, [settings?.assistantMode, settings?.backendBaseUrl]);
 
   const handleBack = async (): Promise<void> => {
     if (chrome === "desktop") {
@@ -389,7 +430,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
           <p className="settings-helper">
             {draft.assistantMode === "simple"
               ? "Quick answers about what you're looking at."
-              : "Hermes agent with memory, tools, and computer use."}
+              : "Use Work on this for supervised tasks that can use tools."}
           </p>
           {draft.assistantMode === "agentic" ? (
             <>
@@ -402,6 +443,15 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
                   onChange={(event) => updateDraft("backendBaseUrl", event.target.value)}
                 />
               </label>
+              <p className="settings-helper" role="status" aria-live="polite">
+                <strong>Gateway readiness:</strong>{" "}
+                {settings?.assistantMode !== draft.assistantMode ||
+                settings.backendBaseUrl !== draft.backendBaseUrl
+                  ? "Save mode or Gateway URL changes to refresh readiness."
+                  : gatewayReadinessLoading
+                    ? "Checking gateway..."
+                    : (gatewayReadiness?.message ?? "Gateway readiness is not available.")}
+              </p>
               <SettingsSelect
                 label="Agent mode"
                 value={draft.agentMode}

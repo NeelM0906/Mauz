@@ -5,6 +5,7 @@ import { DesktopApp } from "./components/DesktopApp";
 import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { TaskPanel } from "./components/TaskPanel";
 import { TalkPanel } from "./components/TalkPanel";
 import { mauzClient } from "./lib/mauzClient";
 import { useMauzStore } from "./state/useMauzStore";
@@ -66,6 +67,10 @@ function App(): React.JSX.Element {
 
   if (mode === "lens") {
     return <LensPanel />;
+  }
+
+  if (mode === "task") {
+    return <TaskPanel />;
   }
 
   if (mode === "settings") {

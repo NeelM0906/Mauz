@@ -16,6 +16,7 @@ export type {
 } from "./backend/askViaRuns";
 export { stopRun } from "./backend/runsClient";
 export type { RunsClientOptions } from "./backend/runsClient";
+export { getGatewayReadinessStatus } from "./backend/capabilities";
 
 export type CreateMauzApiServerOptions = {
   askHandler?: AskMauzHandler;

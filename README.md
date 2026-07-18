@@ -36,14 +36,14 @@ We hope people build integrations and customize Mauz to their own liking.
 
 We will also work on supporting lightweight local models, so Mauz can experiment with simpler, lower-latency, and more private AI interactions where that makes sense.
 
-## Modes
+## Answers and supervised work
 
-Mauz has two product modes, selectable in Settings:
+- **Simple** (default): direct answers about what you are looking at. No gateway is required.
+- **Work on this**: an explicit, supervised task flow for longer work. Mauz captures the context you approve, asks for the outcome you want, checks that the configured gateway supports supervised runs, and shows activity, approvals, and Stop while the task runs.
 
-- **Simple** (default): direct OpenAI answering — quick answers about what you are looking at, no gateway required.
-- **Agentic**: powered by the [Hermes](https://github.com/NousResearch/hermes-agent) agent gateway — persistent memory, session continuity, tools (web, browser, code execution, MCP, computer use), and Approve/YOLO/Stop controls in the popover. Requires the Hermes gateway running locally (default `http://localhost:8642/v1`). A custom OpenAI-compatible gateway URL can be entered in Settings when Agentic mode is selected.
+To enable **Work on this**, select **Agentic** under Settings → Mode and configure a compatible [Hermes](https://github.com/NousResearch/hermes-agent) gateway. Agentic is a connection setting; fast contextual answers remain the default interaction.
 
-See [setup.md](setup.md#hermes-agent-backend) for gateway setup instructions.
+See [setup.md](setup.md#agent-gateway-and-work-on-this) for installation and gateway instructions.
 
 ## Current Preview
 
@@ -57,6 +57,7 @@ The current macOS preview includes:
 - Voice interaction.
 - Local settings.
 - Conversation history.
+- Supervised Work on this tasks through a compatible agent gateway.
 
 - Mouse shake only opens the menu.
 - Ask mode captures context after you choose Ask Mauz.

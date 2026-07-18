@@ -10,6 +10,7 @@ import type {
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
+  GatewayReadinessResult,
   MauzLensResizeRequest,
   MauzDesktopContext,
   MauzBridge,
@@ -119,6 +120,11 @@ const browserPreviewBridge: MauzBridge = {
     onPermissionError: () => () => {}
   },
   agent: {
+    getGatewayReadinessStatus: async () =>
+      ({
+        status: "simple",
+        message: "Browser preview is using the simple answer flow."
+      }) as GatewayReadinessResult,
     respondApproval: async (_payload: unknown) => {},
     stop: async () => {},
     onApprovalRequest: (_callback: (payload: AgentApprovalPayload) => void) => () => {},
@@ -236,5 +242,8 @@ export const mauzClient = {
   },
   stopAgentRun(): Promise<void> {
     return getBridge().agent.stop();
+  },
+  getGatewayReadinessStatus(): Promise<GatewayReadinessResult> {
+    return getBridge().agent.getGatewayReadinessStatus();
   }
 };

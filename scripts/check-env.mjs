@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const envExamplePath = ".env.example";
 const documentedRequiredKeys = [
@@ -48,7 +48,7 @@ for (const [key, value] of documentedEnvKeys) {
   }
 }
 
-for (const file of getTrackedFiles().filter((path) => sourceFilePattern.test(path))) {
+for (const file of getTrackedFiles().filter((path) => sourceFilePattern.test(path) && existsSync(path))) {
   const source = readFileSync(file, "utf8");
 
   for (const key of findProcessEnvKeys(source)) {
