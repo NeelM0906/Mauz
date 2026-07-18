@@ -22,7 +22,7 @@
     "check": "pnpm lint && pnpm env:check && pnpm security:secrets && pnpm typecheck && pnpm test && pnpm smoke"
   },
   "devDependencies": {
-    "prettier": "^3.8.3",
+    "prettier": "^3.9.5",
     "typescript": "^5.9.3"
   },
   "pnpm": {
