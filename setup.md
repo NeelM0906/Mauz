@@ -84,6 +84,22 @@ MAUZ_CLAUDE_CODE_PATH=           # only if claude/codex are not on PATH
 MAUZ_CODEX_PATH=
 ```
 
+## Browser extension (optional)
+
+The Mauz extension for Chrome and Edge lets Mauz read the page under the pointer: its
+address, text, the element you point at, and product details shops publish (price, brand,
+sizes, stock). Without it, Mauz still reads pages through the screen and UI Automation.
+
+1. Open `chrome://extensions` or `edge://extensions` and turn on Developer mode.
+2. Choose Load unpacked and pick `browser-extension/extension` in your clone. Settings >
+   Browser extension has a button that opens this folder.
+3. Keep Mauz running. It registers its browser helper for Chrome and Edge each time it
+   starts, and Settings shows the browser as connected within a minute.
+
+The extension reads nothing until you summon Mauz over that browser, and only from the
+active tab. Sites on Settings > Never capture (banking and payments by default) are not
+read or screenshotted.
+
 ## Talk (push to talk)
 
 Hold **Space** (or the **Hold to talk** button), speak, and release. Mauz transcribes the clip, answers with your AI provider using a fresh screenshot around your pointer, and reads the answer aloud with your system voice. Press Space while Mauz is speaking to interrupt it.

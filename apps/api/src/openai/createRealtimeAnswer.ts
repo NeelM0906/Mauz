@@ -1,6 +1,5 @@
 import {
-  formatPointerTarget,
-  getPointerTarget,
+  formatScreenContent,
   type Bounds,
   type MauzDesktopContext,
   type RealtimeConnectRequest,
@@ -152,7 +151,7 @@ function formatRealtimeContext(context: MauzDesktopContext): string {
   const activeApp = context.activeApp ?? pointer?.activeApp;
   const activeWindow = context.activeWindow ?? pointer?.activeWindow;
   const screenshot = pointer?.screenshot ?? context.screenshot;
-  const target = getPointerTarget(context);
+  const screenContent = formatScreenContent(context);
 
   return [
     `- Timestamp: ${context.timestamp}`,
@@ -163,7 +162,7 @@ function formatRealtimeContext(context: MauzDesktopContext): string {
     `- Window image: ${screenshot === undefined ? "not attached" : `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, sent as broad context`}`,
     `- Active app: ${activeApp === undefined ? "unknown" : [activeApp.name, activeApp.bundleId].filter(Boolean).join(", ") || "unknown"}`,
     `- Active window: ${activeWindow === undefined ? "unknown" : [activeWindow.title, formatBounds(activeWindow.bounds)].filter(Boolean).join(", ") || "unknown"}`,
-    ...(target === undefined ? [] : ["", ...formatPointerTarget(target)])
+    ...(screenContent.length === 0 ? [] : ["", ...screenContent])
   ].join("\n");
 }
 

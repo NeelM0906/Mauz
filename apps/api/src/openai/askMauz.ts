@@ -1,8 +1,7 @@
 import OpenAI, { APIConnectionError } from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import {
-  formatPointerTarget,
-  getPointerTarget,
+  formatScreenContent,
   type AskMauzRequest,
   type AskMauzResponse,
   type CursorCropFocus,
@@ -208,6 +207,10 @@ function describeCursorCrop(crop: ScreenshotPayload, focus: CursorCropFocus | un
     return `cursor-centered crop (${size}); the pointer is at its center and it shows the pointed target.`;
   }
 
+  if (focus.kind === "region") {
+    return `the exact area of the screen the user selected (${size}); "this" means what is in this area.`;
+  }
+
   const pointer = `the pointer is at (${focus.pointer.x}, ${focus.pointer.y}) in this image`;
 
   return focus.kind === "element"
@@ -236,13 +239,13 @@ function getAskMaxOutputTokens(): number {
 
 export function buildContextText(request: AskMauzRequest): string {
   const { question, context } = request;
-  const target = getPointerTarget(context);
+  const screenContent = formatScreenContent(context);
 
   return [
     `User question: ${question}`,
     "",
     "Reference resolution priority: selected text > pointed element > pointer image > active window metadata > cursor position.",
-    "When the user says this, that, or here, they mean the pointed element (shown in the pointer image) unless selected text is available.",
+    "When the user says this, that, or here, they mean the pointed element (shown in the pointer image) unless selected text is available. If they selected an area of the screen, they mean that area.",
     "",
     "Desktop context:",
     `- Timestamp: ${context.timestamp}`,
@@ -253,13 +256,7 @@ export function buildContextText(request: AskMauzRequest): string {
     `- Active app: ${formatActiveApp(context)}`,
     `- Active window: ${formatActiveWindow(context)}`,
     `- Image: ${formatImage(context)}`,
-    ...(target === undefined ? [] : ["", ...formatPointerTarget(target)]),
-    ...(context.captureBlocked === undefined
-      ? []
-      : [
-          "",
-          `Capture blocked: the user's privacy settings block capture of ${context.captureBlocked.appName}. No screenshot, text, or window details were collected. If the question needs them, say so briefly.`
-        ]),
+    ...(screenContent.length === 0 ? [] : ["", ...screenContent]),
     "",
     "Previous conversation:",
     formatConversationMessages(request.conversationMessages)

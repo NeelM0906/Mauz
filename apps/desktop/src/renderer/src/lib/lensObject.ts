@@ -8,7 +8,9 @@ export type LensObjectType =
   | "screen"
   | "window"
   | "cursor"
-  | "blocked";
+  | "blocked"
+  | "page"
+  | "region";
 
 /** One line of "What Mauz saw": exactly what is sent with a question. */
 export type CaptureDetail = {
@@ -73,6 +75,50 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
     };
   }
 
+  const ocrText = context.pointer?.ocrText;
+
+  if (context.pointer?.cursorCropFocus?.kind === "region") {
+    return {
+      id: createLensId(context, "region"),
+      type: "region",
+      label: `Selected area in ${appName}`,
+      summary:
+        ocrText === undefined ? "Mauz will answer about the area you selected." : truncateText(ocrText, 160),
+      confidence: 94,
+      privacyMode: ocrText === undefined ? "Selected area" : "Selected area + recognized text",
+      suggestedActions: ["ask", "explain", "transform", "remember", "compare"]
+    };
+  }
+
+  const page = context.pointer?.page;
+
+  if (page !== undefined) {
+    const product = page.product;
+    const price = product?.price ?? product?.lowPrice;
+    const name = product?.name ?? page.title ?? getHost(page.url);
+
+    return {
+      id: createLensId(context, "page"),
+      type: "page",
+      label: `${truncateText(name, 60)} in ${page.browser}`,
+      summary: truncateText(
+        product !== undefined && price !== undefined
+          ? [
+              product.brand,
+              product.name,
+              `${price}${product.priceCurrency ? ` ${product.priceCurrency}` : ""}`
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : (page.element?.text ?? page.around ?? page.url),
+        160
+      ),
+      confidence: 95,
+      privacyMode: imageMode === undefined ? "Page data" : `Page data + ${imageMode}`,
+      suggestedActions: ["ask", "explain", "remember", "compare"]
+    };
+  }
+
   if (target !== undefined) {
     const element = target.element;
     const text = element.text ?? element.value ?? target.container?.text ?? element.name;
@@ -96,9 +142,12 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       id: createLensId(context, "cursor-area"),
       type: "cursor-area",
       label: windowTitle === undefined ? `Cursor area in ${appName}` : `Cursor area in ${windowTitle}`,
-      summary: `A crop around the pointer at ${formatCursor(context)} is ready for object-aware help.`,
+      summary:
+        ocrText === undefined
+          ? `A crop around the pointer at ${formatCursor(context)} is ready for object-aware help.`
+          : truncateText(ocrText, 160),
       confidence: 84,
-      privacyMode: imageMode ?? "Cursor crop",
+      privacyMode: `${imageMode ?? "Cursor crop"}${ocrText === undefined ? "" : " + recognized text"}`,
       suggestedActions: ["ask", "explain", "remember", "compare"]
     };
   }
@@ -209,6 +258,38 @@ export function describeCapture(context: MauzDesktopContext | null): CaptureDeta
     details.push({ label: "Selected text", text: truncateText(selectedText, 300) });
   }
 
+  const page = context.pointer?.page;
+
+  if (page !== undefined) {
+    details.push({ label: `Page: ${truncateText(page.title ?? getHost(page.url), 80)}`, text: page.url });
+
+    if (page.product !== undefined) {
+      details.push({
+        label: "Product data",
+        text: truncateText(
+          Object.entries(page.product)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join("; "),
+          300
+        )
+      });
+    }
+
+    if (page.element !== undefined) {
+      details.push({
+        label: `Pointed on the page: <${page.element.tag}>`,
+        ...(page.element.text === undefined ? {} : { text: truncateText(page.element.text, 300) })
+      });
+    }
+
+    if (page.text !== undefined) {
+      details.push({
+        label: `Page text, ${page.text.length} characters`,
+        text: truncateText(page.text, 300)
+      });
+    }
+  }
+
   if (target !== undefined) {
     const element = target.element;
     const text = element.text ?? element.value;
@@ -235,6 +316,10 @@ export function describeCapture(context: MauzDesktopContext | null): CaptureDeta
     });
   }
 
+  if (context.pointer?.ocrText !== undefined) {
+    details.push({ label: "Recognized text (OCR)", text: truncateText(context.pointer.ocrText, 300) });
+  }
+
   const window = target?.window;
   const activeWindow = context.activeWindow ?? context.pointer?.activeWindow;
   const windowTitle = window?.title ?? activeWindow?.title;
@@ -254,14 +339,27 @@ function describeImageMode(context: MauzDesktopContext): string | undefined {
   const pointer = context.pointer;
 
   if (pointer?.cursorCrop !== undefined) {
-    if (pointer.cursorCropFocus?.kind === "element") {
-      return "element crop";
+    switch (pointer.cursorCropFocus?.kind) {
+      case "element":
+        return "element crop";
+      case "pointer-area":
+        return "area around pointer";
+      case "region":
+        return "selected area";
+      default:
+        return "cursor crop";
     }
-
-    return pointer.cursorCropFocus?.kind === "pointer-area" ? "area around pointer" : "cursor crop";
   }
 
   return pointer?.screenshot !== undefined || context.screenshot !== undefined ? "window image" : undefined;
+}
+
+function getHost(url: string): string {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
 }
 
 function createLensId(context: MauzDesktopContext, type: LensObjectType): string {

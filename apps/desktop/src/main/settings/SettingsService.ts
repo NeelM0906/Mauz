@@ -5,6 +5,7 @@ import { app, safeStorage } from "electron";
 import {
   AiFallbackPreferenceSchema,
   AiProviderPreferenceSchema,
+  DEFAULT_CAPTURE_BLOCKED_SITES,
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
   TalkEngineSchema,
@@ -166,6 +167,11 @@ export class SettingsService {
         nextSettings,
         "captureBlockedApps",
         normalizeAppList(parsedUpdate.captureBlockedApps)
+      );
+      applyDefinedSetting(
+        nextSettings,
+        "captureBlockedSites",
+        normalizeAppList(parsedUpdate.captureBlockedSites)
       );
       applyDefinedSetting(nextSettings, "assistantMode", parsedUpdate.assistantMode);
       applyDefinedSetting(nextSettings, "backendBaseUrl", parsedUpdate.backendBaseUrl);
@@ -357,6 +363,7 @@ function getDefaultSettings(): StoredMauzSettings {
         ? process.env.OPENAI_REALTIME_REASONING_EFFORT
         : DEFAULT_REALTIME_REASONING_EFFORT,
     captureBlockedApps: [...DEFAULT_CAPTURE_BLOCKED_APPS],
+    captureBlockedSites: [...DEFAULT_CAPTURE_BLOCKED_SITES],
     assistantMode:
       process.env.MAUZ_BACKEND_PRESET === "hermes"
         ? ("agentic" as AssistantMode)
@@ -435,6 +442,7 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeVoice: publicSettings.data.realtimeVoice,
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
     captureBlockedApps: publicSettings.data.captureBlockedApps,
+    captureBlockedSites: publicSettings.data.captureBlockedSites,
     assistantMode: publicSettings.data.assistantMode,
     backendBaseUrl: publicSettings.data.backendBaseUrl,
     agentMode: publicSettings.data.agentMode,
@@ -493,6 +501,7 @@ function toPublicSettings(
     realtimeVoice: settings.realtimeVoice,
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
     captureBlockedApps: [...settings.captureBlockedApps],
+    captureBlockedSites: [...settings.captureBlockedSites],
     apiKeyConfigured: openAiCredentialSource !== "none",
     assistantMode: settings.assistantMode,
     backendBaseUrl: settings.backendBaseUrl,

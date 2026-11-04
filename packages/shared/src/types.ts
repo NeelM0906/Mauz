@@ -45,8 +45,11 @@ export type PointerTarget = {
 };
 
 export type CursorCropFocus = {
-  /** "element": framed on the pointed element or its group; "pointer-area": a fixed area around the pointer. */
-  kind: "element" | "pointer-area";
+  /**
+   * "element": framed on the pointed element or its group; "pointer-area": a fixed area around
+   * the pointer; "region": exactly the area the user selected.
+   */
+  kind: "element" | "pointer-area" | "region";
   /** Pointer position in the crop's pixels. */
   pointer: {
     x: number;
@@ -56,6 +59,49 @@ export type CursorCropFocus = {
 
 export type CaptureBlocked = {
   appName: string;
+};
+
+/** Structured product data a shop page publishes for search engines (schema.org, Open Graph). */
+export type BrowserProduct = {
+  name?: string | undefined;
+  brand?: string | undefined;
+  sku?: string | undefined;
+  gtin?: string | undefined;
+  color?: string | undefined;
+  size?: string | undefined;
+  material?: string | undefined;
+  price?: string | undefined;
+  priceCurrency?: string | undefined;
+  lowPrice?: string | undefined;
+  highPrice?: string | undefined;
+  availability?: string | undefined;
+  rating?: string | undefined;
+  reviewCount?: string | undefined;
+  seller?: string | undefined;
+};
+
+/** The page under the pointer, read by the Mauz browser extension. */
+export type BrowserPage = {
+  /** "Google Chrome", "Microsoft Edge", ... */
+  browser: string;
+  url: string;
+  title?: string | undefined;
+  selection?: string | undefined;
+  /** The element under the pointer. */
+  element?:
+    | {
+        tag: string;
+        role?: string | undefined;
+        text?: string | undefined;
+        href?: string | undefined;
+        alt?: string | undefined;
+      }
+    | undefined;
+  /** Text of the card or section around the pointed element. */
+  around?: string | undefined;
+  /** Main text of the page. */
+  text?: string | undefined;
+  product?: BrowserProduct | undefined;
 };
 
 export type PointerContext = {
@@ -87,6 +133,9 @@ export type PointerContext = {
   target?: PointerTarget | undefined;
   cursorCrop?: ScreenshotPayload | undefined;
   cursorCropFocus?: CursorCropFocus | undefined;
+  /** Text recognized in the cursor crop (Windows OCR) when the app exposed none. */
+  ocrText?: string | undefined;
+  page?: BrowserPage | undefined;
   /** Image of the window under the pointer; sent only when there is no cursor crop. */
   screenshot?: ScreenshotPayload | undefined;
 };
@@ -344,6 +393,8 @@ export type MauzSettings = {
   realtimeReasoningEffort: RealtimeReasoningEffort;
   /** Executable names (Windows) or bundle ids (macOS) Mauz never captures. */
   captureBlockedApps: string[];
+  /** Sites (example.com, *bank*) whose pages Mauz never reads or screenshots. */
+  captureBlockedSites: string[];
   apiKeyConfigured: boolean;
   assistantMode: AssistantMode;
   backendBaseUrl: string;
@@ -402,12 +453,23 @@ export type GatewayReadinessResult = {
   message: string;
 };
 
+export type BrowserExtensionStatus = {
+  /** Browsers whose Mauz extension is connected now. */
+  connectedBrowsers: string[];
+  /** Folder to load as an unpacked extension, or null if Mauz cannot find it. */
+  extensionPath: string | null;
+  /** Whether Chrome and Edge know how to start the Mauz native messaging host. */
+  hostRegistered: boolean;
+};
+
 export type MauzBridge = {
   menu: {
     showMenu(): Promise<void>;
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
+    /** Lets the user drag a rectangle on screen; null when they cancel. */
+    selectRegion(): Promise<MauzDesktopContext | null>;
     setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
     /** The popover was hidden (closed, Escape, or lost focus); stop audio and microphone use. */
     onHidden(callback: () => void): () => void;
@@ -428,6 +490,10 @@ export type MauzBridge = {
   talk: {
     transcribe(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse>;
     captureContext(): Promise<MauzDesktopContext>;
+  };
+  browser: {
+    status(): Promise<BrowserExtensionStatus>;
+    openExtensionFolder(): Promise<void>;
   };
   history: {
     list(): Promise<ChatHistoryListResponse>;

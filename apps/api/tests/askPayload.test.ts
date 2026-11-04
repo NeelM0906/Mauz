@@ -380,6 +380,7 @@ function buildSettingsFixture() {
     realtimeVoice: "alloy",
     realtimeReasoningEffort: "medium" as const,
     captureBlockedApps: [],
+    captureBlockedSites: [],
     apiKeyConfigured: false,
     aiProvider: "auto" as const,
     aiFallbackProvider: "none" as const,

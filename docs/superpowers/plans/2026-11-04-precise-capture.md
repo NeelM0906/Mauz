@@ -90,11 +90,29 @@ shake checks in "Phase 1 acceptance" have not been run yet.
 
 ## Phase 2
 
-- Windows OCR fallback in the helper (spec §3.6).
-- User-drawn region overlay (spec §3.7).
-- macOS `AXUIElementCopyElementAtPosition` in `MauzInputAgent` (same `PointerTarget` shape).
+**Status (2026-11-04):** OCR and region selection are implemented with unit tests. OCR was
+run live through the helper on this machine. The region overlay has not been tried by hand.
+macOS element lookup is deferred (spec §3.1).
+
+- Windows OCR fallback in the helper (spec §3.6): `WindowsContextHelper.recognizeText`;
+  `ContextCollector` runs it when there is no app or page text, and always for a region.
+- User-drawn region (spec §3.7): `RegionSelector`, the `menuSelectRegion` IPC,
+  `ContextCollector.collectForRegion`, `PointerCaptureFocus.region`, and the "Select area"
+  bubble.
+- Deferred: macOS `AXUIElementCopyElementAtPosition` (needs a Mac to build and test).
 
 ## Phase 3
 
-- Chrome/Edge MV3 extension, native messaging host, named-pipe relay, URL denylist, product
-  structured data (spec §3.8).
+**Status (2026-11-04):** Implemented. Live checks on Windows: the unpacked extension in
+headless Edge with a temporary profile returned the pointed element, card text and product
+data, and refused a blocked host. Native messaging ran end to end (Edge → `.cmd` launcher →
+`host.cjs` → named pipe), with the registry key removed afterwards. Chrome has not been
+tried. Branded Chrome ignores `--load-extension`, so it needs a manual Load unpacked.
+
+- `browser-extension/`: MV3 extension (`page.js` extraction, `content.js`, `background.js`)
+  and `native-host/host.cjs`.
+- `BrowserBridge`: pipe server, page requests, re-check against blocked sites, and native host
+  registration.
+- `captureBlockedSites` setting, Settings sections for blocked sites and the extension,
+  `browserStatus` / `browserOpenExtensionFolder` IPC.
+- Prompt: `formatScreenContent` (page, element, OCR); Lens types `page` and `region`.

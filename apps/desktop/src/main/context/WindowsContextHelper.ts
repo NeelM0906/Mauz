@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
-import type { Bounds, PointerTarget, PointerTargetElement } from "@mauzai/shared";
+import type { Bounds, PointerTarget, PointerTargetElement, ScreenshotPayload } from "@mauzai/shared";
 
 type ChildProcessLike = {
   stdin: Writable | null;
@@ -47,8 +47,14 @@ type PendingRequest = {
 };
 
 const DEFAULT_TIMEOUT_MS = 900;
+// PowerShell and its assemblies load in a few seconds; requests wait this long for the helper
+// to say it is ready. Request timeouts start only once it is.
+const STARTUP_WAIT_MS = 3_000;
 // Includes queueing behind the activation's window and selection lookups.
 const ELEMENT_AT_POINT_TIMEOUT_MS = 1_500;
+// The first OCR request also loads the WinRT engine.
+const OCR_TIMEOUT_MS = 4_000;
+const MAX_OCR_IMAGE_BASE64_CHARS = 1_500_000;
 const MAX_WINDOW_TEXT_CHARS = 500;
 const MAX_TARGET_VALUE_CHARS = 2_000;
 const MAX_TARGET_TEXT_CHARS = 4_000;
@@ -69,6 +75,8 @@ export class WindowsContextHelper {
   private child: ChildProcessLike | null = null;
   private nextRequestId = 1;
   private readonly pending = new Map<number, PendingRequest>();
+  private ready = false;
+  private readyWaiters: Array<() => void> = [];
 
   constructor(options: { spawn?: WindowsContextSpawn; coordinates?: WindowsCoordinateConverter } = {}) {
     this.coordinates = options.coordinates ?? identityConverter;
@@ -126,6 +134,7 @@ export class WindowsContextHelper {
   stop(): void {
     const child = this.child;
     this.child = null;
+    this.setReady(false);
     this.failPending(new Error("Windows context helper stopped."));
 
     if (child !== null) {
@@ -159,12 +168,14 @@ export class WindowsContextHelper {
    */
   async getElementAtPoint(
     point: Point,
-    timeoutMs = ELEMENT_AT_POINT_TIMEOUT_MS
+    options: { excludeProcessId?: number | undefined; timeoutMs?: number | undefined } = {}
   ): Promise<PointerTarget | undefined> {
     const physical = this.coordinates.toPhysicalPoint(point);
-    const result = await this.request("elementAtPoint", timeoutMs, {
+    const result = await this.request("elementAtPoint", options.timeoutMs ?? ELEMENT_AT_POINT_TIMEOUT_MS, {
       x: String(Math.round(physical.x)),
-      y: String(Math.round(physical.y))
+      y: String(Math.round(physical.y)),
+      // Mauz's own windows (the popover) are looked through to the app behind them.
+      exclude: String(options.excludeProcessId ?? 0)
     });
 
     return isRecord(result)
@@ -205,12 +216,35 @@ export class WindowsContextHelper {
     return typeof result === "string" ? result.trim() : "";
   }
 
-  private request(
-    command: "activeWindow" | "selectedText" | "elementAtPoint" | "focusWindow" | "transcribe",
+  /**
+   * Text in an image, from the built-in Windows OCR engine. For apps that expose no text to UI
+   * Automation (canvas apps, images, some terminals).
+   */
+  async recognizeText(image: ScreenshotPayload, timeoutMs = OCR_TIMEOUT_MS): Promise<string | undefined> {
+    // Windows PowerShell's JSON reader rejects very long lines.
+    if (image.base64.length > MAX_OCR_IMAGE_BASE64_CHARS) {
+      return undefined;
+    }
+
+    // OCR is bounded inside the helper; restarting would throw away the loaded engine.
+    const result = await this.request("ocr", timeoutMs, { image: image.base64 }, { restartOnTimeout: false });
+
+    return readText(result, MAX_TARGET_TEXT_CHARS);
+  }
+
+  private async request(
+    command: "activeWindow" | "selectedText" | "elementAtPoint" | "ocr" | "focusWindow" | "transcribe",
     timeoutMs: number,
-    parameters: Record<string, string> = {}
+    parameters: Record<string, string> = {},
+    options: { restartOnTimeout?: boolean } = {}
   ): Promise<unknown> {
     this.start();
+
+    if (!(await this.waitUntilReady())) {
+      // Still starting: fail without restarting it, which would only start over.
+      throw new Error("Windows context helper is still starting.");
+    }
+
     const child = this.child;
 
     if (child?.stdin === null || child === null) {
@@ -222,8 +256,12 @@ export class WindowsContextHelper {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
+
         // A UIA call into a hung app can block the helper; restart it so later requests work.
-        this.restart();
+        if (options.restartOnTimeout !== false) {
+          this.restart();
+        }
+
         reject(new Error(`Windows context helper timed out on ${command}.`));
       }, timeoutMs);
 
@@ -242,6 +280,11 @@ export class WindowsContextHelper {
     try {
       response = JSON.parse(line);
     } catch {
+      return;
+    }
+
+    if (isRecord(response) && response.ready === true) {
+      this.setReady(true);
       return;
     }
 
@@ -269,9 +312,39 @@ export class WindowsContextHelper {
   private handleExit(child: ChildProcessLike): void {
     if (this.child === child) {
       this.child = null;
+      this.setReady(false);
     }
 
     this.failPending(new Error("Windows context helper exited."));
+  }
+
+  private waitUntilReady(): Promise<boolean> {
+    if (this.ready) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.readyWaiters = this.readyWaiters.filter((waiter) => waiter !== done);
+        resolve(false);
+      }, STARTUP_WAIT_MS);
+      const done = () => {
+        clearTimeout(timer);
+        resolve(this.ready);
+      };
+
+      this.readyWaiters.push(done);
+    });
+  }
+
+  private setReady(ready: boolean): void {
+    this.ready = ready;
+
+    if (ready) {
+      const waiters = this.readyWaiters;
+      this.readyWaiters = [];
+      waiters.forEach((waiter) => waiter());
+    }
   }
 
   private restart(): void {
@@ -292,7 +365,29 @@ function parseElementAtPoint(
   result: Record<string, unknown>,
   toDipRect: (rect: Bounds) => Bounds
 ): PointerTarget | undefined {
-  const element = isRecord(result.element) ? parseTargetElement(result.element, toDipRect) : undefined;
+  const targetWindow: NonNullable<PointerTarget["window"]> = {};
+
+  if (isRecord(result.window)) {
+    const window = parseActiveWindow(result.window);
+
+    if (window.title !== undefined) targetWindow.title = window.title;
+    if (window.processName !== undefined) targetWindow.appName = window.processName;
+    if (window.executable !== undefined) targetWindow.executable = window.executable;
+    if (window.processId !== undefined) targetWindow.processId = window.processId;
+    if (window.bounds !== undefined) targetWindow.bounds = toDipRect(window.bounds);
+  }
+
+  const hasWindow = Object.keys(targetWindow).length > 0;
+  // With no element (UIA found nothing), the window alone still says which app is there.
+  const element =
+    (isRecord(result.element) ? parseTargetElement(result.element, toDipRect) : undefined) ??
+    (hasWindow
+      ? {
+          role: "Window",
+          ...(targetWindow.title === undefined ? {} : { name: targetWindow.title }),
+          ...(targetWindow.bounds === undefined ? {} : { bounds: targetWindow.bounds })
+        }
+      : undefined);
 
   if (element === undefined) {
     return undefined;
@@ -305,19 +400,8 @@ function parseElementAtPoint(
     target.container = container;
   }
 
-  if (isRecord(result.window)) {
-    const window = parseActiveWindow(result.window);
-    const targetWindow: NonNullable<PointerTarget["window"]> = {};
-
-    if (window.title !== undefined) targetWindow.title = window.title;
-    if (window.processName !== undefined) targetWindow.appName = window.processName;
-    if (window.executable !== undefined) targetWindow.executable = window.executable;
-    if (window.processId !== undefined) targetWindow.processId = window.processId;
-    if (window.bounds !== undefined) targetWindow.bounds = toDipRect(window.bounds);
-
-    if (Object.keys(targetWindow).length > 0) {
-      target.window = targetWindow;
-    }
+  if (hasWindow) {
+    target.window = targetWindow;
   }
 
   return target;
@@ -436,6 +520,30 @@ public static class MauzWin32 {
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
   [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+  [DllImport("user32.dll")] static extern IntPtr GetTopWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hWnd);
+  [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int index);
+  [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")] static extern int DwmGetCloaked(IntPtr hWnd, int attribute, out int value, int size);
+
+  // The topmost visible window at a point, skipping one process's windows (Mauz's own) and
+  // click-through overlays, which WindowFromPoint would also skip.
+  public static IntPtr WindowAtPointExcluding(int x, int y, uint excludedProcessId) {
+    for (IntPtr h = GetTopWindow(IntPtr.Zero); h != IntPtr.Zero; h = GetWindow(h, 2)) {
+      if (!IsWindowVisible(h) || IsIconic(h)) { continue; }
+      uint owner;
+      GetWindowThreadProcessId(h, out owner);
+      if (owner == excludedProcessId) { continue; }
+      int exStyle = GetWindowLong(h, -20);
+      if ((exStyle & 0x20) != 0 && (exStyle & 0x80000) != 0) { continue; }
+      int cloaked;
+      if (DwmGetCloaked(h, 14, out cloaked, 4) == 0 && cloaked != 0) { continue; }
+      RECT rect;
+      if (GetWindowRect(h, out rect) && x >= rect.Left && x < rect.Right && y >= rect.Top && y < rect.Bottom) { return h; }
+    }
+    return IntPtr.Zero;
+  }
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
@@ -577,16 +685,25 @@ function Get-MauzSubtreeText($root) {
   return $text.ToString()
 }
 
-function Get-MauzElementAtPoint([double]$x, [double]$y) {
+function Get-MauzElementAtPoint([double]$x, [double]$y, [int]$excludedProcessId) {
   $point = New-Object System.Windows.Point($x, $y)
   $element = [System.Windows.Automation.AutomationElement]::FromPoint($point)
-  if ($null -eq $element) { return @{} }
 
   $win32Point = New-Object MauzWin32+POINT
   $win32Point.X = [int]$x
   $win32Point.Y = [int]$y
   $rootHandle = [MauzWin32]::GetAncestor([MauzWin32]::WindowFromPoint($win32Point), 2)
   $window = Get-MauzWindowInfo $rootHandle
+
+  # Over an excluded (Mauz) window: report the app window behind it, without reading its contents.
+  $excluded = $excludedProcessId -gt 0 -and ($window.processId -eq $excludedProcessId -or ($null -ne $element -and $element.Current.ProcessId -eq $excludedProcessId))
+  if ($excluded) {
+    $behind = [MauzWin32]::WindowAtPointExcluding([int]$x, [int]$y, [uint32]$excludedProcessId)
+    if ($behind -eq [IntPtr]::Zero) { return @{} }
+    $behindWindow = Get-MauzWindowInfo $behind
+    return @{ element = @{ role = 'Window'; name = Limit-MauzText $behindWindow.title 500; bounds = $behindWindow.bounds }; window = $behindWindow }
+  }
+  if ($null -eq $element) { return @{ window = $window } }
 
   $current = $element.Current
   $target = @{ role = Get-MauzRole $element; name = Limit-MauzText $current.Name 500; bounds = Get-MauzBounds $element }
@@ -623,6 +740,41 @@ function Get-MauzElementAtPoint([double]$x, [double]$y) {
     }
   }
   return $result
+}
+
+$script:mauzOcr = $null
+
+# Windows.Media.Ocr through WinRT interop: offline, and installed with the Windows language packs.
+function Get-MauzOcr {
+  if ($null -ne $script:mauzOcr) { return $script:mauzOcr }
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
+  $null = [Windows.Graphics.Imaging.BitmapDecoder, Windows.Graphics.Imaging, ContentType = WindowsRuntime]
+  $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -like 'IAsyncOperation*'
+  } | Select-Object -First 1
+  $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
+  if ($null -eq $engine) { throw 'No Windows OCR language is installed.' }
+  $script:mauzOcr = @{ engine = $engine; asTask = $asTask }
+  return $script:mauzOcr
+}
+
+function Wait-MauzOperation($ocr, $operation, [Type]$resultType) {
+  $task = $ocr.asTask.MakeGenericMethod($resultType).Invoke($null, @($operation))
+  if (-not $task.Wait(2500)) { throw 'OCR timed out' }
+  return $task.Result
+}
+
+function Invoke-MauzOcr([string]$base64) {
+  $ocr = Get-MauzOcr
+  $bytes = [Convert]::FromBase64String($base64)
+  $stream = [System.IO.WindowsRuntimeStreamExtensions]::AsRandomAccessStream((New-Object System.IO.MemoryStream (, $bytes)))
+  $decoder = Wait-MauzOperation $ocr ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])
+  $bitmap = Wait-MauzOperation $ocr ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
+  $result = Wait-MauzOperation $ocr ($ocr.engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
+  $lines = @()
+  foreach ($line in $result.Lines) { $lines += $line.Text }
+  return ($lines -join [Environment]::NewLine)
 }
 
 $script:mauzRecognizer = $null
@@ -670,6 +822,10 @@ function Invoke-MauzTranscription([string]$path) {
 }
 
 try { [void][System.Windows.Automation.AutomationElement]::FocusedElement } catch { }
+# Load the OCR engine now so the first OCR request does not pay for it.
+try { [void](Get-MauzOcr) } catch { }
+[Console]::Out.WriteLine('{"ready":true}')
+[Console]::Out.Flush()
 
 while ($true) {
   $line = [Console]::In.ReadLine()
@@ -681,7 +837,8 @@ while ($true) {
     switch ($request.command) {
       'activeWindow' { $response.result = Get-MauzActiveWindow }
       'selectedText' { $response.result = Get-MauzSelectedText }
-      'elementAtPoint' { $response.result = Get-MauzElementAtPoint ([double]$request.x) ([double]$request.y) }
+      'elementAtPoint' { $response.result = Get-MauzElementAtPoint ([double]$request.x) ([double]$request.y) ([int]$request.exclude) }
+      'ocr' { $response.result = Invoke-MauzOcr $request.image }
       'focusWindow' { $response.result = [MauzWin32]::Focus([IntPtr][long]$request.handle) }
       'transcribe' { $response.result = Invoke-MauzTranscription $request.path }
       default { $response.error = 'unknown command' }

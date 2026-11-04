@@ -2,6 +2,8 @@ import {
   ArrowLeft,
   Check,
   Cpu,
+  FolderOpen,
+  Globe,
   KeyRound,
   Lock,
   MousePointerClick,
@@ -20,6 +22,7 @@ import type {
   AiProviderId,
   AiProviderPreference,
   AiProvidersStatusResponse,
+  BrowserExtensionStatus,
   GatewayReadinessResult,
   MauzSettings,
   MauzSettingsUpdate,
@@ -28,7 +31,11 @@ import type {
   SubscriptionProviderId,
   TalkEngine
 } from "@mauzai/shared";
-import { DEFAULT_HERMES_BASE_URL, MAX_CAPTURE_BLOCKED_APPS } from "@mauzai/shared";
+import {
+  DEFAULT_HERMES_BASE_URL,
+  MAX_CAPTURE_BLOCKED_APPS,
+  MAX_CAPTURE_BLOCKED_ENTRY_CHARS
+} from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -100,6 +107,8 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
   // Edited as free text so typing a new line is not normalized away; parsed on Save.
   const [blockedAppsDraft, setBlockedAppsDraft] = useState(formatAppList(settings?.captureBlockedApps));
+  const [blockedSitesDraft, setBlockedSitesDraft] = useState(formatAppList(settings?.captureBlockedSites));
+  const [browserStatus, setBrowserStatus] = useState<BrowserExtensionStatus | null>(null);
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
@@ -133,6 +142,25 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   useEffect(() => {
     void loadProvidersStatus(false);
   }, [loadProvidersStatus]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void mauzClient.getBrowserExtensionStatus().then(
+      (status) => {
+        if (!disposed) {
+          setBrowserStatus(status);
+        }
+      },
+      () => {
+        // The section shows setup steps without a connection state.
+      }
+    );
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(
     () =>
@@ -180,6 +208,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   useEffect(() => {
     setDraft(settings);
     setBlockedAppsDraft(formatAppList(settings?.captureBlockedApps));
+    setBlockedSitesDraft(formatAppList(settings?.captureBlockedSites));
     setOpenAiApiKeyDraft("");
     setClearSavedOpenAiApiKey(false);
   }, [settings]);
@@ -353,6 +382,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
         captureBlockedApps: parseAppList(blockedAppsDraft),
+        captureBlockedSites: parseAppList(blockedSitesDraft),
         assistantMode: draft.assistantMode,
         backendBaseUrl: draft.backendBaseUrl,
         agentMode: draft.agentMode,
@@ -813,8 +843,47 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
           />
           <p className="settings-helper">
             One app per line: the program name on Windows (1Password.exe) or the bundle id on macOS. Mauz
-            sends no screenshot, text, or window title from these apps.
+            sends no screenshot, text, or window title from these apps. Up to 50 entries.
           </p>
+          <textarea
+            className="settings-textarea"
+            aria-label="Sites Mauz never captures"
+            rows={4}
+            spellCheck={false}
+            value={blockedSitesDraft}
+            onChange={(event) => setBlockedSitesDraft(event.target.value)}
+          />
+          <p className="settings-helper">
+            One site per line. example.com also covers its subdomains; * matches anything (*bank*). Needs the
+            browser extension: pages from these sites are not read or screenshotted. Up to 50 entries.
+          </p>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">
+            <Globe aria-hidden="true" size={15} />
+            <span>Browser extension</span>
+          </div>
+          <p className="settings-helper" role="status">
+            {getBrowserExtensionMessage(browserStatus)}
+          </p>
+          <p className="settings-helper">
+            Lets Mauz read the page under the pointer in Chrome or Edge: its address, text, and product
+            details such as price and sizes. To install, open chrome://extensions or edge://extensions, turn
+            on Developer mode, choose Load unpacked, and pick the extension folder.
+          </p>
+          {browserStatus?.extensionPath ? (
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void mauzClient.openBrowserExtensionFolder()}
+              >
+                <FolderOpen aria-hidden="true" size={13} />
+                <span>Extension folder</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -836,9 +905,23 @@ function formatAppList(apps: readonly string[] | undefined): string {
 function parseAppList(text: string): string[] {
   return text
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => line.trim().slice(0, MAX_CAPTURE_BLOCKED_ENTRY_CHARS))
     .filter((line) => line.length > 0)
     .slice(0, MAX_CAPTURE_BLOCKED_APPS);
+}
+
+function getBrowserExtensionMessage(status: BrowserExtensionStatus | null): string {
+  if (status === null) {
+    return "Checking the browser extension...";
+  }
+
+  if (status.connectedBrowsers.length > 0) {
+    return `Connected: ${status.connectedBrowsers.join(", ")}.`;
+  }
+
+  return status.hostRegistered
+    ? "Not connected. Install the extension, or open the browser if it is installed."
+    : "Not available: Mauz could not register its browser helper.";
 }
 
 function getOpenAiAuthState(settings: MauzSettings): "active" | "disconnected" | "missing" {

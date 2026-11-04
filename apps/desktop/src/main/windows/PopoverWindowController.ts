@@ -11,7 +11,8 @@ import {
 import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosition";
 import { hardenRendererWindow } from "./WindowSecurity";
 
-export type HideReason = "blur" | "explicit";
+/** "region": hidden while the user selects an area of the screen. */
+export type HideReason = "blur" | "explicit" | "region";
 
 type PopoverWindowControllerOptions = {
   preloadPath: string;

@@ -87,9 +87,11 @@ With this command the helper script no longer fits on a Windows command line
 command instead; it sets UTF-8 on the console and runs the full script, which arrives as
 the first line on stdin.
 
-macOS (Phase 2) produces the same shape from `AXUIElementCopyElementAtPosition` in the
-Swift input agent: `AXRole`, `AXTitle`/`AXDescription`/`AXValue`, `AXFrame`, and the same
-container walk over `AXParent`.
+macOS (deferred) would produce the same shape from `AXUIElementCopyElementAtPosition`:
+`AXRole`, `AXTitle`/`AXDescription`/`AXValue`, `AXFrame`, and the same container walk
+over `AXParent`. The Swift input agent only emits mouse events today, so this needs a
+request channel to it. Nothing in CI compiles the agent, so it waits until it can be built
+and tested on a Mac.
 
 ### 3.2 Shared data model
 
@@ -169,21 +171,33 @@ system prompts (text and voice) and the Realtime context text are updated to mat
   the crop thumbnail and the exact element text.
 - Banking sites cannot be matched by executable. They are covered by the browser
   extension's URL denylist in Phase 3.
+- When a capture is blocked, the model is told only that the app or site under the pointer is
+  on the never-capture list. Naming it would tell the model what the user had open; the
+  name is kept for the local "What Mauz saw" panel.
+- **Every app the capture covers is checked:** the foreground app, the window under the
+  pointer (looking through Mauz's own windows to the app behind them), and, for a
+  selected area, the windows at its four corners as well as its centre.
+- **Fail closed:** if either list has entries and the Windows helper cannot say which app is
+  under the pointer (timeout, still starting), Mauz captures nothing for that question.
 
 ### 3.6 Windows OCR fallback, Phase 2
 
-When UIA returns no element text (canvas apps, images, some terminals), run
-`Windows.Media.Ocr.OcrEngine` on the focus crop inside the existing helper (PowerShell
-WinRT interop with an `AsTask` await). It is offline, free and fast. The result is sent
-as `target.element.text` with `source: "windows-ocr"` and labelled as OCR. Budget:
-300 ms; OCR is skipped when it would exceed that.
+When neither UIA nor the browser extension returns any text (canvas apps, images, some
+terminals), the helper runs `Windows.Media.Ocr.OcrEngine` on the focus crop, through
+PowerShell WinRT interop with an `AsTask` await. It is offline, free, and needs no
+install. The result is sent as `PointerContext.ocrText` and labelled in the prompt as OCR
+that may contain errors. On the dev machine the first call takes about 600 ms because it
+loads the engine; later calls take about 10 ms. The request times out after 4 s.
 
 ### 3.7 User-drawn region, Phase 2
 
-A "Select area" item in the radial menu, plus a modifier (shake while holding Shift),
-opens a transparent full-display overlay. The user drags a rectangle, which replaces
-the focus crop (kind `region`); OCR runs on it. Escape cancels. The overlay window is
-excluded from capture and torn down before capture runs.
+A "Select area" bubble in the radial menu hides the popover and opens a dimmed overlay
+over the display under the pointer. The user drags a rectangle; that exact area becomes
+the crop (kind `region`), and OCR always runs on it. Escape, a right-click, switching
+away, or 60 s without a selection cancels it and brings the menu back. The overlay is a
+self-contained data URL page with no preload or IPC; main reads the rectangle with
+`executeJavaScript`. It is excluded from capture and destroyed before the screen is
+captured. A Shift-while-shaking shortcut is not implemented.
 
 ### 3.8 Browser extension (Chrome/Edge), Phase 3
 
@@ -199,12 +213,32 @@ excluded from capture and torn down before capture runs.
   the Edge equivalent at install). The host relays over a per-user named pipe to the
   Mauz main process. There is no open localhost port and no pairing token in the
   extension.
-- Mauz asks only when the window under the pointer is that browser, and the extension
-  answers only for the active tab of the focused window.
-- URL denylist (banking and health by default, user-editable). It is enforced in the
-  extension and checked again in Mauz.
-- `PointerTarget.source = "browser"`, plus `PointerContext.page = { url, title, product? }`.
-  This makes "any cheaper alternatives?" answerable with real data.
+- The host and Mauz authenticate each other with an HMAC challenge in both directions,
+  using a per-install secret. Mauz keeps the secret in its user data folder and passes it to
+  the host through the launcher. A process that claims the pipe name first can neither
+  read pages nor feed Mauz fake ones.
+- Mauz asks the foreground browser (in parallel with the UIA lookups) and the browser
+  under the pointer, if different. The page comes from the browser under the pointer. A
+  never-capture site in any of them blocks the whole capture, because a foreground
+  browser window can overlap the crop.
+- Each browser profile runs its own extension copy and host connection. Mauz asks all of
+  them; any blocked site blocks, and otherwise the page comes from the profile whose
+  window is focused, or from the only profile. It does not guess between unfocused
+  profiles.
+- The extension answers only for the active tab of its last-focused window, and only for
+  http(s) pages. Requests time out after 400 ms.
+- Site denylist (`captureBlockedSites`): banking, payments and patient portals by
+  default, editable in Settings. `example.com` covers subdomains, and `*` is a wildcard.
+  Mauz sends the list with each request, the extension refuses matching pages, and Mauz
+  checks the URL again. A blocked page produces `captureBlocked`, with no screenshot.
+- The result is `PointerContext.page = { browser, url, title, selection, element, around,
+text, product }`; UIA still supplies the bounds used to frame the crop.
+- Layout: `browser-extension/extension` (load unpacked) and
+  `browser-extension/native-host/host.cjs`. The manifest's `key` pins the extension ID
+  to `lnahcdbpmfglahakbckmgbfgbclaaiog`, the only origin the host manifest allows. At
+  startup Mauz writes a launcher (Electron with `ELECTRON_RUN_AS_NODE`) and the host
+  manifest into its user data folder, and registers it for Chrome and Edge (HKCU on
+  Windows, `~/Library/Application Support/<browser>/NativeMessagingHosts` on macOS).
 
 ## 4. Non-goals
 

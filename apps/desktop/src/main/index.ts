@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, screen, shell } from "electron";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -22,6 +23,12 @@ import {
   type SubscriptionConnector
 } from "@mauzai/api/server";
 import { AgentRunBridge } from "./agent/AgentRunBridge";
+import {
+  BrowserBridge,
+  getBrowserPipePath,
+  loadOrCreateBrowserToken,
+  registerNativeHost
+} from "./context/BrowserBridge";
 import { ChatHistoryService } from "./chat/ChatHistoryService";
 import { ContextCollector } from "./context/ContextCollector";
 import { WindowsContextHelper } from "./context/WindowsContextHelper";
@@ -41,6 +48,7 @@ import {
 import { SettingsService, type MauzRuntimeSettings } from "./settings/SettingsService";
 import { DesktopWindowController } from "./windows/DesktopWindowController";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
+import { RegionSelector } from "./windows/RegionSelector";
 import { TrayController } from "./windows/TrayController";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,6 +60,8 @@ let contextCollector: ContextCollector | null = null;
 let chatHistoryService: ChatHistoryService | null = null;
 let settingsService: SettingsService | null = null;
 let windowsContextHelper: WindowsContextHelper | null = null;
+let browserBridge: BrowserBridge | null = null;
+let browserHostRegistered = false;
 let subscriptionConnector: SubscriptionConnector | null = null;
 let trayController: TrayController | null = null;
 let currentSettings: MauzSettings | null = null;
@@ -89,6 +99,12 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  const excludeFromCapture = readBooleanEnv(
+    process.env.MAUZ_EXCLUDE_FROM_CAPTURE,
+    process.platform === "win32"
+  );
+  const regionSelector = new RegionSelector({ iconPath: appIconPath, excludeFromCapture });
+
   popover = new PopoverWindowController({
     preloadPath,
     rendererFile,
@@ -105,7 +121,7 @@ async function bootstrap(): Promise<void> {
         webContents.send(IPC_CHANNELS.menuHidden);
       }
     },
-    excludeFromCapture: readBooleanEnv(process.env.MAUZ_EXCLUDE_FROM_CAPTURE, process.platform === "win32"),
+    excludeFromCapture,
     ...(process.platform === "win32"
       ? {
           forceForeground: (handle: bigint) =>
@@ -130,6 +146,8 @@ async function bootstrap(): Promise<void> {
     });
     windowsContextHelper.start();
   }
+
+  await startBrowserBridge();
 
   // Sign-in checks for Claude Code / Codex take seconds; run them before the first question.
   void getAiProvidersStatus().catch(() => {});
@@ -161,6 +179,8 @@ async function bootstrap(): Promise<void> {
   contextCollector = new ContextCollector({
     captureHider: popover,
     getCaptureBlockedApps: () => currentSettings?.captureBlockedApps ?? [],
+    getCaptureBlockedSites: () => currentSettings?.captureBlockedSites ?? [],
+    ...(browserBridge === null ? {} : { browserPageReader: browserBridge }),
     ...(windowsContextHelper === null ? {} : { windowsContextHelper })
   });
   subscriptionConnector = createSubscriptionConnector(broadcastSubscriptionConnectState);
@@ -180,7 +200,34 @@ async function bootstrap(): Promise<void> {
       transcribeWithOpenAi: (wavAudio) => transcribeWithOpenAi(wavAudio)
     }),
     subscriptionConnector,
-    openExternal: (url) => shell.openExternal(url)
+    openExternal: (url) => shell.openExternal(url),
+    browserExtension: {
+      status: () => ({
+        connectedBrowsers: browserBridge?.connectedBrowsers() ?? [],
+        extensionPath: getExtensionPath(),
+        hostRegistered: browserHostRegistered
+      }),
+      openExtensionFolder: async () => {
+        const extensionPath = getExtensionPath();
+
+        if (extensionPath !== null) {
+          await shell.openPath(extensionPath);
+        }
+      }
+    },
+    selectRegion: async (collect) => {
+      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+
+      popover?.hide("region");
+
+      try {
+        const region = await regionSelector.select(display);
+
+        return region === null ? null : await collect(region);
+      } finally {
+        await popover?.showAtLastAnchor({ notifyActivation: false, preserveSize: true });
+      }
+    }
   });
   startInputProviders(initialSettings);
   trayController = new TrayController({
@@ -296,6 +343,64 @@ function configureAppIdentity(iconPath: string): void {
     applicationVersion: app.getVersion(),
     iconPath
   });
+}
+
+/**
+ * Listens for the browser extension's native host and registers that host with Chrome and
+ * Edge. Optional: Mauz works without it, so failures are ignored.
+ */
+async function startBrowserBridge(): Promise<void> {
+  const pipePath = getBrowserPipePath(app.getPath("userData"), userInfo().username);
+  const installDir = join(app.getPath("userData"), "browser-host");
+  let bridge: BrowserBridge;
+  let token: string;
+
+  try {
+    token = await loadOrCreateBrowserToken(installDir);
+    bridge = new BrowserBridge(pipePath, token);
+    await bridge.start();
+    browserBridge = bridge;
+  } catch {
+    return;
+  }
+
+  const hostScriptPath = findRepoPath("browser-extension/native-host/host.cjs");
+
+  if (hostScriptPath === null || (process.platform !== "win32" && process.platform !== "darwin")) {
+    return;
+  }
+
+  try {
+    await registerNativeHost({
+      hostScriptPath,
+      installDir,
+      execPath: process.execPath,
+      pipePath,
+      token
+    });
+    browserHostRegistered = true;
+  } catch {
+    browserHostRegistered = false;
+  }
+}
+
+function getExtensionPath(): string | null {
+  const manifestPath = findRepoPath("browser-extension/extension/manifest.json");
+
+  return manifestPath === null ? null : dirname(manifestPath);
+}
+
+/** A file from the repository checkout (Mauz runs from a clone). */
+function findRepoPath(relativePath: string): string | null {
+  const candidates = [
+    resolve(app.getAppPath(), "../..", relativePath),
+    resolve(app.getAppPath(), relativePath),
+    resolve(process.cwd(), relativePath),
+    resolve(process.cwd(), "../..", relativePath),
+    resolve(__dirname, "../../../..", relativePath)
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
 function getAppIconPath(): string {
@@ -448,6 +553,8 @@ async function shutdownResources(): Promise<void> {
   trayController = null;
   windowsContextHelper?.stop();
   windowsContextHelper = null;
+  browserBridge?.stop();
+  browserBridge = null;
 
   subscriptionConnector?.dispose();
   subscriptionConnector = null;

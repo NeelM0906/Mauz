@@ -467,4 +467,49 @@ describe("ScreenshotService", () => {
 
     await expect(service.captureDisplayNear({ x: 10, y: 20 })).resolves.toBeDefined();
   });
+  it("crops exactly a selected region, ignoring targets and the window", async () => {
+    let cropRect: Bounds | undefined;
+    const service = new ScreenshotService(
+      createDeps({
+        desktopCapturer: {
+          getSources: async () => [
+            { display_id: "7", thumbnail: createThumbnail({ onCrop: (rect) => (cropRect = rect) }) }
+          ]
+        }
+      })
+    );
+
+    const context = await service.capturePointerContext(
+      { x: 300, y: 250 },
+      {
+        region: { x: 200, y: 200, width: 200, height: 100 },
+        targets: [{ x: 0, y: 0, width: 100, height: 100 }],
+        window: { x: 1000, y: 1000, width: 100, height: 100 }
+      }
+    );
+
+    expect(cropRect).toEqual({ x: 100, y: 100, width: 100, height: 50 });
+    expect(context.cursorCropFocus?.kind).toBe("region");
+  });
+  it("sends nothing wider when a selected region cannot be cropped", async () => {
+    const service = new ScreenshotService(
+      createDeps({
+        desktopCapturer: {
+          getSources: async () => [
+            {
+              display_id: "7",
+              thumbnail: { ...createThumbnail(), crop: () => ({ ...createThumbnail(), isEmpty: () => true }) }
+            }
+          ]
+        }
+      })
+    );
+
+    await expect(
+      service.capturePointerContext(
+        { x: 300, y: 250 },
+        { region: { x: 200, y: 200, width: 200, height: 100 } }
+      )
+    ).rejects.toBeInstanceOf(ScreenshotCaptureError);
+  });
 });

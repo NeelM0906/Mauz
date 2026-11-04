@@ -41,6 +41,7 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
+  IPC_CHANNELS.menuSelectRegion,
   IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
@@ -62,7 +63,9 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.providersConnectOpenPage,
   IPC_CHANNELS.providersDisconnect,
   IPC_CHANNELS.talkTranscribe,
-  IPC_CHANNELS.talkCaptureContext
+  IPC_CHANNELS.talkCaptureContext,
+  IPC_CHANNELS.browserStatus,
+  IPC_CHANNELS.browserOpenExtensionFolder
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -459,6 +462,7 @@ describe("registerIpcHandlers", () => {
       realtimeVoice: "marin",
       realtimeReasoningEffort: "low",
       captureBlockedApps: [],
+      captureBlockedSites: [],
       apiKeyConfigured: false,
       assistantMode: "agentic",
       backendBaseUrl: "http://gateway.test/v1",
@@ -501,6 +505,7 @@ describe("registerIpcHandlers", () => {
       realtimeVoice: "marin",
       realtimeReasoningEffort: "low",
       captureBlockedApps: [],
+      captureBlockedSites: [],
       apiKeyConfigured: false,
       assistantMode: "agentic",
       backendBaseUrl: "",
@@ -651,6 +656,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeVoice: "marin",
       realtimeReasoningEffort: "low" as const,
       captureBlockedApps: [],
+      captureBlockedSites: [],
       apiKeyConfigured: false,
       assistantMode: "simple" as const,
       backendBaseUrl: "",
@@ -673,6 +679,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       realtimeVoice: update.realtimeVoice ?? "marin",
       realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
       captureBlockedApps: update.captureBlockedApps ?? [],
+      captureBlockedSites: update.captureBlockedSites ?? [],
       apiKeyConfigured: false,
       assistantMode: update.assistantMode ?? ("simple" as const),
       backendBaseUrl: update.backendBaseUrl ?? "",

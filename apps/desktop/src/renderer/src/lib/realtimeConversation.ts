@@ -1,9 +1,4 @@
-import {
-  formatPointerTarget,
-  getPointerTarget,
-  type MauzDesktopContext,
-  type ScreenshotPayload
-} from "@mauzai/shared";
+import { formatScreenContent, type MauzDesktopContext, type ScreenshotPayload } from "@mauzai/shared";
 
 export type VoiceState =
   | "connecting"
@@ -187,7 +182,7 @@ function sendConversationMessage(dataChannel: SendableDataChannel, content: unkn
 
 function buildRealtimeContextText(context: MauzDesktopContext): string {
   const selectedText = context.selectedText ?? context.pointer?.selectedText;
-  const target = getPointerTarget(context);
+  const screenContent = formatScreenContent(context);
 
   return [
     "The user started a voice conversation with Mauz.",
@@ -198,7 +193,7 @@ function buildRealtimeContextText(context: MauzDesktopContext): string {
     `Selected text: ${selectedText?.trim() ? selectedText : "none provided"}`,
     `Active app: ${context.activeApp?.name ?? context.pointer?.activeApp?.name ?? "unknown"}`,
     `Active window: ${context.activeWindow?.title ?? context.pointer?.activeWindow?.title ?? "unknown"}`,
-    ...(target === undefined ? [] : formatPointerTarget(target))
+    ...screenContent
   ].join("\n");
 }
 

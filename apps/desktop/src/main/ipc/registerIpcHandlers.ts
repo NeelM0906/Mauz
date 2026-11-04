@@ -19,6 +19,8 @@ import {
   SubscriptionDisconnectRequestSchema,
   TalkTranscribeRequestSchema,
   TalkTranscribeResponseSchema,
+  type Bounds,
+  type BrowserExtensionStatus,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
@@ -53,6 +55,15 @@ type RegisterIpcHandlersOptions = {
     "connect" | "submitCode" | "cancel" | "disconnect" | "getState"
   >;
   openExternal?: (url: string) => Promise<void>;
+  /**
+   * Hides the popover, lets the user drag a rectangle (screen DIPs), runs `collect` on it while
+   * the popover is still hidden, then shows the popover again. Null when the user cancels.
+   */
+  selectRegion?: <T>(collect: (region: Bounds) => Promise<T>) => Promise<T | null>;
+  browserExtension?: {
+    status(): BrowserExtensionStatus;
+    openExtensionFolder(): Promise<void>;
+  };
 };
 
 const HANDLED_IPC_CHANNELS = [
@@ -60,6 +71,7 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
   IPC_CHANNELS.menuStartTalk,
+  IPC_CHANNELS.menuSelectRegion,
   IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
@@ -81,7 +93,9 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.providersConnectOpenPage,
   IPC_CHANNELS.providersDisconnect,
   IPC_CHANNELS.talkTranscribe,
-  IPC_CHANNELS.talkCaptureContext
+  IPC_CHANNELS.talkCaptureContext,
+  IPC_CHANNELS.browserStatus,
+  IPC_CHANNELS.browserOpenExtensionFolder
 ] as const;
 
 export function registerIpcHandlers({
@@ -96,7 +110,9 @@ export function registerIpcHandlers({
   getProvidersStatus = getAiProvidersStatus,
   talkTranscriber,
   subscriptionConnector,
-  openExternal
+  openExternal,
+  selectRegion,
+  browserExtension
 }: RegisterIpcHandlersOptions): void {
   for (const channel of HANDLED_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
@@ -122,6 +138,18 @@ export function registerIpcHandlers({
     const context = await contextCollector.collectForRealtime();
     popover.resizeForRealtime();
     return context;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.menuSelectRegion, async (event) => {
+    assertTrustedSurface(event, ["popover"]);
+
+    if (selectRegion === undefined) {
+      throw new Error("Selecting an area is not available.");
+    }
+
+    contextCollector.discardActivationSnapshot();
+
+    return selectRegion((region) => contextCollector.collectForRegion(region));
   });
 
   ipcMain.handle(IPC_CHANNELS.menuSetLensExpanded, (event, payload: unknown) => {
@@ -345,6 +373,19 @@ export function registerIpcHandlers({
     assertTrustedSurface(event, ["popover"]);
     // Each spoken turn sees the screen as it is now, at the current pointer.
     return contextCollector.collectForRealtime();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.browserStatus, (event): BrowserExtensionStatus => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+
+    return (
+      browserExtension?.status() ?? { connectedBrowsers: [], extensionPath: null, hostRegistered: false }
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.browserOpenExtensionFolder, async (event) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    await browserExtension?.openExtensionFolder();
   });
 }
 

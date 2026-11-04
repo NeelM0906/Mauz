@@ -478,5 +478,6 @@ const DEFAULT_SETTINGS = {
   realtimeModel: "gpt-realtime-2",
   realtimeVoice: "marin",
   realtimeReasoningEffort: "low",
-  captureBlockedApps: []
+  captureBlockedApps: [],
+  captureBlockedSites: []
 } as const;

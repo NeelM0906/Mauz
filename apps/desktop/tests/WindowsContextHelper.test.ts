@@ -14,7 +14,7 @@ type FakeChild = EventEmitter & {
   kill(): boolean;
 };
 
-function createFakeHelper(coordinates?: WindowsCoordinateConverter) {
+function createFakeHelper(coordinates?: WindowsCoordinateConverter, options: { ready?: boolean } = {}) {
   const spawned: Array<{ command: string; args: readonly string[]; child: FakeChild }> = [];
   const written: string[] = [];
   const spawn: WindowsContextSpawn = (command, args) => {
@@ -28,6 +28,12 @@ function createFakeHelper(coordinates?: WindowsCoordinateConverter) {
       written.push(...chunk.toString("utf8").split("\n").filter(Boolean))
     );
     spawned.push({ command, args, child });
+
+    if (options.ready !== false) {
+      // The real helper prints this once its assemblies have loaded.
+      setImmediate(() => child.stdout.write('{"ready":true}\n'));
+    }
+
     return child;
   };
   const helper = new WindowsContextHelper({ spawn, ...(coordinates === undefined ? {} : { coordinates }) });
@@ -36,13 +42,32 @@ function createFakeHelper(coordinates?: WindowsCoordinateConverter) {
     helper,
     spawned,
     written,
-    /** Answers the next request with a result once it has been written. */
+    /** Answers the latest request with a result once it has been written. */
     async reply(result: unknown): Promise<void> {
-      await new Promise((resolve) => setImmediate(resolve));
-      const request = JSON.parse(written.at(-1)!) as { id: number };
-      spawned[0]!.child.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
-    }
+      const request = await waitForRequest(written);
+      spawned.at(-1)!.child.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
+    },
+    waitForRequest: () => waitForRequest(written)
   };
+}
+
+const answered = new WeakMap<string[], number>();
+
+/** The newest JSON request line not yet answered (the first line is the base64 script). */
+async function waitForRequest(written: string[]): Promise<{ id: number; command: string }> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const seen = answered.get(written) ?? 0;
+    const requests = written.filter((line) => line.startsWith("{"));
+
+    if (requests.length > seen) {
+      answered.set(written, requests.length);
+      return JSON.parse(requests.at(-1)!) as { id: number; command: string };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error("No request was written.");
 }
 
 const scale150: WindowsCoordinateConverter = {
@@ -149,6 +174,54 @@ describe("WindowsContextHelper", () => {
       processId: 5,
       bounds: { x: 200, y: 100, width: 1000, height: 600 }
     });
+    helper.stop();
+  });
+
+  it("waits for the helper to be ready before sending requests", async () => {
+    const { helper, spawned, written, reply } = createFakeHelper(undefined, { ready: false });
+    const pending = helper.getActiveWindow();
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(written.filter((line) => line.startsWith("{"))).toEqual([]);
+
+    spawned[0]!.child.stdout.write('{"ready":true}\n');
+    await reply({ title: "Doc" });
+
+    await expect(pending).resolves.toEqual({ title: "Doc" });
+    helper.stop();
+  });
+
+  it("looks through Mauz's own windows when asked", async () => {
+    const { helper, reply, written } = createFakeHelper();
+    const pending = helper.getElementAtPoint({ x: 1, y: 2 }, { excludeProcessId: 4242 });
+
+    await reply({ window: { title: "Editor", processId: 7, executable: "Code.exe" } });
+
+    expect(JSON.parse(written.filter((line) => line.startsWith("{")).at(-1)!)).toMatchObject({
+      command: "elementAtPoint",
+      exclude: "4242"
+    });
+    // With only a window, the app is still known.
+    await expect(pending).resolves.toMatchObject({
+      element: { role: "Window", name: "Editor" },
+      window: { executable: "Code.exe", processId: 7 }
+    });
+    helper.stop();
+  });
+
+  it("restarts after a stuck lookup but not after a slow OCR", async () => {
+    const { helper, spawned, waitForRequest } = createFakeHelper();
+    const image = { mimeType: "image/jpeg" as const, base64: "aGk=", width: 1, height: 1 };
+
+    const ocr = helper.recognizeText(image, 20);
+    await waitForRequest();
+    await expect(ocr).rejects.toThrow(/timed out on ocr/);
+    expect(spawned).toHaveLength(1);
+
+    const lookup = helper.getElementAtPoint({ x: 1, y: 2 }, { timeoutMs: 20 });
+    await waitForRequest();
+    await expect(lookup).rejects.toThrow(/timed out on elementAtPoint/);
+    expect(spawned).toHaveLength(2);
     helper.stop();
   });
 });

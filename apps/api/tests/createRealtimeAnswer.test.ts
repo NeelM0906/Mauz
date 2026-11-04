@@ -115,6 +115,18 @@ describe("createRealtimeAnswer", () => {
     expect(instructions).toContain("Use the initial screenshot context only unless they share more context.");
   });
 
+  it("tells Realtime when privacy settings withheld the screen", () => {
+    const instructions = buildRealtimeInstructions({
+      ...validRealtimeRequest,
+      context: { ...validRealtimeRequest.context, captureBlocked: { appName: "Signal" } }
+    });
+
+    expect(instructions).toContain(
+      "Capture blocked: the app or site under the pointer is on the user's never-capture list."
+    );
+    expect(instructions).not.toContain("Signal");
+  });
+
   it("requires an API key for Realtime", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
 

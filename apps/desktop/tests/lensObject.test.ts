@@ -123,16 +123,16 @@ describe("detectLensObject and describeCapture", () => {
       timestamp: "2026-11-04T10:00:00.000Z",
       platform: "win32",
       cursor: { x: 1, y: 2 },
-      captureBlocked: { appName: "1Password" }
+      captureBlocked: { appName: "Signal" }
     };
 
     expect(detectLensObject(context)).toMatchObject({
       type: "blocked",
-      label: "Capture blocked in 1Password",
+      label: "Capture blocked in Signal",
       privacyMode: "Nothing captured"
     });
     expect(describeCapture(context)).toEqual([
-      { label: "Blocked: 1Password", text: "Nothing was captured from this app." }
+      { label: "Blocked: Signal", text: "Nothing was captured from this app." }
     ]);
   });
 
@@ -150,5 +150,45 @@ describe("detectLensObject and describeCapture", () => {
       type: "cursor-area",
       privacyMode: "area around pointer"
     });
+  });
+  it("names a product page from the browser extension", () => {
+    const context: MauzDesktopContext = {
+      ...elementContext,
+      pointer: {
+        ...elementContext.pointer!,
+        page: {
+          browser: "Microsoft Edge",
+          url: "https://shop.example.com/p/1",
+          product: { name: "Trail Shoe", brand: "Acme", price: "89.99", priceCurrency: "EUR" }
+        }
+      }
+    };
+
+    expect(detectLensObject(context)).toMatchObject({
+      type: "page",
+      label: "Trail Shoe in Microsoft Edge",
+      summary: "Acme · Trail Shoe · 89.99 EUR",
+      privacyMode: "Page data + element crop"
+    });
+    expect(describeCapture(context).map((detail) => detail.label)).toContain("Product data");
+  });
+
+  it("labels a selected area with its recognized text", () => {
+    const context: MauzDesktopContext = {
+      ...elementContext,
+      pointer: {
+        cursor: { x: 100, y: 200 },
+        cursorCrop: crop,
+        cursorCropFocus: { kind: "region", pointer: { x: 180, y: 120 } },
+        ocrText: "Revenue Q3"
+      }
+    };
+
+    expect(detectLensObject(context)).toMatchObject({
+      type: "region",
+      summary: "Revenue Q3",
+      privacyMode: "Selected area + recognized text"
+    });
+    expect(describeCapture(context)).toContainEqual({ label: "Recognized text (OCR)", text: "Revenue Q3" });
   });
 });
