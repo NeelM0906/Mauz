@@ -25,13 +25,13 @@
     "@anthropic-ai/sdk": "^1.4.0",
     "@mauzai/shared": "workspace:*",
     "dotenv": "^17.4.2",
-    "openai": "^6.38.0"
+    "openai": "^6.49.0"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0",
-    "fastify": "^5.10.0",
-    "tsx": "^4.23.0",
+    "@types/node": "^26.6.6",
+    "fastify": "^5.12.8",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.12"
   }
 }
