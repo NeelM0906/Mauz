@@ -9,6 +9,7 @@ import {
   Save,
   Server,
   Settings2,
+  ShieldOff,
   Sparkles,
   Trash2,
   Zap
@@ -27,7 +28,7 @@ import type {
   SubscriptionProviderId,
   TalkEngine
 } from "@mauzai/shared";
-import { DEFAULT_HERMES_BASE_URL } from "@mauzai/shared";
+import { DEFAULT_HERMES_BASE_URL, MAX_CAPTURE_BLOCKED_APPS } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -97,6 +98,8 @@ type SettingsPanelProps = {
 export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): React.JSX.Element {
   const { settings, setSettings, setStatus, backToMenu } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
+  // Edited as free text so typing a new line is not normalized away; parsed on Save.
+  const [blockedAppsDraft, setBlockedAppsDraft] = useState(formatAppList(settings?.captureBlockedApps));
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
@@ -176,6 +179,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
 
   useEffect(() => {
     setDraft(settings);
+    setBlockedAppsDraft(formatAppList(settings?.captureBlockedApps));
     setOpenAiApiKeyDraft("");
     setClearSavedOpenAiApiKey(false);
   }, [settings]);
@@ -348,7 +352,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         realtimeModel: draft.realtimeModel,
         realtimeVoice: draft.realtimeVoice,
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
-        includeFullScreenshot: draft.includeFullScreenshot,
+        captureBlockedApps: parseAppList(blockedAppsDraft),
         assistantMode: draft.assistantMode,
         backendBaseUrl: draft.backendBaseUrl,
         agentMode: draft.agentMode,
@@ -792,14 +796,25 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
               </button>
             ))}
           </div>
-          <label className="settings-check">
-            <input
-              type="checkbox"
-              checked={draft.includeFullScreenshot}
-              onChange={(event) => updateDraft("includeFullScreenshot", event.target.checked)}
-            />
-            <span>Send full screenshot with cursor crop</span>
-          </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">
+            <ShieldOff aria-hidden="true" size={15} />
+            <span>Never capture</span>
+          </div>
+          <textarea
+            className="settings-textarea"
+            aria-label="Apps Mauz never captures"
+            rows={4}
+            spellCheck={false}
+            value={blockedAppsDraft}
+            onChange={(event) => setBlockedAppsDraft(event.target.value)}
+          />
+          <p className="settings-helper">
+            One app per line: the program name on Windows (1Password.exe) or the bundle id on macOS. Mauz
+            sends no screenshot, text, or window title from these apps.
+          </p>
         </div>
       </div>
 
@@ -812,6 +827,18 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
       </footer>
     </section>
   );
+}
+
+function formatAppList(apps: readonly string[] | undefined): string {
+  return apps === undefined ? "" : apps.join("\n");
+}
+
+function parseAppList(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .slice(0, MAX_CAPTURE_BLOCKED_APPS);
 }
 
 function getOpenAiAuthState(settings: MauzSettings): "active" | "disconnected" | "missing" {

@@ -1,6 +1,14 @@
 import OpenAI, { APIConnectionError } from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
-import type { AskMauzRequest, AskMauzResponse, MauzDesktopContext, ScreenshotPayload } from "@mauzai/shared";
+import {
+  formatPointerTarget,
+  getPointerTarget,
+  type AskMauzRequest,
+  type AskMauzResponse,
+  type CursorCropFocus,
+  type MauzDesktopContext,
+  type ScreenshotPayload
+} from "@mauzai/shared";
 import { BackendUnreachableError, MissingOpenAIKeyError } from "../errors";
 import { getSystemPromptFor } from "../prompts/mauzSystemPrompt";
 import { type BackendCapabilities, detectBackendCapabilities } from "../backend/capabilities";
@@ -119,28 +127,13 @@ async function askWithAnswerProvider(
 
 /** Provider-neutral prompt: system prompt, context text, and labeled images in send order. */
 export function buildAnswerPrompt(request: AskMauzRequest): AnswerPrompt {
-  const cursorCrop = request.context.pointer?.cursorCrop;
-  const screenshot =
-    cursorCrop === undefined || shouldIncludeFullScreenshot()
-      ? (request.context.pointer?.screenshot ?? request.context.screenshot)
-      : undefined;
-  const images: AnswerImage[] = [];
-
-  if (cursorCrop !== undefined) {
-    images.push({
-      mimeType: cursorCrop.mimeType,
-      base64: cursorCrop.base64,
-      label: `Image ${images.length + 1}: cursor-centered crop (${cursorCrop.width}x${cursorCrop.height}); the pointer is at its center and it shows the pointed target.`
-    });
-  }
-
-  if (screenshot !== undefined) {
-    images.push({
-      mimeType: screenshot.mimeType,
-      base64: screenshot.base64,
-      label: `Image ${images.length + 1}: screenshot of the display under the cursor (${screenshot.width}x${screenshot.height}), for broader context.`
-    });
-  }
+  const image = getContextImage(request.context);
+  const images: AnswerImage[] =
+    image === undefined
+      ? []
+      : [
+          { mimeType: image.payload.mimeType, base64: image.payload.base64, label: `Image 1: ${image.label}` }
+        ];
 
   return {
     systemPrompt: getSystemPromptFor(request),
@@ -165,29 +158,61 @@ export function buildResponseContent(request: AskMauzRequest): ResponseInputMess
       text: buildContextText(request)
     }
   ];
-  const cursorCrop = request.context.pointer?.cursorCrop;
-  const screenshot =
-    cursorCrop === undefined || shouldIncludeFullScreenshot()
-      ? (request.context.pointer?.screenshot ?? request.context.screenshot)
-      : undefined;
+  const image = getContextImage(request.context);
 
-  if (cursorCrop !== undefined) {
+  if (image !== undefined) {
     content.push({
       type: "input_image",
-      image_url: toDataUrl(cursorCrop),
-      detail: getScreenshotDetail()
-    });
-  }
-
-  if (screenshot !== undefined) {
-    content.push({
-      type: "input_image",
-      image_url: toDataUrl(screenshot),
+      image_url: toDataUrl(image.payload),
       detail: getScreenshotDetail()
     });
   }
 
   return content;
+}
+
+type ContextImage = {
+  payload: ScreenshotPayload;
+  label: string;
+};
+
+/**
+ * One image: the crop around what the pointer is on, or the pointed window when there is no
+ * crop. Nothing is sent for an app on the never-capture list.
+ */
+export function getContextImage(context: MauzDesktopContext): ContextImage | undefined {
+  if (context.captureBlocked !== undefined) {
+    return undefined;
+  }
+
+  const cursorCrop = context.pointer?.cursorCrop;
+
+  if (cursorCrop !== undefined) {
+    return { payload: cursorCrop, label: describeCursorCrop(cursorCrop, context.pointer?.cursorCropFocus) };
+  }
+
+  const screenshot = context.pointer?.screenshot ?? context.screenshot;
+
+  return screenshot === undefined
+    ? undefined
+    : {
+        payload: screenshot,
+        label: `screenshot of the window under the pointer (${screenshot.width}x${screenshot.height}), for broader context.`
+      };
+}
+
+function describeCursorCrop(crop: ScreenshotPayload, focus: CursorCropFocus | undefined): string {
+  const size = `${crop.width}x${crop.height}`;
+
+  if (focus === undefined) {
+    return `cursor-centered crop (${size}); the pointer is at its center and it shows the pointed target.`;
+  }
+
+  const pointer = `the pointer is at (${focus.pointer.x}, ${focus.pointer.y}) in this image`;
+
+  return focus.kind === "element"
+    ? `crop framed on the pointed element and the group around it (${size}); ${pointer}.`
+    : `crop of the screen around the pointer (${size}); ${pointer}.`;
 }
 
 function getScreenshotDetail(): "auto" | "low" | "high" {
@@ -209,18 +234,15 @@ function getAskMaxOutputTokens(): number {
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_ASK_MAX_OUTPUT_TOKENS;
 }
 
-export function shouldIncludeFullScreenshot(): boolean {
-  return process.env.OPENAI_INCLUDE_FULL_SCREENSHOT === "true";
-}
-
 export function buildContextText(request: AskMauzRequest): string {
   const { question, context } = request;
+  const target = getPointerTarget(context);
 
   return [
     `User question: ${question}`,
     "",
-    "Reference resolution priority: selected text > cursor-centered crop > active window metadata > full screenshot > cursor position.",
-    "When the user says this, that, or here, use the cursor-centered crop as the pointed target unless selected text is available.",
+    "Reference resolution priority: selected text > pointed element > pointer image > active window metadata > cursor position.",
+    "When the user says this, that, or here, they mean the pointed element (shown in the pointer image) unless selected text is available.",
     "",
     "Desktop context:",
     `- Timestamp: ${context.timestamp}`,
@@ -230,7 +252,14 @@ export function buildContextText(request: AskMauzRequest): string {
     `- Pointer context: ${formatPointerContext(context)}`,
     `- Active app: ${formatActiveApp(context)}`,
     `- Active window: ${formatActiveWindow(context)}`,
-    `- Screenshot: ${formatScreenshot(context)}`,
+    `- Image: ${formatImage(context)}`,
+    ...(target === undefined ? [] : ["", ...formatPointerTarget(target)]),
+    ...(context.captureBlocked === undefined
+      ? []
+      : [
+          "",
+          `Capture blocked: the user's privacy settings block capture of ${context.captureBlocked.appName}. No screenshot, text, or window details were collected. If the question needs them, say so briefly.`
+        ]),
     "",
     "Previous conversation:",
     formatConversationMessages(request.conversationMessages)
@@ -290,19 +319,12 @@ function formatSelectedText(context: MauzDesktopContext): string {
   return selectedText?.trim() ? selectedText : "none provided";
 }
 
-function formatScreenshot(context: MauzDesktopContext): string {
-  const cursorCrop = context.pointer?.cursorCrop;
-  const screenshot = context.pointer?.screenshot ?? context.screenshot;
+function formatImage(context: MauzDesktopContext): string {
+  const image = getContextImage(context);
 
-  if (screenshot === undefined) {
-    return "none attached";
-  }
-
-  if (cursorCrop !== undefined && !shouldIncludeFullScreenshot()) {
-    return `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, captured locally but omitted from model image inputs for faster pointer asks`;
-  }
-
-  return `${screenshot.mimeType}, ${screenshot.width}x${screenshot.height}, attached as broad image input`;
+  return image === undefined
+    ? "none attached"
+    : `${image.payload.mimeType}, attached as the only image input: ${image.label}`;
 }
 
 function normalizeBaseUrl(value: string | undefined): string | undefined {
@@ -349,16 +371,8 @@ function formatPointerContext(context: MauzDesktopContext): string {
     displayBounds === undefined
       ? undefined
       : `display ${Math.round(displayBounds.width)}x${Math.round(displayBounds.height)} at ${Math.round(displayBounds.x)},${Math.round(displayBounds.y)}`;
-  const cursorCrop =
-    pointer.cursorCrop === undefined
-      ? "no cursor crop"
-      : `cursor-centered crop ${pointer.cursorCrop.mimeType}, ${pointer.cursorCrop.width}x${pointer.cursorCrop.height}, attached as first image input`;
 
-  return [
-    `cursor (${Math.round(pointer.cursor.x)}, ${Math.round(pointer.cursor.y)})`,
-    displayText,
-    cursorCrop
-  ]
+  return [`cursor (${Math.round(pointer.cursor.x)}, ${Math.round(pointer.cursor.y)})`, displayText]
     .filter(Boolean)
     .join("; ");
 }

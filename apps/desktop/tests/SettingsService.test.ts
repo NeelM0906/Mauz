@@ -32,6 +32,34 @@ describe("SettingsService", () => {
     expect(runtime.installId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  it("defaults the never-capture list to common password managers", async () => {
+    const settings = await createService().get();
+
+    expect(settings.captureBlockedApps).toEqual(
+      expect.arrayContaining(["1Password.exe", "Bitwarden.exe", "KeePassXC.exe", "com.1password.1password"])
+    );
+  });
+
+  it("ignores the removed full-screenshot setting in stored files", async () => {
+    const { captureBlockedApps: _captureBlockedApps, ...stored } = DEFAULT_SETTINGS;
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({ ...stored, includeFullScreenshot: true })
+    });
+
+    const settings = await service.get();
+
+    expect(settings).not.toHaveProperty("includeFullScreenshot");
+    expect(settings.captureBlockedApps).toContain("1Password.exe");
+  });
+
+  it("saves the never-capture list trimmed and without duplicates", async () => {
+    const settings = await createService().update({
+      captureBlockedApps: [" Signal.exe ", "signal.exe", "com.agilebits.onepassword7"]
+    });
+
+    expect(settings.captureBlockedApps).toEqual(["Signal.exe", "com.agilebits.onepassword7"]);
+  });
+
   it("persists installId across loads once written", async () => {
     const files = new Map<string, string>();
     const service = createServiceWithFiles(files);
@@ -450,5 +478,5 @@ const DEFAULT_SETTINGS = {
   realtimeModel: "gpt-realtime-2",
   realtimeVoice: "marin",
   realtimeReasoningEffort: "low",
-  includeFullScreenshot: false
+  captureBlockedApps: []
 } as const;

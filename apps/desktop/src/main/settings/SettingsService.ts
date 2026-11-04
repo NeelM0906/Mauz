@@ -35,6 +35,24 @@ const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
 const DEFAULT_REALTIME_VOICE = "marin";
 const DEFAULT_REALTIME_REASONING_EFFORT = "low";
 
+/** Password managers: never screenshot or read their windows. Executables (Windows) and bundle ids (macOS). */
+export const DEFAULT_CAPTURE_BLOCKED_APPS = [
+  "1Password.exe",
+  "Bitwarden.exe",
+  "KeePass.exe",
+  "KeePassXC.exe",
+  "Dashlane.exe",
+  "LastPass.exe",
+  "keeperpasswordmanager.exe",
+  "NordPass.exe",
+  "Proton Pass.exe",
+  "com.1password.1password",
+  "com.bitwarden.desktop",
+  "org.keepassxc.keepassxc",
+  "com.nordpass.macos.NordPass",
+  "me.proton.pass.electron"
+] as const;
+
 type SecretCodec = {
   isAvailable(): boolean;
   encrypt(value: string): string;
@@ -144,7 +162,11 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "realtimeModel", parsedUpdate.realtimeModel);
       applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
       applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
-      applyDefinedSetting(nextSettings, "includeFullScreenshot", parsedUpdate.includeFullScreenshot);
+      applyDefinedSetting(
+        nextSettings,
+        "captureBlockedApps",
+        normalizeAppList(parsedUpdate.captureBlockedApps)
+      );
       applyDefinedSetting(nextSettings, "assistantMode", parsedUpdate.assistantMode);
       applyDefinedSetting(nextSettings, "backendBaseUrl", parsedUpdate.backendBaseUrl);
       applyDefinedSetting(nextSettings, "agentMode", parsedUpdate.agentMode);
@@ -299,6 +321,25 @@ function applyAnthropicKeyUpdate(
   }
 }
 
+function normalizeAppList(apps: string[] | undefined): string[] | undefined {
+  if (apps === undefined) {
+    return undefined;
+  }
+
+  const seen = new Set<string>();
+
+  return apps.filter((app) => {
+    const key = app.trim().toLowerCase();
+
+    if (key.length === 0 || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
 function getDefaultSettings(): StoredMauzSettings {
   return {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, true),
@@ -315,7 +356,7 @@ function getDefaultSettings(): StoredMauzSettings {
       process.env.OPENAI_REALTIME_REASONING_EFFORT === "high"
         ? process.env.OPENAI_REALTIME_REASONING_EFFORT
         : DEFAULT_REALTIME_REASONING_EFFORT,
-    includeFullScreenshot: readBooleanEnv(process.env.OPENAI_INCLUDE_FULL_SCREENSHOT, false),
+    captureBlockedApps: [...DEFAULT_CAPTURE_BLOCKED_APPS],
     assistantMode:
       process.env.MAUZ_BACKEND_PRESET === "hermes"
         ? ("agentic" as AssistantMode)
@@ -393,7 +434,7 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeModel: publicSettings.data.realtimeModel,
     realtimeVoice: publicSettings.data.realtimeVoice,
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
-    includeFullScreenshot: publicSettings.data.includeFullScreenshot,
+    captureBlockedApps: publicSettings.data.captureBlockedApps,
     assistantMode: publicSettings.data.assistantMode,
     backendBaseUrl: publicSettings.data.backendBaseUrl,
     agentMode: publicSettings.data.agentMode,
@@ -451,7 +492,7 @@ function toPublicSettings(
     realtimeModel: settings.realtimeModel,
     realtimeVoice: settings.realtimeVoice,
     realtimeReasoningEffort: settings.realtimeReasoningEffort,
-    includeFullScreenshot: settings.includeFullScreenshot,
+    captureBlockedApps: [...settings.captureBlockedApps],
     apiKeyConfigured: openAiCredentialSource !== "none",
     assistantMode: settings.assistantMode,
     backendBaseUrl: settings.backendBaseUrl,

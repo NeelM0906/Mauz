@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PointerContext } from "@mauzai/shared";
+import type { PointerContext, PointerTarget } from "@mauzai/shared";
 
 const screenMock = vi.hoisted(() => ({
   getCursorScreenPoint: vi.fn()
@@ -13,6 +13,7 @@ import { ContextCollector } from "../src/main/context/ContextCollector";
 import type { ActiveWindowService } from "../src/main/context/ActiveWindowService";
 import type { SelectedTextService } from "../src/main/context/SelectedTextService";
 import { ScreenshotCaptureError, type ScreenshotService } from "../src/main/context/ScreenshotService";
+import type { WindowsContextHelper } from "../src/main/context/WindowsContextHelper";
 
 const pointerContext: PointerContext = {
   cursor: {
@@ -71,10 +72,13 @@ describe("ContextCollector", () => {
 
     const context = await collector.collectForAsk();
 
-    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith({
-      x: 320,
-      y: 240
-    });
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(
+      {
+        x: 320,
+        y: 240
+      },
+      {}
+    );
     expect(hideDuringCaptureCalls).toBe(1);
     expect(context.pointer).toEqual(pointerContext);
     expect(context.screenshot).toEqual(pointerContext.screenshot);
@@ -105,7 +109,7 @@ describe("ContextCollector", () => {
     });
     const context = await collector.collectForAsk();
 
-    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(activationCursor);
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(activationCursor, {});
     expect(context.cursor).toEqual(activationCursor);
     expect(context.pointer?.cursor).toEqual(activationCursor);
   });
@@ -137,7 +141,7 @@ describe("ContextCollector", () => {
       useActivationSnapshot: false
     });
 
-    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(currentCursor);
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(currentCursor, {});
     expect(context.cursor).toEqual(currentCursor);
     expect(context.pointer?.cursor).toEqual(currentCursor);
   });
@@ -263,7 +267,148 @@ describe("ContextCollector", () => {
     expect(context.selectedText).toBe("activation selected text");
     expect(context.pointer?.selectedText).toBe("activation selected text");
   });
+
+  it("reads the pointed element at activation and frames the crop on it", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const helper = createTargetReader(productTarget);
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService(),
+      windowsContextHelper: helper
+    });
+
+    await collector.prepareForActivation({ x: 110, y: 220 });
+    screenMock.getCursorScreenPoint.mockReturnValue({ x: 900, y: 700 });
+    const context = await collector.collectForAsk();
+
+    expect(helper.getElementAtPoint).toHaveBeenCalledTimes(1);
+    expect(helper.getElementAtPoint).toHaveBeenCalledWith({ x: 110, y: 220 });
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith(
+      { x: 110, y: 220 },
+      {
+        targets: [productTarget.container!.bounds, productTarget.element.bounds],
+        window: productTarget.window!.bounds
+      }
+    );
+    expect(context.pointer?.target).toEqual(productTarget);
+  });
+
+  it("reads the element under the current pointer on later Talk turns", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const helper = createTargetReader(productTarget);
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService(),
+      windowsContextHelper: helper
+    });
+
+    const context = await collector.collectForRealtime();
+
+    expect(helper.getElementAtPoint).toHaveBeenCalledWith({ x: 320, y: 240 });
+    expect(context.pointer?.target).toEqual(productTarget);
+  });
+
+  it("drops a pointed element that belongs to Mauz itself", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService(),
+      windowsContextHelper: createTargetReader({ ...productTarget, window: { processId: 777 } }),
+      ownProcessId: 777
+    });
+
+    const context = await collector.collectForRealtime();
+
+    expect(screenshotService.capturePointerContext).toHaveBeenCalledWith({ x: 320, y: 240 }, {});
+    expect(context.pointer?.target).toBeUndefined();
+  });
+
+  it("keeps the pointed element text when the screenshot fails", async () => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => {
+        throw new ScreenshotCaptureError("no capture");
+      })
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(),
+      selectedTextService: createSelectedTextService(),
+      windowsContextHelper: createTargetReader(productTarget)
+    });
+
+    const context = await collector.collectForRealtime();
+
+    expect(context.pointer).toEqual({ cursor: { x: 320, y: 240 }, target: productTarget });
+    expect(context.screenshotError?.message).toBe("no capture");
+  });
+
+  it.each([
+    [
+      "the foreground app",
+      { activeApp: { name: "Signal", bundleId: "Signal.exe", processId: 9 } },
+      undefined
+    ],
+    [
+      "the window under the pointer",
+      { activeApp: { name: "Code", bundleId: "Code.exe", processId: 8 } },
+      { ...productTarget, window: { appName: "Slack", executable: "slack.exe", processId: 10 } }
+    ]
+  ])("captures nothing when %s is on the never-capture list", async (_label, metadata, target) => {
+    const screenshotService = {
+      capturePointerContext: vi.fn(async () => pointerContext)
+    } as unknown as ScreenshotService;
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: createActiveWindowService(metadata),
+      selectedTextService: createSelectedTextService("private note"),
+      windowsContextHelper: createTargetReader(target),
+      // Matching is case-insensitive and ignores ".exe".
+      getCaptureBlockedApps: () => ["signal", "Slack.exe"]
+    });
+
+    const context = await collector.collectForRealtime();
+
+    expect(screenshotService.capturePointerContext).not.toHaveBeenCalled();
+    expect(context).toEqual({
+      timestamp: expect.any(String),
+      platform: expect.any(String),
+      cursor: { x: 320, y: 240 },
+      captureBlocked: { appName: target === undefined ? "Signal" : "Slack" }
+    });
+  });
 });
+
+const productTarget: PointerTarget = {
+  source: "windows-uia",
+  element: { role: "Text", name: "$328.00", bounds: { x: 100, y: 200, width: 60, height: 20 } },
+  container: {
+    role: "ListItem",
+    text: "Sony WH-1000XM5\n$328.00",
+    bounds: { x: 80, y: 150, width: 300, height: 260 }
+  },
+  window: {
+    title: "Shop",
+    appName: "Microsoft Edge",
+    executable: "msedge.exe",
+    processId: 31,
+    bounds: { x: 0, y: 0, width: 1440, height: 900 }
+  }
+};
+
+function createTargetReader(target: PointerTarget | undefined): WindowsContextHelper {
+  return {
+    getElementAtPoint: vi.fn(async () => target)
+  } as unknown as WindowsContextHelper;
+}
 
 function createActiveWindowService(
   metadata: Awaited<ReturnType<ActiveWindowService["capture"]>> = {}

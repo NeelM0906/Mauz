@@ -379,7 +379,7 @@ function buildSettingsFixture() {
     realtimeModel: "gpt-4o-realtime-preview",
     realtimeVoice: "alloy",
     realtimeReasoningEffort: "medium" as const,
-    includeFullScreenshot: false,
+    captureBlockedApps: [],
     apiKeyConfigured: false,
     aiProvider: "auto" as const,
     aiFallbackProvider: "none" as const,

@@ -122,7 +122,12 @@ async function bootstrap(): Promise<void> {
 
   if (process.platform === "win32") {
     // PowerShell + UI Automation take a few seconds to load; start before the first shake.
-    windowsContextHelper = new WindowsContextHelper();
+    windowsContextHelper = new WindowsContextHelper({
+      coordinates: {
+        toPhysicalPoint: (point) => screen.dipToScreenPoint(point),
+        toDipRect: (rect) => screen.screenToDipRect(null, rect)
+      }
+    });
     windowsContextHelper.start();
   }
 
@@ -155,6 +160,7 @@ async function bootstrap(): Promise<void> {
   currentSettings = initialSettings;
   contextCollector = new ContextCollector({
     captureHider: popover,
+    getCaptureBlockedApps: () => currentSettings?.captureBlockedApps ?? [],
     ...(windowsContextHelper === null ? {} : { windowsContextHelper })
   });
   subscriptionConnector = createSubscriptionConnector(broadcastSubscriptionConnectState);
@@ -251,7 +257,6 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   process.env.OPENAI_REALTIME_MODEL = settings.realtimeModel;
   process.env.OPENAI_REALTIME_VOICE = settings.realtimeVoice;
   process.env.OPENAI_REALTIME_REASONING_EFFORT = settings.realtimeReasoningEffort;
-  process.env.OPENAI_INCLUDE_FULL_SCREENSHOT = settings.includeFullScreenshot ? "true" : "false";
 
   const backendBaseUrl = resolveBackendBaseUrl(settings);
 

@@ -19,6 +19,7 @@ import { detectLensObject } from "@renderer/lib/lensObject";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
+import { CaptureDetails } from "./CaptureDetails";
 import { FormattedAnswer } from "./FormattedAnswer";
 
 type ReadinessState = GatewayReadinessResult | { status: "loading"; message: string };
@@ -213,6 +214,8 @@ export function TaskPanel(): React.JSX.Element {
           Approval required for mutations
         </span>
       </div>
+
+      <CaptureDetails context={currentContext} />
 
       <p className="task-readiness" data-status={readiness.status} role="status">
         <strong>Gateway: {readiness.status === "loading" ? "checking" : readiness.status}</strong>

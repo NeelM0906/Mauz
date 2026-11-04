@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import type { Readable, Writable } from "node:stream";
+import type { Bounds, PointerTarget, PointerTargetElement } from "@mauzai/shared";
 
 type ChildProcessLike = {
   stdin: Writable | null;
@@ -13,6 +14,23 @@ type ChildProcessLike = {
 };
 
 export type WindowsContextSpawn = (command: string, args: readonly string[]) => ChildProcessLike;
+
+type Point = { x: number; y: number };
+
+/**
+ * The helper is per-monitor DPI aware and works in physical pixels; the rest of Mauz uses
+ * Electron DIPs. These convert at the boundary (Electron's screen.dipToScreenPoint and
+ * screen.screenToDipRect on Windows). Identity by default.
+ */
+export type WindowsCoordinateConverter = {
+  toPhysicalPoint(point: Point): Point;
+  toDipRect(rect: Bounds): Bounds;
+};
+
+const identityConverter: WindowsCoordinateConverter = {
+  toPhysicalPoint: (point) => point,
+  toDipRect: (rect) => rect
+};
 
 export type WindowsActiveWindow = {
   title?: string | undefined;
@@ -29,22 +47,31 @@ type PendingRequest = {
 };
 
 const DEFAULT_TIMEOUT_MS = 900;
+// Includes queueing behind the activation's window and selection lookups.
+const ELEMENT_AT_POINT_TIMEOUT_MS = 1_500;
+const MAX_WINDOW_TEXT_CHARS = 500;
+const MAX_TARGET_VALUE_CHARS = 2_000;
+const MAX_TARGET_TEXT_CHARS = 4_000;
+const MAX_ROLE_CHARS = 80;
 const TRANSCRIBE_TIMEOUT_MS = 30_000;
 const MAX_SELECTED_TEXT_CHARS = 8_000;
 
 /**
  * A long-lived PowerShell process that answers context questions about the foreground
- * window: Win32 for the window and owning process, UI Automation for selected text.
+ * window: Win32 for the window and owning process, UI Automation for selected text and
+ * the element under the pointer.
  * PowerShell and UIA ship with Windows, so this needs no extra install, and keeping the
  * process alive avoids PowerShell's startup cost on every activation.
  */
 export class WindowsContextHelper {
   private readonly spawnHelper: WindowsContextSpawn;
+  private readonly coordinates: WindowsCoordinateConverter;
   private child: ChildProcessLike | null = null;
   private nextRequestId = 1;
   private readonly pending = new Map<number, PendingRequest>();
 
-  constructor(options: { spawn?: WindowsContextSpawn } = {}) {
+  constructor(options: { spawn?: WindowsContextSpawn; coordinates?: WindowsCoordinateConverter } = {}) {
+    this.coordinates = options.coordinates ?? identityConverter;
     this.spawnHelper =
       options.spawn ??
       ((command, args) =>
@@ -66,9 +93,11 @@ export class WindowsContextHelper {
       "-ExecutionPolicy",
       "Bypass",
       "-EncodedCommand",
-      Buffer.from(HELPER_SCRIPT, "utf16le").toString("base64")
+      Buffer.from(BOOTSTRAP_SCRIPT, "utf16le").toString("base64")
     ]);
     this.child = child;
+    // The helper is longer than Windows allows on a command line, so it arrives as the first stdin line.
+    child.stdin?.write(`${Buffer.from(HELPER_SCRIPT, "utf8").toString("base64")}\n`);
 
     const decoder = new StringDecoder("utf8");
     let buffer = "";
@@ -111,7 +140,36 @@ export class WindowsContextHelper {
   async getActiveWindow(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<WindowsActiveWindow> {
     const result = await this.request("activeWindow", timeoutMs);
 
-    return isRecord(result) ? parseActiveWindow(result) : {};
+    if (!isRecord(result)) {
+      return {};
+    }
+
+    const window = parseActiveWindow(result);
+
+    if (window.bounds !== undefined) {
+      window.bounds = this.coordinates.toDipRect(window.bounds);
+    }
+
+    return window;
+  }
+
+  /**
+   * The UI element under a screen point (DIPs): its text, the group around it, and the
+   * window it belongs to. Password fields are never read.
+   */
+  async getElementAtPoint(
+    point: Point,
+    timeoutMs = ELEMENT_AT_POINT_TIMEOUT_MS
+  ): Promise<PointerTarget | undefined> {
+    const physical = this.coordinates.toPhysicalPoint(point);
+    const result = await this.request("elementAtPoint", timeoutMs, {
+      x: String(Math.round(physical.x)),
+      y: String(Math.round(physical.y))
+    });
+
+    return isRecord(result)
+      ? parseElementAtPoint(result, (rect) => this.coordinates.toDipRect(rect))
+      : undefined;
   }
 
   async getSelectedText(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<string | undefined> {
@@ -148,7 +206,7 @@ export class WindowsContextHelper {
   }
 
   private request(
-    command: "activeWindow" | "selectedText" | "focusWindow" | "transcribe",
+    command: "activeWindow" | "selectedText" | "elementAtPoint" | "focusWindow" | "transcribe",
     timeoutMs: number,
     parameters: Record<string, string> = {}
   ): Promise<unknown> {
@@ -230,8 +288,96 @@ export class WindowsContextHelper {
   }
 }
 
+function parseElementAtPoint(
+  result: Record<string, unknown>,
+  toDipRect: (rect: Bounds) => Bounds
+): PointerTarget | undefined {
+  const element = isRecord(result.element) ? parseTargetElement(result.element, toDipRect) : undefined;
+
+  if (element === undefined) {
+    return undefined;
+  }
+
+  const target: PointerTarget = { source: "windows-uia", element };
+  const container = isRecord(result.container) ? parseTargetElement(result.container, toDipRect) : undefined;
+
+  if (container !== undefined) {
+    target.container = container;
+  }
+
+  if (isRecord(result.window)) {
+    const window = parseActiveWindow(result.window);
+    const targetWindow: NonNullable<PointerTarget["window"]> = {};
+
+    if (window.title !== undefined) targetWindow.title = window.title;
+    if (window.processName !== undefined) targetWindow.appName = window.processName;
+    if (window.executable !== undefined) targetWindow.executable = window.executable;
+    if (window.processId !== undefined) targetWindow.processId = window.processId;
+    if (window.bounds !== undefined) targetWindow.bounds = toDipRect(window.bounds);
+
+    if (Object.keys(targetWindow).length > 0) {
+      target.window = targetWindow;
+    }
+  }
+
+  return target;
+}
+
+function parseTargetElement(
+  value: Record<string, unknown>,
+  toDipRect: (rect: Bounds) => Bounds
+): PointerTargetElement | undefined {
+  const role = readText(value.role, MAX_ROLE_CHARS);
+
+  if (role === undefined) {
+    return undefined;
+  }
+
+  const element: PointerTargetElement = { role };
+  const name = readText(value.name, MAX_WINDOW_TEXT_CHARS);
+  const elementValue = readText(value.value, MAX_TARGET_VALUE_CHARS);
+  const text = readText(value.text, MAX_TARGET_TEXT_CHARS);
+  const bounds = parseBounds(value.bounds);
+
+  if (name !== undefined) element.name = name;
+  if (elementValue !== undefined) element.value = elementValue;
+  if (text !== undefined) element.text = text;
+  if (bounds !== undefined && bounds.width > 0 && bounds.height > 0) element.bounds = toDipRect(bounds);
+
+  return element;
+}
+
+function readText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length === 0 ? undefined : trimmed.slice(0, maxLength);
+}
+
+function parseBounds(value: unknown): Bounds | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const { x, y, width, height } = value;
+
+  if (![x, y, width, height].every((part) => typeof part === "number" && Number.isFinite(part))) {
+    return undefined;
+  }
+
+  return {
+    x: x as number,
+    y: y as number,
+    width: Math.max(0, width as number),
+    height: Math.max(0, height as number)
+  };
+}
+
 function parseActiveWindow(result: Record<string, unknown>): WindowsActiveWindow {
-  const bounds = isRecord(result.bounds) ? result.bounds : undefined;
+  const bounds = parseBounds(result.bounds);
   const window: WindowsActiveWindow = {};
 
   if (typeof result.title === "string" && result.title.trim().length > 0) {
@@ -250,16 +396,8 @@ function parseActiveWindow(result: Record<string, unknown>): WindowsActiveWindow
     window.processId = result.processId;
   }
 
-  if (
-    bounds !== undefined &&
-    [bounds.x, bounds.y, bounds.width, bounds.height].every((value) => typeof value === "number")
-  ) {
-    window.bounds = {
-      x: bounds.x as number,
-      y: bounds.y as number,
-      width: Math.max(0, bounds.width as number),
-      height: Math.max(0, bounds.height as number)
-    };
+  if (bounds !== undefined) {
+    window.bounds = bounds;
   }
 
   return window;
@@ -275,18 +413,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const HELPER_SCRIPT = String.raw`
-$ErrorActionPreference = 'Stop'
+// Sets UTF-8 before the first read (changing it later drops buffered input), then runs the
+// helper script sent as one base64 line on stdin.
+const BOOTSTRAP_SCRIPT = String.raw`
 $utf8 = New-Object System.Text.UTF8Encoding $false
 [Console]::OutputEncoding = $utf8
 [Console]::InputEncoding = $utf8
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$mauzHelper = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()))
+Invoke-Expression $mauzHelper
+`;
+
+const HELPER_SCRIPT = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
 public static class MauzWin32 {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
+  [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
   [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
@@ -322,8 +471,14 @@ public static class MauzWin32 {
 }
 "@
 
+# Physical pixels on every monitor; Mauz converts to and from Electron DIPs.
+try { [void][MauzWin32]::SetProcessDpiAwarenessContext([IntPtr](-4)) } catch { }
+
 function Get-MauzActiveWindow {
-  $handle = [MauzWin32]::GetForegroundWindow()
+  return Get-MauzWindowInfo ([MauzWin32]::GetForegroundWindow())
+}
+
+function Get-MauzWindowInfo([IntPtr]$handle) {
   if ($handle -eq [IntPtr]::Zero) { return @{} }
   $length = [MauzWin32]::GetWindowTextLength($handle)
   $builder = New-Object System.Text.StringBuilder ($length + 1)
@@ -357,6 +512,117 @@ function Get-MauzSelectedText {
   $parts = @()
   foreach ($range in $pattern.GetSelection()) { $parts += $range.GetText(8000) }
   return ($parts -join [Environment]::NewLine)
+}
+
+$script:mauzWalker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+
+function Limit-MauzText([string]$text, [int]$max) {
+  if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+  $trimmed = $text.Trim()
+  if ($trimmed.Length -gt $max) { return $trimmed.Substring(0, $max) }
+  return $trimmed
+}
+
+function Get-MauzRole($element) {
+  return ($element.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '')
+}
+
+function Get-MauzBounds($element) {
+  $rect = $element.Current.BoundingRectangle
+  if ($rect.IsEmpty -or [double]::IsInfinity($rect.X) -or [double]::IsInfinity($rect.Width)) { return $null }
+  if ($rect.Width -le 0 -or $rect.Height -le 0) { return $null }
+  return @{ x = [int]$rect.X; y = [int]$rect.Y; width = [int]$rect.Width; height = [int]$rect.Height }
+}
+
+# The paragraph under the point, from the nearest element (or ancestor) that exposes text.
+function Get-MauzTextAtPoint($element, $point) {
+  $candidate = $element
+  for ($depth = 0; $depth -lt 4 -and $null -ne $candidate; $depth++) {
+    $pattern = $null
+    if ($candidate.TryGetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern, [ref]$pattern)) {
+      if ($candidate.Current.IsPassword) { return $null }
+      $range = $pattern.RangeFromPoint($point)
+      $range.ExpandToEnclosingUnit([System.Windows.Automation.Text.TextUnit]::Paragraph)
+      return $range.GetText(4000)
+    }
+    $candidate = $script:mauzWalker.GetParent($candidate)
+  }
+  return $null
+}
+
+# Visible text inside a group (a card, a dialog), depth first, bounded in nodes, size, and time.
+function Get-MauzSubtreeText($root) {
+  $watch = [System.Diagnostics.Stopwatch]::StartNew()
+  $text = New-Object System.Text.StringBuilder
+  $stack = New-Object System.Collections.Stack
+  $stack.Push($root)
+  $visited = 0
+  while ($stack.Count -gt 0 -and $visited -lt 120 -and $text.Length -lt 4000 -and $watch.ElapsedMilliseconds -lt 250) {
+    $node = $stack.Pop()
+    $visited++
+    $current = $node.Current
+    if (-not $current.IsPassword -and -not [string]::IsNullOrWhiteSpace($current.Name)) {
+      $name = ($current.Name -replace '\s+', ' ').Trim()
+      # Groups often repeat their children's text in their own name.
+      if (-not $text.ToString().Contains($name)) { [void]$text.AppendLine($name) }
+    }
+    $children = New-Object System.Collections.ArrayList
+    $child = $script:mauzWalker.GetFirstChild($node)
+    while ($null -ne $child -and $children.Count -lt 40) {
+      [void]$children.Add($child)
+      $child = $script:mauzWalker.GetNextSibling($child)
+    }
+    for ($index = $children.Count - 1; $index -ge 0; $index--) { $stack.Push($children[$index]) }
+  }
+  return $text.ToString()
+}
+
+function Get-MauzElementAtPoint([double]$x, [double]$y) {
+  $point = New-Object System.Windows.Point($x, $y)
+  $element = [System.Windows.Automation.AutomationElement]::FromPoint($point)
+  if ($null -eq $element) { return @{} }
+
+  $win32Point = New-Object MauzWin32+POINT
+  $win32Point.X = [int]$x
+  $win32Point.Y = [int]$y
+  $rootHandle = [MauzWin32]::GetAncestor([MauzWin32]::WindowFromPoint($win32Point), 2)
+  $window = Get-MauzWindowInfo $rootHandle
+
+  $current = $element.Current
+  $target = @{ role = Get-MauzRole $element; name = Limit-MauzText $current.Name 500; bounds = Get-MauzBounds $element }
+  if (-not $current.IsPassword) {
+    $valuePattern = $null
+    if ($element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valuePattern)) {
+      $target.value = Limit-MauzText $valuePattern.Current.Value 2000
+    }
+    try { $target.text = Limit-MauzText (Get-MauzTextAtPoint $element $point) 4000 } catch { }
+  }
+  $result = @{ element = $target; window = $window }
+
+  # The group around the element: the highest ancestor that is still a small part of the window.
+  if ($null -ne $window.bounds) {
+    $maxArea = 0.4 * [double]$window.bounds.width * [double]$window.bounds.height
+    $container = $null
+    $ancestor = $script:mauzWalker.GetParent($element)
+    for ($depth = 0; $depth -lt 12 -and $null -ne $ancestor; $depth++) {
+      if ([long]$ancestor.Current.NativeWindowHandle -eq $rootHandle.ToInt64()) { break }
+      $bounds = Get-MauzBounds $ancestor
+      if ($null -ne $bounds) {
+        if ([double]$bounds.width * [double]$bounds.height -gt $maxArea) { break }
+        $container = $ancestor
+      }
+      $ancestor = $script:mauzWalker.GetParent($ancestor)
+    }
+    if ($null -ne $container) {
+      $result.container = @{
+        role = Get-MauzRole $container
+        name = Limit-MauzText $container.Current.Name 500
+        bounds = Get-MauzBounds $container
+        text = Limit-MauzText (Get-MauzSubtreeText $container) 4000
+      }
+    }
+  }
+  return $result
 }
 
 $script:mauzRecognizer = $null
@@ -415,6 +681,7 @@ while ($true) {
     switch ($request.command) {
       'activeWindow' { $response.result = Get-MauzActiveWindow }
       'selectedText' { $response.result = Get-MauzSelectedText }
+      'elementAtPoint' { $response.result = Get-MauzElementAtPoint ([double]$request.x) ([double]$request.y) }
       'focusWindow' { $response.result = [MauzWin32]::Focus([IntPtr][long]$request.handle) }
       'transcribe' { $response.result = Invoke-MauzTranscription $request.path }
       default { $response.error = 'unknown command' }
@@ -422,7 +689,7 @@ while ($true) {
   } catch {
     $response.error = if ($request.command -eq 'transcribe') { "$($_.Exception.Message)" } else { 'context lookup failed' }
   }
-  [Console]::Out.WriteLine(($response | ConvertTo-Json -Compress -Depth 4))
+  [Console]::Out.WriteLine(($response | ConvertTo-Json -Compress -Depth 6))
   [Console]::Out.Flush()
 }
 `;

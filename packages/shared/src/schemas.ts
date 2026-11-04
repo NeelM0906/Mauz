@@ -124,6 +124,12 @@ export const AskAnswerDeltaSchema = z.object({
   text: z.string().max(MAX_ANSWER_CHARS)
 });
 
+export const MAX_CAPTURE_BLOCKED_APPS = 50;
+
+export const CaptureBlockedAppsSchema = z
+  .array(z.string().trim().min(1).max(120))
+  .max(MAX_CAPTURE_BLOCKED_APPS);
+
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
@@ -136,7 +142,7 @@ export const MauzSettingsSchema = z.object({
   realtimeModel: ModelNameSchema,
   realtimeVoice: VoiceNameSchema,
   realtimeReasoningEffort: RealtimeReasoningEffortSchema,
-  includeFullScreenshot: z.boolean(),
+  captureBlockedApps: CaptureBlockedAppsSchema,
   apiKeyConfigured: z.boolean(),
   assistantMode: AssistantModeSchema,
   backendBaseUrl: z.string().trim().max(400),
@@ -180,6 +186,41 @@ export const MacInputAgentEventSchema = z.discriminatedUnion("type", [
   MacInputAgentPermissionErrorEventSchema
 ]);
 
+const MAX_TARGET_TEXT_CHARS = 4_000;
+const MAX_TARGET_VALUE_CHARS = 2_000;
+
+export const PointerTargetElementSchema = z.object({
+  role: z.string().min(1).max(80),
+  name: WindowTextSchema.optional(),
+  value: z.string().max(MAX_TARGET_VALUE_CHARS).optional(),
+  text: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
+  bounds: BoundsSchema.optional()
+});
+
+export const PointerTargetSchema = z.object({
+  source: z.enum(["windows-uia", "macos-ax", "browser"]),
+  element: PointerTargetElementSchema,
+  container: PointerTargetElementSchema.optional(),
+  window: z
+    .object({
+      title: WindowTextSchema.optional(),
+      appName: WindowTextSchema.optional(),
+      executable: WindowTextSchema.optional(),
+      processId: z.number().int().nonnegative().optional(),
+      bounds: BoundsSchema.optional()
+    })
+    .optional()
+});
+
+export const CursorCropFocusSchema = z.object({
+  kind: z.enum(["element", "pointer-area"]),
+  pointer: CursorPositionSchema
+});
+
+export const CaptureBlockedSchema = z.object({
+  appName: WindowTextSchema
+});
+
 export const PointerContextSchema = z.object({
   cursor: CursorPositionSchema,
   display: z
@@ -203,7 +244,9 @@ export const PointerContextSchema = z.object({
     })
     .optional(),
   selectedText: UserTextSchema.optional(),
+  target: PointerTargetSchema.optional(),
   cursorCrop: ScreenshotPayloadSchema.optional(),
+  cursorCropFocus: CursorCropFocusSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional()
 });
 
@@ -234,7 +277,8 @@ export const MauzDesktopContextSchema = z.object({
   selectedText: UserTextSchema.optional(),
   pointer: PointerContextSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional(),
-  screenshotError: PermissionErrorSchema.optional()
+  screenshotError: PermissionErrorSchema.optional(),
+  captureBlocked: CaptureBlockedSchema.optional()
 });
 
 export const ChatRoleSchema = z.enum(["user", "assistant"]);

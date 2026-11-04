@@ -14,6 +14,50 @@ export type Bounds = {
   height: number;
 };
 
+/** Something on screen read from the app itself (UI Automation, Accessibility, or a browser). */
+export type PointerTargetElement = {
+  /** Control type, e.g. "Button", "Text", "Hyperlink", "Edit", "ListItem". */
+  role: string;
+  name?: string | undefined;
+  /** Never read from password fields. */
+  value?: string | undefined;
+  /** Paragraph at the pointer for the element; descendant text for a container. */
+  text?: string | undefined;
+  bounds?: Bounds | undefined;
+};
+
+export type PointerTargetSource = "windows-uia" | "macos-ax" | "browser";
+
+/** The element under the pointer, the group around it, and the window it belongs to. */
+export type PointerTarget = {
+  source: PointerTargetSource;
+  element: PointerTargetElement;
+  container?: PointerTargetElement | undefined;
+  window?:
+    | {
+        title?: string | undefined;
+        appName?: string | undefined;
+        executable?: string | undefined;
+        processId?: number | undefined;
+        bounds?: Bounds | undefined;
+      }
+    | undefined;
+};
+
+export type CursorCropFocus = {
+  /** "element": framed on the pointed element or its group; "pointer-area": a fixed area around the pointer. */
+  kind: "element" | "pointer-area";
+  /** Pointer position in the crop's pixels. */
+  pointer: {
+    x: number;
+    y: number;
+  };
+};
+
+export type CaptureBlocked = {
+  appName: string;
+};
+
 export type PointerContext = {
   cursor: {
     x: number;
@@ -40,7 +84,10 @@ export type PointerContext = {
       }
     | undefined;
   selectedText?: string | undefined;
+  target?: PointerTarget | undefined;
   cursorCrop?: ScreenshotPayload | undefined;
+  cursorCropFocus?: CursorCropFocus | undefined;
+  /** Image of the window under the pointer; sent only when there is no cursor crop. */
   screenshot?: ScreenshotPayload | undefined;
 };
 
@@ -75,6 +122,8 @@ export type MauzDesktopContext = {
   pointer?: PointerContext | undefined;
   screenshot?: ScreenshotPayload | undefined;
   screenshotError?: PermissionError | undefined;
+  /** The app is on the user's never-capture list; no pixels, text, or window title were collected. */
+  captureBlocked?: CaptureBlocked | undefined;
 };
 
 export type AskMauzRequest = {
@@ -293,7 +342,8 @@ export type MauzSettings = {
   realtimeModel: string;
   realtimeVoice: string;
   realtimeReasoningEffort: RealtimeReasoningEffort;
-  includeFullScreenshot: boolean;
+  /** Executable names (Windows) or bundle ids (macOS) Mauz never captures. */
+  captureBlockedApps: string[];
   apiKeyConfigured: boolean;
   assistantMode: AssistantMode;
   backendBaseUrl: string;

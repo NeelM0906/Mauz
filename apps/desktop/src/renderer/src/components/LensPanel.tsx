@@ -22,6 +22,7 @@ import type { LensAction } from "@renderer/state/useMauzStore";
 import { classifyApprovalRisk } from "@renderer/lib/approvalRisk";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { detectLensObject, getLensActionQuestion, toLensMemory } from "@renderer/lib/lensObject";
+import { CaptureDetails } from "./CaptureDetails";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 import { FormattedAnswer } from "./FormattedAnswer";
@@ -289,6 +290,8 @@ export function LensPanel(): React.JSX.Element {
           No autonomous actions
         </span>
       </div>
+
+      <CaptureDetails context={currentContext} />
 
       {currentContext?.screenshotError !== undefined ? (
         <div className="permission-note" role="status">
