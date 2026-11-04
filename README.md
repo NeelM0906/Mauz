@@ -12,7 +12,7 @@ Mauz runs on **macOS** and **Windows**.
 
 ## Quick start
 
-Requirements: Git, Node.js 22+, pnpm (`corepack enable`), and either a signed-in [Claude Code](https://docs.claude.com/en/docs/claude-code) / [Codex](https://github.com/openai/codex) CLI or an Anthropic / OpenAI API key.
+Requirements: Git, Node.js 22+, pnpm (`corepack enable`), and a Claude or ChatGPT subscription, or an Anthropic or OpenAI API key. You connect them from Mauz's Settings.
 
 **Windows**
 
@@ -50,12 +50,14 @@ Full instructions, environment variables, and development mode are in [setup.md]
 
 Mauz does not ship with, or require, its own AI account. It answers with the provider you have set up:
 
-| Source                       | How Mauz uses it            | Default model     |
-| ---------------------------- | --------------------------- | ----------------- |
-| Anthropic API key            | Anthropic API               | `claude-opus-5-5` |
-| OpenAI API key               | OpenAI API                  | `gpt-5.4-mini`    |
-| Claude Code subscription     | Your signed-in `claude` CLI | `sonnet`          |
-| Codex (ChatGPT) subscription | Your signed-in `codex` CLI  | Codex default     |
+| Source                       | How Mauz uses it | Default model     |
+| ---------------------------- | ---------------- | ----------------- |
+| Anthropic API key            | Anthropic API    | `claude-opus-5-5` |
+| OpenAI API key               | OpenAI API       | `gpt-5.4-mini`    |
+| Claude Code subscription     | The `claude` CLI | `sonnet`          |
+| Codex (ChatGPT) subscription | The `codex` CLI  | Codex default     |
+
+To use a subscription, click **Connect** next to it in **Settings → AI provider**. Mauz installs the CLI if it is missing and opens the sign-in page in your browser. If the CLI is already signed in on your computer, Mauz picks it up automatically.
 
 If only one provider is set up, Mauz uses it. If several are, choose a **default** and an optional **fallback** in **Settings → AI provider**. The fallback answers when the default is not ready or fails. Settings also shows which providers Mauz detected. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer.
 

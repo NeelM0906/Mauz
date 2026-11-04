@@ -56,6 +56,11 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.agentStop,
   IPC_CHANNELS.agentGatewayReadinessStatus,
   IPC_CHANNELS.providersStatus,
+  IPC_CHANNELS.providersConnect,
+  IPC_CHANNELS.providersConnectCode,
+  IPC_CHANNELS.providersConnectCancel,
+  IPC_CHANNELS.providersConnectOpenPage,
+  IPC_CHANNELS.providersDisconnect,
   IPC_CHANNELS.talkTranscribe,
   IPC_CHANNELS.talkCaptureContext
 ] as const;
@@ -382,6 +387,41 @@ describe("registerIpcHandlers", () => {
       activeProviderId: "claude-code"
     });
     expect(getProvidersStatus).toHaveBeenCalledWith({ refresh: true });
+  });
+
+  it("starts subscription sign-in and opens only the link the CLI printed", async () => {
+    const state = {
+      connectId: "connect-1",
+      providerId: "codex" as const,
+      phase: "waiting" as const,
+      url: "https://auth.openai.com/codex/device",
+      userCode: "AB12-CD34E",
+      acceptsPastedCode: false,
+      message: null
+    };
+    const subscriptionConnector = {
+      connect: vi.fn(() => state),
+      submitCode: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(async () => {}),
+      getState: vi.fn(() => state)
+    };
+    const openExternal = vi.fn(async () => {});
+
+    registerIpcHandlers({ ...createOptions(), subscriptionConnector, openExternal });
+
+    await expect(
+      getRegisteredHandler(IPC_CHANNELS.providersConnect)(createInvokeEvent("desktop"), {
+        providerId: "codex"
+      })
+    ).resolves.toEqual(state);
+    await getRegisteredHandler(IPC_CHANNELS.providersConnectOpenPage)(createInvokeEvent("desktop"), {
+      connectId: "connect-1",
+      url: "https://attacker.example"
+    });
+
+    expect(subscriptionConnector.connect).toHaveBeenCalledWith("codex");
+    expect(openExternal).toHaveBeenCalledWith("https://auth.openai.com/codex/device");
   });
 
   it("returns gateway readiness status for simple mode", async () => {

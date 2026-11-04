@@ -23,12 +23,20 @@ import type {
   MauzSettings,
   MauzSettingsUpdate,
   ShakeSensitivity,
+  SubscriptionConnectState,
+  SubscriptionProviderId,
   TalkEngine
 } from "@mauzai/shared";
 import { DEFAULT_HERMES_BASE_URL } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
+import {
+  isConnecting,
+  isSubscriptionProvider,
+  SubscriptionButton,
+  SubscriptionSignIn
+} from "./SubscriptionConnect";
 
 const SENSITIVITY_OPTIONS: Array<{
   value: ShakeSensitivity;
@@ -99,6 +107,11 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [providersLoading, setProvidersLoading] = useState(false);
   const [anthropicApiKeyDraft, setAnthropicApiKeyDraft] = useState("");
   const [clearSavedAnthropicApiKey, setClearSavedAnthropicApiKey] = useState(false);
+  const [connectStates, setConnectStates] = useState<
+    Partial<Record<SubscriptionProviderId, SubscriptionConnectState>>
+  >({});
+  const [providerActionBusy, setProviderActionBusy] = useState(false);
+  const [providerActionError, setProviderActionError] = useState<string | null>(null);
   const openAiApiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const gatewayReadinessRequestRef = useRef(0);
 
@@ -117,6 +130,49 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   useEffect(() => {
     void loadProvidersStatus(false);
   }, [loadProvidersStatus]);
+
+  useEffect(
+    () =>
+      mauzClient.onSubscriptionConnectState((state) => {
+        setConnectStates((current) => ({ ...current, [state.providerId]: state }));
+
+        if (state.phase === "connected") {
+          // The connector already refreshed detection, so the cached status is current.
+          void loadProvidersStatus(false);
+        }
+      }),
+    [loadProvidersStatus]
+  );
+
+  const connectSubscription = async (providerId: SubscriptionProviderId): Promise<void> => {
+    setProviderActionError(null);
+
+    try {
+      const state = await mauzClient.connectSubscription(providerId);
+      setConnectStates((current) => ({ ...current, [providerId]: state }));
+    } catch (error) {
+      setProviderActionError(error instanceof Error ? error.message : "Could not start sign-in.");
+    }
+  };
+
+  const cancelSubscriptionConnect = (state: SubscriptionConnectState): void => {
+    void mauzClient.cancelSubscriptionConnect(state.connectId).catch(() => {});
+    setConnectStates((current) => ({ ...current, [state.providerId]: undefined }));
+  };
+
+  const disconnectSubscription = async (providerId: SubscriptionProviderId): Promise<void> => {
+    setProviderActionBusy(true);
+    setProviderActionError(null);
+
+    try {
+      setProvidersStatus(await mauzClient.disconnectSubscription(providerId));
+      setConnectStates((current) => ({ ...current, [providerId]: undefined }));
+    } catch (error) {
+      setProviderActionError(error instanceof Error ? error.message : "Could not sign out.");
+    } finally {
+      setProviderActionBusy(false);
+    }
+  };
 
   useEffect(() => {
     setDraft(settings);
@@ -406,35 +462,65 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
                   : "Provider status unavailable."}
               </p>
             ) : (
-              providersStatus.providers.map((provider) => (
-                <div
-                  className="auth-provider-card"
-                  data-status={provider.available ? "active" : "missing"}
-                  key={provider.id}
-                >
-                  <div>
-                    <strong>{provider.label}</strong>
-                    <span>
-                      {provider.detail} Model: {provider.model}.
-                    </span>
+              providersStatus.providers.map((provider) => {
+                const subscription = isSubscriptionProvider(provider.id) ? provider.id : null;
+                const connectState = subscription === null ? undefined : connectStates[subscription];
+
+                return (
+                  <div
+                    className="auth-provider-card"
+                    data-status={provider.available ? "active" : "missing"}
+                    key={provider.id}
+                  >
+                    <div>
+                      <strong>{provider.label}</strong>
+                      <span>
+                        {connectState?.phase === "failed" && connectState.message !== null
+                          ? connectState.message
+                          : `${provider.detail} Model: ${provider.model}.`}
+                      </span>
+                    </div>
+                    <div className="provider-side">
+                      <span className="provider-status">
+                        {provider.id === providersStatus.activeProviderId ? (
+                          <>
+                            <Check aria-hidden="true" size={12} />
+                            In use
+                          </>
+                        ) : provider.id === providersStatus.fallbackProviderId ? (
+                          "Fallback"
+                        ) : provider.available ? (
+                          "Ready"
+                        ) : isConnecting(connectState) ? (
+                          "Connecting"
+                        ) : (
+                          "Not set up"
+                        )}
+                      </span>
+                      {subscription !== null ? (
+                        <SubscriptionButton
+                          provider={{ ...provider, id: subscription }}
+                          state={connectState}
+                          busy={providerActionBusy}
+                          onConnect={() => void connectSubscription(subscription)}
+                          onDisconnect={() => void disconnectSubscription(subscription)}
+                        />
+                      ) : null}
+                    </div>
+                    {connectState !== undefined && isConnecting(connectState) ? (
+                      <SubscriptionSignIn
+                        label={provider.id === "claude-code" ? "Claude Code" : "Codex"}
+                        state={connectState}
+                        onCancel={() => cancelSubscriptionConnect(connectState)}
+                      />
+                    ) : null}
                   </div>
-                  <span className="provider-status">
-                    {provider.id === providersStatus.activeProviderId ? (
-                      <>
-                        <Check aria-hidden="true" size={12} />
-                        In use
-                      </>
-                    ) : provider.id === providersStatus.fallbackProviderId ? (
-                      "Fallback"
-                    ) : provider.available ? (
-                      "Ready"
-                    ) : (
-                      "Not set up"
-                    )}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
+            {providerActionError !== null ? (
+              <p className="subscription-error">{providerActionError}</p>
+            ) : null}
           </div>
           <div className="settings-inline-actions">
             <button
@@ -448,8 +534,9 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             </button>
           </div>
           <p className="settings-helper">
-            With one provider set up, Mauz uses it. With several, pick a default and a fallback that answers
-            when the default is not ready or fails.
+            Connect a Claude Code or Codex subscription here, or add an API key below. With one provider set
+            up, Mauz uses it. With several, pick a default and a fallback that answers when the default is not
+            ready or fails.
           </p>
           <label className="settings-field api-key-field">
             <span>Anthropic API key</span>

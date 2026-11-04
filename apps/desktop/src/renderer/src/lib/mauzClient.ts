@@ -24,6 +24,8 @@ import type {
   RealtimeConnectRequest,
   RealtimeConnectResponse,
   RealtimeSessionResponse,
+  SubscriptionConnectState,
+  SubscriptionProviderId,
   TalkTranscribeRequest,
   TalkTranscribeResponse
 } from "@mauzai/shared";
@@ -57,7 +59,17 @@ const browserPreviewBridge: MauzBridge = {
       activeProviderId: null,
       fallbackProviderId: null,
       providers: []
-    })
+    }),
+    connect: async () => {
+      throw new Error("Run the Electron app to connect a subscription.");
+    },
+    submitCode: async () => {},
+    cancelConnect: async () => {},
+    disconnect: async () => {
+      throw new Error("Run the Electron app to sign out.");
+    },
+    openConnectPage: async () => {},
+    onConnectState: () => () => {}
   },
   talk: {
     transcribe: async () => {
@@ -228,6 +240,24 @@ export const mauzClient = {
   },
   getProvidersStatus(options: { refresh?: boolean } = {}): Promise<AiProvidersStatusResponse> {
     return getBridge().providers.status(options);
+  },
+  connectSubscription(providerId: SubscriptionProviderId): Promise<SubscriptionConnectState> {
+    return getBridge().providers.connect({ providerId });
+  },
+  submitSubscriptionCode(connectId: string, code: string): Promise<void> {
+    return getBridge().providers.submitCode({ connectId, code });
+  },
+  cancelSubscriptionConnect(connectId: string): Promise<void> {
+    return getBridge().providers.cancelConnect({ connectId });
+  },
+  openSubscriptionConnectPage(connectId: string): Promise<void> {
+    return getBridge().providers.openConnectPage({ connectId });
+  },
+  disconnectSubscription(providerId: SubscriptionProviderId): Promise<AiProvidersStatusResponse> {
+    return getBridge().providers.disconnect({ providerId });
+  },
+  onSubscriptionConnectState(callback: (state: SubscriptionConnectState) => void): () => void {
+    return getBridge().providers.onConnectState(callback);
   },
   transcribeTalk(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse> {
     return getBridge().talk.transcribe(payload);

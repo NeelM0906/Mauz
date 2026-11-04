@@ -118,6 +118,47 @@ export type AiProvidersStatusResponse = {
   providers: AiProviderStatus[];
 };
 
+export type SubscriptionProviderId = "claude-code" | "codex";
+
+export type SubscriptionConnectPhase =
+  | "installing"
+  | "starting"
+  | "waiting"
+  | "connected"
+  | "failed"
+  | "cancelled";
+
+/** Progress of connecting a subscription from inside Mauz (install the CLI if needed, then sign in). */
+export type SubscriptionConnectState = {
+  connectId: string;
+  providerId: SubscriptionProviderId;
+  phase: SubscriptionConnectPhase;
+  /** Sign-in page to open in the browser. */
+  url: string | null;
+  /** One-time code to enter on the sign-in page (device sign-in). */
+  userCode: string | null;
+  /** The sign-in page may show a code that has to be pasted back into Mauz. */
+  acceptsPastedCode: boolean;
+  message: string | null;
+};
+
+export type SubscriptionConnectRequest = {
+  providerId: SubscriptionProviderId;
+};
+
+export type SubscriptionCodeRequest = {
+  connectId: string;
+  code: string;
+};
+
+export type SubscriptionCancelRequest = {
+  connectId: string;
+};
+
+export type SubscriptionDisconnectRequest = {
+  providerId: SubscriptionProviderId;
+};
+
 export type AiProvidersStatusRequest = {
   refresh?: boolean | undefined;
 };
@@ -325,6 +366,12 @@ export type MauzBridge = {
   };
   providers: {
     status(payload?: AiProvidersStatusRequest): Promise<AiProvidersStatusResponse>;
+    connect(payload: SubscriptionConnectRequest): Promise<SubscriptionConnectState>;
+    submitCode(payload: SubscriptionCodeRequest): Promise<void>;
+    cancelConnect(payload: SubscriptionCancelRequest): Promise<void>;
+    disconnect(payload: SubscriptionDisconnectRequest): Promise<AiProvidersStatusResponse>;
+    openConnectPage(payload: SubscriptionCancelRequest): Promise<void>;
+    onConnectState(callback: (state: SubscriptionConnectState) => void): () => void;
   };
   talk: {
     transcribe(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse>;

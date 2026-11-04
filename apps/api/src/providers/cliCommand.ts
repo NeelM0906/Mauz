@@ -193,3 +193,26 @@ function splitPath(env: NodeJS.ProcessEnv, pathApi: PathApi): string[] {
     .map((entry) => entry.trim().replace(/^"(.*)"$/, "$1"))
     .filter((entry) => entry.length > 0);
 }
+
+/**
+ * Finds npm for installing a missing CLI. On Windows npm's own `npm.cmd` is not a regular
+ * package shim, so run `npm-cli.js` with the Node.js it ships next to.
+ */
+export function resolveNpmCommand(options: CliResolutionOptions = {}): ResolvedCliCommand | null {
+  const platform = options.platform ?? process.platform;
+
+  if (platform !== "win32") {
+    return resolveCliCommand("npm", options);
+  }
+
+  const pathExists = options.pathExists ?? existsSync;
+  const node = resolveCliCommand("node", options);
+
+  if (node === null) {
+    return null;
+  }
+
+  const npmCli = win32.join(win32.dirname(node.command), "node_modules", "npm", "bin", "npm-cli.js");
+
+  return pathExists(npmCli) ? { command: node.command, args: [npmCli] } : null;
+}

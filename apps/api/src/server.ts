@@ -2,11 +2,12 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { config as loadDotenv } from "dotenv";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { AiProvidersStatusResponse } from "@mauzai/shared";
+import type { AiProvidersStatusResponse, SubscriptionConnectState } from "@mauzai/shared";
 import { registerAskRoute, type AnswerStreamHooks, type AskMauzHandler } from "./routes/ask";
 import type { RunLifecycleHooks } from "./backend/askViaRuns";
 import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
-import { getDefaultAnswerProviderRegistry } from "./providers/registry";
+import { getDefaultAnswerProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
+import { SubscriptionConnector } from "./providers/subscriptionConnect";
 import { registerChatTitleRoute, type ChatTitleHandler } from "./routes/chatTitle";
 import { registerHealthzRoute } from "./routes/healthz";
 import { registerRealtimeRoute, type RealtimeConnectHandler } from "./routes/realtime";
@@ -34,6 +35,22 @@ export function getAiProvidersStatus(
 export function prewarmAnswerProvider(): void {
   getDefaultAnswerProviderRegistry().prewarm(MAUZ_SYSTEM_PROMPT);
 }
+
+/**
+ * Connects Claude Code or Codex subscriptions from inside Mauz (install the CLI if needed, then
+ * run its sign-in). Successful sign-ins refresh provider detection.
+ */
+export function createSubscriptionConnector(
+  onState: (state: SubscriptionConnectState) => void
+): SubscriptionConnector {
+  return new SubscriptionConnector({
+    resolveCommand: resolveCliCommandForMauz,
+    onAuthChanged: () => getDefaultAnswerProviderRegistry().getStatus({ refresh: true }),
+    onState
+  });
+}
+
+export type { SubscriptionConnector } from "./providers/subscriptionConnect";
 
 export function disposeAnswerProviders(): void {
   getDefaultAnswerProviderRegistry().dispose();

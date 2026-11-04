@@ -8,7 +8,7 @@ This guide covers running MauzAI from a clone on macOS and Windows.
 - Node.js 22 or newer.
 - pnpm 10.27.0 or newer. Run `corepack enable` if pnpm is not available.
 - macOS only: Xcode Command Line Tools for the native mouse-shake helper. Install with `xcode-select --install`.
-- An AI provider: a signed-in [Claude Code](https://claude.com/claude-code) or [Codex](https://github.com/openai/codex) subscription, or an Anthropic or OpenAI API key. See [AI providers](#ai-providers).
+- An AI provider: a Claude ([Claude Code](https://claude.com/claude-code)) or ChatGPT ([Codex](https://github.com/openai/codex)) subscription, or an Anthropic or OpenAI API key. You can connect any of them from Mauz's Settings. See [AI providers](#ai-providers).
 
 ## Install from a clone
 
@@ -50,15 +50,27 @@ Mauz answers with the provider you have set up. It supports:
 
 - An Anthropic API key (default model `claude-opus-5-5`).
 - An OpenAI API key (default model `gpt-5.4-mini`).
-- Your Claude Code subscription, if the `claude` CLI is installed and signed in (default model `sonnet`).
-- Your Codex (ChatGPT) subscription, if the `codex` CLI is installed and signed in (Codex's default model).
+- Your Claude subscription through Claude Code (default model `sonnet`). See [Connect a subscription](#connect-a-subscription).
+- Your ChatGPT subscription through Codex (Codex's default model).
 
 If only one is set up, Mauz uses it. If several are set up, choose them under **Settings → AI provider**:
 
 - **Default provider** answers every question. Left on **Automatic**, Mauz prefers an API key you added, then Claude Code, then Codex.
 - **Fallback provider** (optional) answers when the default is not ready or fails before it starts answering.
 
-To use a subscription, install the CLI and sign in once in a terminal: run `claude` (then `/login`) for Claude Code, or `codex login` for Codex. Mauz runs these CLIs with tools, hooks, MCP servers, and session history turned off, from an empty working directory, so they only answer the question. Settings shows which providers are ready; use **Check again** after signing in.
+### Connect a subscription
+
+Open **Settings → AI provider** and click **Connect** next to Claude Code or Codex:
+
+- If the CLI is not installed, Mauz installs it with npm (`@anthropic-ai/claude-code` or `@openai/codex`). The button says **Install & connect**.
+- Mauz then runs the CLI's own sign-in and opens the sign-in page in your browser.
+  - **Codex** shows a one-time code in Mauz; enter it on the page.
+  - **Claude Code** usually finishes on its own after you approve in the browser. If the page shows a code instead, paste it into Mauz.
+- The sign-in is stored by the CLI itself, exactly as if you had signed in from a terminal, so the `claude` or `codex` CLI is signed in too.
+
+If the CLI is already signed in on your computer, Mauz picks it up automatically; there is nothing to connect. **Sign out** next to a connected subscription signs the CLI out. Use **Check again** if you signed in or out from a terminal.
+
+Mauz runs these CLIs with tools, hooks, MCP servers, and session history turned off, from an empty working directory, so they only answer the question.
 
 Add API keys in Settings (stored encrypted with Electron safe storage: Keychain on macOS, DPAPI on Windows) or through the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). Optional overrides:
 

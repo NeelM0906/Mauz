@@ -81,6 +81,26 @@ export const AiProvidersStatusResponseSchema = z.object({
   providers: z.array(AiProviderStatusSchema)
 });
 
+export const SubscriptionProviderIdSchema = z.enum(["claude-code", "codex"]);
+
+export const SubscriptionConnectStateSchema = z.object({
+  connectId: z.string().min(1).max(128),
+  providerId: SubscriptionProviderIdSchema,
+  phase: z.enum(["installing", "starting", "waiting", "connected", "failed", "cancelled"]),
+  url: z.string().url().max(2000).nullable(),
+  userCode: z.string().max(64).nullable(),
+  acceptsPastedCode: z.boolean(),
+  message: z.string().max(500).nullable()
+});
+
+export const SubscriptionConnectRequestSchema = z.object({ providerId: SubscriptionProviderIdSchema });
+export const SubscriptionCodeRequestSchema = z.object({
+  connectId: z.string().min(1).max(128),
+  code: z.string().trim().min(1).max(2000)
+});
+export const SubscriptionCancelRequestSchema = z.object({ connectId: z.string().min(1).max(128) });
+export const SubscriptionDisconnectRequestSchema = z.object({ providerId: SubscriptionProviderIdSchema });
+
 export const AiProvidersStatusRequestSchema = z
   .object({
     refresh: z.boolean().optional()

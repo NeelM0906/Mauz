@@ -70,13 +70,7 @@ export class AnswerProviderRegistry {
   constructor(options: AnswerProviderRegistryOptions = {}) {
     this.readEnv = options.env ?? (() => process.env);
     this.spawnProcess = options.spawn ?? spawnCliProcess;
-    this.resolveCommand =
-      options.resolveCommand ??
-      ((name, env) =>
-        resolveCliCommand(name, {
-          env,
-          fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
-        }));
+    this.resolveCommand = options.resolveCommand ?? resolveCliCommandForMauz;
     this.now = options.now ?? Date.now;
     this.providers = {
       "claude-code": options.providers?.["claude-code"] ?? new ClaudeCodeProvider({ env: this.readEnv }),
@@ -271,6 +265,14 @@ export class AnswerProviderRegistry {
  * Picks the provider that answers and the one that backs it up. The default answers when it is
  * ready; otherwise a ready fallback takes over. With a single provisioned provider, "auto" uses it.
  */
+/** Resolves a CLI; inside Electron, npm JS shims can run on Electron itself when Node.js is missing. */
+export function resolveCliCommandForMauz(name: string, env: NodeJS.ProcessEnv): ResolvedCliCommand | null {
+  return resolveCliCommand(name, {
+    env,
+    fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
+  });
+}
+
 export function pickProviders(
   preference: AiProviderPreference,
   fallbackPreference: AiFallbackPreference,

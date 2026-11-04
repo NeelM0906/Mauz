@@ -12,12 +12,21 @@ import {
   IPC_CHANNELS,
   MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
+  SubscriptionCancelRequestSchema,
+  SubscriptionCodeRequestSchema,
+  SubscriptionConnectRequestSchema,
+  SubscriptionConnectStateSchema,
+  SubscriptionDisconnectRequestSchema,
   TalkTranscribeRequestSchema,
   TalkTranscribeResponseSchema,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
-import { getAiProvidersStatus, getGatewayReadinessStatus } from "@mauzai/api/server";
+import {
+  getAiProvidersStatus,
+  getGatewayReadinessStatus,
+  type SubscriptionConnector
+} from "@mauzai/api/server";
 import type { AgentRunBridge } from "../agent/AgentRunBridge";
 import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
@@ -39,6 +48,11 @@ type RegisterIpcHandlersOptions = {
   agentRunBridge: AgentRunBridge;
   getProvidersStatus?: typeof getAiProvidersStatus;
   talkTranscriber?: Pick<TalkTranscriber, "transcribe">;
+  subscriptionConnector?: Pick<
+    SubscriptionConnector,
+    "connect" | "submitCode" | "cancel" | "disconnect" | "getState"
+  >;
+  openExternal?: (url: string) => Promise<void>;
 };
 
 const HANDLED_IPC_CHANNELS = [
@@ -61,6 +75,11 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.agentStop,
   IPC_CHANNELS.agentGatewayReadinessStatus,
   IPC_CHANNELS.providersStatus,
+  IPC_CHANNELS.providersConnect,
+  IPC_CHANNELS.providersConnectCode,
+  IPC_CHANNELS.providersConnectCancel,
+  IPC_CHANNELS.providersConnectOpenPage,
+  IPC_CHANNELS.providersDisconnect,
   IPC_CHANNELS.talkTranscribe,
   IPC_CHANNELS.talkCaptureContext
 ] as const;
@@ -75,7 +94,9 @@ export function registerIpcHandlers({
   updateSettings,
   agentRunBridge,
   getProvidersStatus = getAiProvidersStatus,
-  talkTranscriber
+  talkTranscriber,
+  subscriptionConnector,
+  openExternal
 }: RegisterIpcHandlersOptions): void {
   for (const channel of HANDLED_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
@@ -264,6 +285,50 @@ export function registerIpcHandlers({
 
     return AiProvidersStatusResponseSchema.parse(status);
   });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnect, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = SubscriptionConnectRequestSchema.parse(payload);
+
+    return SubscriptionConnectStateSchema.parse(requireConnector().connect(request.providerId));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnectCode, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = SubscriptionCodeRequestSchema.parse(payload);
+    requireConnector().submitCode(request.connectId, request.code);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnectCancel, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    requireConnector().cancel(SubscriptionCancelRequestSchema.parse(payload).connectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnectOpenPage, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const state = requireConnector().getState(SubscriptionCancelRequestSchema.parse(payload).connectId);
+
+    // Only the sign-in page the CLI printed can be opened, never a URL from the renderer.
+    if (state?.url?.startsWith("https://") === true && openExternal !== undefined) {
+      await openExternal(state.url);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersDisconnect, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = SubscriptionDisconnectRequestSchema.parse(payload);
+    await requireConnector().disconnect(request.providerId);
+
+    return AiProvidersStatusResponseSchema.parse(await getProvidersStatus({ refresh: true }));
+  });
+
+  function requireConnector(): NonNullable<RegisterIpcHandlersOptions["subscriptionConnector"]> {
+    if (subscriptionConnector === undefined) {
+      throw new Error("Connecting subscriptions is not available.");
+    }
+
+    return subscriptionConnector;
+  }
 
   ipcMain.handle(IPC_CHANNELS.talkTranscribe, async (event, payload: unknown) => {
     assertTrustedSurface(event, ["popover"]);

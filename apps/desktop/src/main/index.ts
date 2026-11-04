@@ -1,4 +1,4 @@
-import { app, dialog, screen } from "electron";
+import { app, BrowserWindow, dialog, screen, shell } from "electron";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -9,14 +9,17 @@ import {
   readBooleanEnv,
   type MauzSettings,
   type MauzSettingsUpdate,
-  type PermissionError
+  type PermissionError,
+  type SubscriptionConnectState
 } from "@mauzai/shared";
 import {
+  createSubscriptionConnector,
   disposeAnswerProviders,
   getAiProvidersStatus,
   hasOpenAiTranscription,
   prewarmAnswerProvider,
-  transcribeWithOpenAi
+  transcribeWithOpenAi,
+  type SubscriptionConnector
 } from "@mauzai/api/server";
 import { AgentRunBridge } from "./agent/AgentRunBridge";
 import { ChatHistoryService } from "./chat/ChatHistoryService";
@@ -49,6 +52,7 @@ let contextCollector: ContextCollector | null = null;
 let chatHistoryService: ChatHistoryService | null = null;
 let settingsService: SettingsService | null = null;
 let windowsContextHelper: WindowsContextHelper | null = null;
+let subscriptionConnector: SubscriptionConnector | null = null;
 let trayController: TrayController | null = null;
 let currentSettings: MauzSettings | null = null;
 let inputProviders: InputProvider[] = [];
@@ -146,6 +150,8 @@ async function bootstrap(): Promise<void> {
     captureHider: popover,
     ...(windowsContextHelper === null ? {} : { windowsContextHelper })
   });
+  subscriptionConnector = createSubscriptionConnector(broadcastSubscriptionConnectState);
+
   registerIpcHandlers({
     popover,
     contextCollector,
@@ -159,7 +165,9 @@ async function bootstrap(): Promise<void> {
       getWindowsHelper: () => windowsContextHelper,
       hasOpenAiKey: hasOpenAiTranscription,
       transcribeWithOpenAi: (wavAudio) => transcribeWithOpenAi(wavAudio)
-    })
+    }),
+    subscriptionConnector,
+    openExternal: (url) => shell.openExternal(url)
   });
   startInputProviders(initialSettings);
   trayController = new TrayController({
@@ -429,6 +437,9 @@ async function shutdownResources(): Promise<void> {
   windowsContextHelper?.stop();
   windowsContextHelper = null;
 
+  subscriptionConnector?.dispose();
+  subscriptionConnector = null;
+
   try {
     disposeAnswerProviders();
   } catch (error: unknown) {
@@ -546,4 +557,26 @@ if (!hasSingleInstanceLock) {
   app.on("window-all-closed", () => {
     // Keep the resident assistant alive after popup windows close.
   });
+}
+
+const openedConnectPages = new Set<string>();
+
+/** Sends sign-in progress to every Mauz window; device sign-in pages open automatically. */
+function broadcastSubscriptionConnectState(state: SubscriptionConnectState): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.webContents.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.providersConnectState, state);
+    }
+  }
+
+  // Claude Code opens the browser itself; Codex device sign-in only prints the link.
+  if (
+    state.phase === "waiting" &&
+    !state.acceptsPastedCode &&
+    state.url?.startsWith("https://") === true &&
+    !openedConnectPages.has(state.connectId)
+  ) {
+    openedConnectPages.add(state.connectId);
+    void shell.openExternal(state.url).catch(() => {});
+  }
 }

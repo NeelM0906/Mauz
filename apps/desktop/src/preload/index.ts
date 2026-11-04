@@ -25,6 +25,11 @@ import type {
   RealtimeConnectRequest,
   RealtimeConnectResponse,
   RealtimeSessionResponse,
+  SubscriptionCancelRequest,
+  SubscriptionCodeRequest,
+  SubscriptionConnectRequest,
+  SubscriptionConnectState,
+  SubscriptionDisconnectRequest,
   TalkTranscribeRequest,
   TalkTranscribeResponse
 } from "@mauzai/shared";
@@ -34,6 +39,7 @@ import {
   AgentRunStatePayloadSchema,
   AskAnswerDeltaSchema,
   IPC_CHANNELS,
+  SubscriptionConnectStateSchema,
   MauzSettingsSchema,
   PermissionErrorSchema
 } from "@mauzai/shared";
@@ -61,7 +67,25 @@ const mauzApi: MauzBridge = {
   },
   providers: {
     status: (payload?: AiProvidersStatusRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.providersStatus, payload) as Promise<AiProvidersStatusResponse>
+      ipcRenderer.invoke(IPC_CHANNELS.providersStatus, payload) as Promise<AiProvidersStatusResponse>,
+    connect: (payload: SubscriptionConnectRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnect, payload) as Promise<SubscriptionConnectState>,
+    submitCode: (payload: SubscriptionCodeRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnectCode, payload) as Promise<void>,
+    cancelConnect: (payload: SubscriptionCancelRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnectCancel, payload) as Promise<void>,
+    disconnect: (payload: SubscriptionDisconnectRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersDisconnect, payload) as Promise<AiProvidersStatusResponse>,
+    openConnectPage: (payload: SubscriptionCancelRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnectOpenPage, payload) as Promise<void>,
+    onConnectState: (callback: (state: SubscriptionConnectState) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = SubscriptionConnectStateSchema.safeParse(payload);
+        if (parsed.success) callback(parsed.data);
+      };
+      ipcRenderer.on(IPC_CHANNELS.providersConnectState, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.providersConnectState, listener);
+    }
   },
   talk: {
     transcribe: (payload: TalkTranscribeRequest) =>
