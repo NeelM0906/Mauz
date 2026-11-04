@@ -3,6 +3,9 @@ import type {
   AgentApprovalPayload,
   AgentRunActivityPayload,
   AgentRunStatePayload,
+  AiProvidersStatusRequest,
+  AiProvidersStatusResponse,
+  AskAnswerDelta,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -21,13 +24,22 @@ import type {
   PermissionError,
   RealtimeConnectRequest,
   RealtimeConnectResponse,
-  RealtimeSessionResponse
+  RealtimeSessionResponse,
+  SubscriptionCancelRequest,
+  SubscriptionCodeRequest,
+  SubscriptionConnectRequest,
+  SubscriptionConnectState,
+  SubscriptionDisconnectRequest,
+  TalkTranscribeRequest,
+  TalkTranscribeResponse
 } from "@mauzai/shared";
 import {
   AgentApprovalPayloadSchema,
   AgentRunActivityPayloadSchema,
   AgentRunStatePayloadSchema,
+  AskAnswerDeltaSchema,
   IPC_CHANNELS,
+  SubscriptionConnectStateSchema,
   MauzSettingsSchema,
   PermissionErrorSchema
 } from "@mauzai/shared";
@@ -39,11 +51,51 @@ const mauzApi: MauzBridge = {
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
     startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
     setLensExpanded: (payload: MauzLensResizeRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>
+      ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>,
+    onHidden: (callback: () => void) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(IPC_CHANNELS.menuHidden, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.menuHidden, listener);
+    }
   },
   ask: {
     submit: (payload: AskMauzRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>
+      ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>,
+    onDelta: (callback: (payload: AskAnswerDelta) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = AskAnswerDeltaSchema.safeParse(payload);
+        if (parsed.success) callback(parsed.data);
+      };
+      ipcRenderer.on(IPC_CHANNELS.askDelta, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.askDelta, listener);
+    }
+  },
+  providers: {
+    status: (payload?: AiProvidersStatusRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersStatus, payload) as Promise<AiProvidersStatusResponse>,
+    connect: (payload: SubscriptionConnectRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnect, payload) as Promise<SubscriptionConnectState>,
+    submitCode: (payload: SubscriptionCodeRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnectCode, payload) as Promise<void>,
+    cancelConnect: (payload: SubscriptionCancelRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnectCancel, payload) as Promise<void>,
+    disconnect: (payload: SubscriptionDisconnectRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersDisconnect, payload) as Promise<AiProvidersStatusResponse>,
+    openConnectPage: (payload: SubscriptionCancelRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersConnectOpenPage, payload) as Promise<void>,
+    onConnectState: (callback: (state: SubscriptionConnectState) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = SubscriptionConnectStateSchema.safeParse(payload);
+        if (parsed.success) callback(parsed.data);
+      };
+      ipcRenderer.on(IPC_CHANNELS.providersConnectState, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.providersConnectState, listener);
+    }
+  },
+  talk: {
+    transcribe: (payload: TalkTranscribeRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.talkTranscribe, payload) as Promise<TalkTranscribeResponse>,
+    captureContext: () => ipcRenderer.invoke(IPC_CHANNELS.talkCaptureContext) as Promise<MauzDesktopContext>
   },
   history: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryList) as Promise<ChatHistoryListResponse>,

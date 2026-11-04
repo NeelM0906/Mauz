@@ -5,6 +5,11 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  test: {
+    // The first Fastify server in each file pays module-load cost, which is slow on
+    // Windows (Defender scans every module); the 5s default times out there.
+    testTimeout: 20_000
+  },
   resolve: {
     alias: [
       {

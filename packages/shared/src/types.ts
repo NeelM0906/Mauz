@@ -82,6 +82,97 @@ export type AskMauzRequest = {
   context: MauzDesktopContext;
   conversationMessages?: ChatMessage[] | undefined;
   sessionId?: string | undefined;
+  requestId?: string | undefined;
+  responseStyle?: AskResponseStyle | undefined;
+};
+
+/** "voice" answers are written to be spoken aloud (Talk); "text" answers may use Markdown. */
+export type AskResponseStyle = "text" | "voice";
+
+export type AskAnswerDelta = {
+  requestId: string;
+  text: string;
+};
+
+export type AiProviderId = "claude-code" | "codex" | "anthropic" | "openai";
+export type AiProviderPreference = "auto" | AiProviderId;
+/** Provider to use when the default is not ready or fails before answering. */
+export type AiFallbackPreference = "none" | AiProviderId;
+export type AiProviderKind = "subscription" | "api-key";
+
+export type AiProviderStatus = {
+  id: AiProviderId;
+  label: string;
+  kind: AiProviderKind;
+  available: boolean;
+  detail: string;
+  model: string;
+};
+
+export type AiProvidersStatusResponse = {
+  preference: AiProviderPreference;
+  fallbackPreference: AiFallbackPreference;
+  activeProviderId: AiProviderId | null;
+  /** Ready fallback that differs from the active provider, or null. */
+  fallbackProviderId: AiProviderId | null;
+  providers: AiProviderStatus[];
+};
+
+export type SubscriptionProviderId = "claude-code" | "codex";
+
+export type SubscriptionConnectPhase =
+  | "installing"
+  | "starting"
+  | "waiting"
+  | "connected"
+  | "failed"
+  | "cancelled";
+
+/** Progress of connecting a subscription from inside Mauz (install the CLI if needed, then sign in). */
+export type SubscriptionConnectState = {
+  connectId: string;
+  providerId: SubscriptionProviderId;
+  phase: SubscriptionConnectPhase;
+  /** Sign-in page to open in the browser. */
+  url: string | null;
+  /** One-time code to enter on the sign-in page (device sign-in). */
+  userCode: string | null;
+  /** The sign-in page may show a code that has to be pasted back into Mauz. */
+  acceptsPastedCode: boolean;
+  message: string | null;
+};
+
+export type SubscriptionConnectRequest = {
+  providerId: SubscriptionProviderId;
+};
+
+export type SubscriptionCodeRequest = {
+  connectId: string;
+  code: string;
+};
+
+export type SubscriptionCancelRequest = {
+  connectId: string;
+};
+
+export type SubscriptionDisconnectRequest = {
+  providerId: SubscriptionProviderId;
+};
+
+export type AiProvidersStatusRequest = {
+  refresh?: boolean | undefined;
+};
+
+export type TalkTranscribeRequest = {
+  audioBase64: string;
+  mimeType: "audio/wav";
+};
+
+export type TalkTranscriptionEngine = "openai" | "windows";
+
+export type TalkTranscribeResponse = {
+  text: string;
+  engine: TalkTranscriptionEngine;
 };
 
 export type AskMauzResponse = {
@@ -188,6 +279,7 @@ export type OpenAiCredentialSource = "none" | "environment" | "saved";
 
 export type AssistantMode = "simple" | "agentic";
 export type AgentMode = "approve" | "yolo";
+export type TalkEngine = "pipeline" | "realtime";
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
@@ -206,13 +298,19 @@ export type MauzSettings = {
   assistantMode: AssistantMode;
   backendBaseUrl: string;
   agentMode: AgentMode;
+  aiProvider: AiProviderPreference;
+  aiFallbackProvider: AiFallbackPreference;
+  anthropicKeyConfigured: boolean;
+  talkEngine: TalkEngine;
 };
 
 export type MauzSettingsUpdate = Partial<
-  Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource">
+  Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource" | "anthropicKeyConfigured">
 > & {
   openAiApiKey?: string | null | undefined;
   clearOpenAiApiKey?: boolean | undefined;
+  anthropicApiKey?: string | null | undefined;
+  clearAnthropicApiKey?: boolean | undefined;
 };
 
 export type MauzSettingsOpenOptions = {
@@ -261,9 +359,25 @@ export type MauzBridge = {
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
     setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
+    /** The popover was hidden (closed, Escape, or lost focus); stop audio and microphone use. */
+    onHidden(callback: () => void): () => void;
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;
+    onDelta(callback: (payload: AskAnswerDelta) => void): () => void;
+  };
+  providers: {
+    status(payload?: AiProvidersStatusRequest): Promise<AiProvidersStatusResponse>;
+    connect(payload: SubscriptionConnectRequest): Promise<SubscriptionConnectState>;
+    submitCode(payload: SubscriptionCodeRequest): Promise<void>;
+    cancelConnect(payload: SubscriptionCancelRequest): Promise<void>;
+    disconnect(payload: SubscriptionDisconnectRequest): Promise<AiProvidersStatusResponse>;
+    openConnectPage(payload: SubscriptionCancelRequest): Promise<void>;
+    onConnectState(callback: (state: SubscriptionConnectState) => void): () => void;
+  };
+  talk: {
+    transcribe(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse>;
+    captureContext(): Promise<MauzDesktopContext>;
   };
   history: {
     list(): Promise<ChatHistoryListResponse>;

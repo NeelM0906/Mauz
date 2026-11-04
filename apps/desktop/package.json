@@ -20,22 +20,22 @@
   "dependencies": {
     "@mauzai/api": "workspace:*",
     "@mauzai/shared": "workspace:*",
-    "lucide-react": "^1.16.0",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.7",
-    "zustand": "^5.0.13"
+    "lucide-react": "^1.67.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zustand": "^5.0.16"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.1.6",
-    "@types/node": "^26.1.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
+    "@tailwindcss/vite": "^4.3.4",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
-    "electron": "^42.5.0",
+    "electron": "^42.11.18",
     "electron-vite": "^5.0.0",
-    "tailwindcss": "^4.1.6",
+    "tailwindcss": "^4.3.4",
     "typescript": "^5.9.3",
-    "vite": "^7.3.6",
-    "vitest": "^4.1.6"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
   }
 }

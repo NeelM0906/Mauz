@@ -2,6 +2,8 @@ import type {
   AgentApprovalPayload,
   AgentRunActivityPayload,
   AgentRunStatePayload,
+  AiProvidersStatusResponse,
+  AskAnswerDelta,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -21,7 +23,11 @@ import type {
   PermissionError,
   RealtimeConnectRequest,
   RealtimeConnectResponse,
-  RealtimeSessionResponse
+  RealtimeSessionResponse,
+  SubscriptionConnectState,
+  SubscriptionProviderId,
+  TalkTranscribeRequest,
+  TalkTranscribeResponse
 } from "@mauzai/shared";
 
 type WindowWithOptionalBridge = Window & {
@@ -34,7 +40,8 @@ const browserPreviewBridge: MauzBridge = {
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
     startTalk: async () => collectPreviewContext(),
-    setLensExpanded: async (_payload: MauzLensResizeRequest) => {}
+    setLensExpanded: async (_payload: MauzLensResizeRequest) => {},
+    onHidden: () => () => {}
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
@@ -43,7 +50,33 @@ const browserPreviewBridge: MauzBridge = {
           "Browser preview is connected. Run the Electron app to ask Mauz with live screenshot context.",
         model: "preview"
       };
-    }
+    },
+    onDelta: (_callback: (payload: AskAnswerDelta) => void) => () => {}
+  },
+  providers: {
+    status: async () => ({
+      preference: "auto",
+      fallbackPreference: "none",
+      activeProviderId: null,
+      fallbackProviderId: null,
+      providers: []
+    }),
+    connect: async () => {
+      throw new Error("Run the Electron app to connect a subscription.");
+    },
+    submitCode: async () => {},
+    cancelConnect: async () => {},
+    disconnect: async () => {
+      throw new Error("Run the Electron app to sign out.");
+    },
+    openConnectPage: async () => {},
+    onConnectState: () => () => {}
+  },
+  talk: {
+    transcribe: async () => {
+      throw new Error("Run the Electron app to talk to Mauz.");
+    },
+    captureContext: async () => collectPreviewContext()
   },
   history: {
     list: async () => ({
@@ -87,7 +120,11 @@ const browserPreviewBridge: MauzBridge = {
       apiKeyConfigured: false,
       assistantMode: "simple",
       backendBaseUrl: "",
-      agentMode: "approve"
+      agentMode: "approve",
+      aiProvider: "auto",
+      aiFallbackProvider: "none",
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline"
     }),
     update: async (payload: MauzSettingsUpdate) => {
       const openAiAuthDisconnected = payload.openAiAuthDisconnected ?? false;
@@ -111,7 +148,11 @@ const browserPreviewBridge: MauzBridge = {
         apiKeyConfigured: openAiCredentialSource !== "none",
         assistantMode: payload.assistantMode ?? "simple",
         backendBaseUrl: payload.backendBaseUrl ?? "",
-        agentMode: payload.agentMode ?? "approve"
+        agentMode: payload.agentMode ?? "approve",
+        aiProvider: payload.aiProvider ?? "auto",
+        aiFallbackProvider: payload.aiFallbackProvider ?? "none",
+        anthropicKeyConfigured: (payload.anthropicApiKey?.trim().length ?? 0) > 0,
+        talkEngine: payload.talkEngine ?? "pipeline"
       };
     }
   },
@@ -194,6 +235,39 @@ export const mauzClient = {
   },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);
+  },
+  onPopoverHidden(callback: () => void): () => void {
+    return getBridge().menu.onHidden(callback);
+  },
+  onAnswerDelta(callback: (payload: AskAnswerDelta) => void): () => void {
+    return getBridge().ask.onDelta(callback);
+  },
+  getProvidersStatus(options: { refresh?: boolean } = {}): Promise<AiProvidersStatusResponse> {
+    return getBridge().providers.status(options);
+  },
+  connectSubscription(providerId: SubscriptionProviderId): Promise<SubscriptionConnectState> {
+    return getBridge().providers.connect({ providerId });
+  },
+  submitSubscriptionCode(connectId: string, code: string): Promise<void> {
+    return getBridge().providers.submitCode({ connectId, code });
+  },
+  cancelSubscriptionConnect(connectId: string): Promise<void> {
+    return getBridge().providers.cancelConnect({ connectId });
+  },
+  openSubscriptionConnectPage(connectId: string): Promise<void> {
+    return getBridge().providers.openConnectPage({ connectId });
+  },
+  disconnectSubscription(providerId: SubscriptionProviderId): Promise<AiProvidersStatusResponse> {
+    return getBridge().providers.disconnect({ providerId });
+  },
+  onSubscriptionConnectState(callback: (state: SubscriptionConnectState) => void): () => void {
+    return getBridge().providers.onConnectState(callback);
+  },
+  transcribeTalk(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse> {
+    return getBridge().talk.transcribe(payload);
+  },
+  captureTalkContext(): Promise<MauzDesktopContext> {
+    return getBridge().talk.captureContext();
   },
   listChatHistory(): Promise<ChatHistoryListResponse> {
     return getBridge().history.list();

@@ -380,7 +380,11 @@ function buildSettingsFixture() {
     realtimeVoice: "alloy",
     realtimeReasoningEffort: "medium" as const,
     includeFullScreenshot: false,
-    apiKeyConfigured: false
+    apiKeyConfigured: false,
+    aiProvider: "auto" as const,
+    aiFallbackProvider: "none" as const,
+    anthropicKeyConfigured: false,
+    talkEngine: "pipeline" as const
   };
 }
 

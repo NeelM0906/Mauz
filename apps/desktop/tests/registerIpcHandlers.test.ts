@@ -14,7 +14,14 @@ vi.mock("electron", () => ({
 }));
 vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
 vi.mock("@mauzai/api/server", () => ({
-  getGatewayReadinessStatus: getGatewayReadinessStatusMock
+  getGatewayReadinessStatus: getGatewayReadinessStatusMock,
+  getAiProvidersStatus: vi.fn(async () => ({
+    preference: "auto",
+    fallbackPreference: "none",
+    activeProviderId: null,
+    fallbackProviderId: null,
+    providers: []
+  }))
 }));
 
 import {
@@ -47,7 +54,15 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.agentApprovalRespond,
   IPC_CHANNELS.agentStop,
-  IPC_CHANNELS.agentGatewayReadinessStatus
+  IPC_CHANNELS.agentGatewayReadinessStatus,
+  IPC_CHANNELS.providersStatus,
+  IPC_CHANNELS.providersConnect,
+  IPC_CHANNELS.providersConnectCode,
+  IPC_CHANNELS.providersConnectCancel,
+  IPC_CHANNELS.providersConnectOpenPage,
+  IPC_CHANNELS.providersDisconnect,
+  IPC_CHANNELS.talkTranscribe,
+  IPC_CHANNELS.talkCaptureContext
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -346,6 +361,69 @@ describe("registerIpcHandlers", () => {
     expect(capturedAskBody.sessionId).toBe("conv-42");
   });
 
+  it("returns AI provider status and forwards refresh requests", async () => {
+    const getProvidersStatus = vi.fn(async () => ({
+      preference: "auto" as const,
+      fallbackPreference: "none" as const,
+      activeProviderId: "claude-code" as const,
+      fallbackProviderId: null,
+      providers: [
+        {
+          id: "claude-code" as const,
+          label: "Claude Code subscription",
+          kind: "subscription" as const,
+          available: true,
+          detail: "Signed in (max plan).",
+          model: "sonnet"
+        }
+      ]
+    }));
+
+    registerIpcHandlers({ ...createOptions(), getProvidersStatus });
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.providersStatus);
+
+    await expect(handler(createInvokeEvent("desktop"), { refresh: true })).resolves.toMatchObject({
+      activeProviderId: "claude-code"
+    });
+    expect(getProvidersStatus).toHaveBeenCalledWith({ refresh: true });
+  });
+
+  it("starts subscription sign-in and opens only the link the CLI printed", async () => {
+    const state = {
+      connectId: "connect-1",
+      providerId: "codex" as const,
+      phase: "waiting" as const,
+      url: "https://auth.openai.com/codex/device",
+      userCode: "AB12-CD34E",
+      acceptsPastedCode: false,
+      message: null
+    };
+    const subscriptionConnector = {
+      connect: vi.fn(() => state),
+      submitCode: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(async () => {}),
+      getState: vi.fn(() => state)
+    };
+    const openExternal = vi.fn(async () => {});
+
+    registerIpcHandlers({ ...createOptions(), subscriptionConnector, openExternal });
+
+    await expect(
+      getRegisteredHandler(IPC_CHANNELS.providersConnect)(createInvokeEvent("desktop"), {
+        providerId: "codex"
+      })
+    ).resolves.toEqual(state);
+    await getRegisteredHandler(IPC_CHANNELS.providersConnectOpenPage)(createInvokeEvent("desktop"), {
+      connectId: "connect-1",
+      url: "https://attacker.example"
+    });
+
+    expect(subscriptionConnector.connect).toHaveBeenCalledWith("codex");
+    expect(openExternal).toHaveBeenCalledWith("https://auth.openai.com/codex/device");
+  });
+
   it("returns gateway readiness status for simple mode", async () => {
     const options = createOptions();
 
@@ -384,7 +462,11 @@ describe("registerIpcHandlers", () => {
       apiKeyConfigured: false,
       assistantMode: "agentic",
       backendBaseUrl: "http://gateway.test/v1",
-      agentMode: "approve"
+      agentMode: "approve",
+      aiProvider: "auto",
+      aiFallbackProvider: "none",
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline"
     });
 
     getGatewayReadinessStatusMock.mockResolvedValueOnce({
@@ -422,7 +504,11 @@ describe("registerIpcHandlers", () => {
       apiKeyConfigured: false,
       assistantMode: "agentic",
       backendBaseUrl: "",
-      agentMode: "approve"
+      agentMode: "approve",
+      aiProvider: "auto",
+      aiFallbackProvider: "none",
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline"
     });
 
     getGatewayReadinessStatusMock.mockResolvedValueOnce({
@@ -568,7 +654,11 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       apiKeyConfigured: false,
       assistantMode: "simple" as const,
       backendBaseUrl: "",
-      agentMode: "approve" as const
+      agentMode: "approve" as const,
+      aiProvider: "auto" as const,
+      aiFallbackProvider: "none" as const,
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline" as const
     })),
     updateSettings: vi.fn(async (update) => ({
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
@@ -586,7 +676,11 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       apiKeyConfigured: false,
       assistantMode: update.assistantMode ?? ("simple" as const),
       backendBaseUrl: update.backendBaseUrl ?? "",
-      agentMode: update.agentMode ?? ("approve" as const)
+      agentMode: update.agentMode ?? ("approve" as const),
+      aiProvider: update.aiProvider ?? ("auto" as const),
+      aiFallbackProvider: update.aiFallbackProvider ?? ("none" as const),
+      anthropicKeyConfigured: false,
+      talkEngine: update.talkEngine ?? ("pipeline" as const)
     }))
   };
 }

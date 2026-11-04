@@ -5,6 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # React refuses to start when react and react-dom versions differ; bump them together.
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
 
   - package-ecosystem: github-actions
     directory: /

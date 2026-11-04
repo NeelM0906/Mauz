@@ -2,8 +2,14 @@ import OpenAI, { APIConnectionError } from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import type { AskMauzRequest, AskMauzResponse, MauzDesktopContext, ScreenshotPayload } from "@mauzai/shared";
 import { BackendUnreachableError, MissingOpenAIKeyError } from "../errors";
-import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
+import { getSystemPromptFor } from "../prompts/mauzSystemPrompt";
 import { type BackendCapabilities, detectBackendCapabilities } from "../backend/capabilities";
+import {
+  answerWithFallback,
+  getDefaultAnswerProviderRegistry,
+  type AnswerProviderRegistry
+} from "../providers/registry";
+import type { AnswerImage, AnswerPrompt } from "../providers/types";
 
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
 const DEFAULT_SCREENSHOT_DETAIL = "auto";
@@ -17,6 +23,9 @@ export type AskMauzOptions = {
   backendApiKey?: string;
   installId?: string;
   fetchImpl?: typeof fetch;
+  registry?: Pick<AnswerProviderRegistry, "resolve">;
+  onText?: (textSoFar: string) => void;
+  signal?: AbortSignal;
 };
 
 export async function askMauz(
@@ -24,6 +33,13 @@ export async function askMauz(
   options: AskMauzOptions = {}
 ): Promise<AskMauzResponse> {
   const baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.MAUZ_BACKEND_BASE_URL);
+
+  // Without a gateway or an explicit OpenAI client, answer with the provider the user
+  // configured or signed in to (API key or Claude Code / Codex subscription).
+  if (baseUrl === undefined && options.client === undefined && options.apiKey === undefined) {
+    return askWithAnswerProvider(request, options);
+  }
+
   const backendApiKey = options.backendApiKey ?? process.env.MAUZ_BACKEND_API_KEY?.trim() ?? undefined;
   const installId = options.installId ?? process.env.MAUZ_INSTALL_ID?.trim() ?? undefined;
   const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -54,7 +70,7 @@ export async function askMauz(
         input: [
           {
             role: "system",
-            content: MAUZ_SYSTEM_PROMPT
+            content: getSystemPromptFor(request)
           },
           {
             role: "user",
@@ -81,6 +97,65 @@ export async function askMauz(
     model,
     ...(response.usage === undefined ? {} : { usage: response.usage })
   };
+}
+
+async function askWithAnswerProvider(
+  request: AskMauzRequest,
+  options: AskMauzOptions
+): Promise<AskMauzResponse> {
+  const registry = options.registry ?? getDefaultAnswerProviderRegistry();
+  const providers = await registry.resolve();
+  const result = await answerWithFallback(providers, buildAnswerPrompt(request), {
+    onText: options.onText,
+    signal: options.signal
+  });
+
+  return {
+    answer: result.text,
+    model: toModelLabel(result.model),
+    ...(result.usage === undefined ? {} : { usage: result.usage })
+  };
+}
+
+/** Provider-neutral prompt: system prompt, context text, and labeled images in send order. */
+export function buildAnswerPrompt(request: AskMauzRequest): AnswerPrompt {
+  const cursorCrop = request.context.pointer?.cursorCrop;
+  const screenshot =
+    cursorCrop === undefined || shouldIncludeFullScreenshot()
+      ? (request.context.pointer?.screenshot ?? request.context.screenshot)
+      : undefined;
+  const images: AnswerImage[] = [];
+
+  if (cursorCrop !== undefined) {
+    images.push({
+      mimeType: cursorCrop.mimeType,
+      base64: cursorCrop.base64,
+      label: `Image ${images.length + 1}: cursor-centered crop (${cursorCrop.width}x${cursorCrop.height}); the pointer is at its center and it shows the pointed target.`
+    });
+  }
+
+  if (screenshot !== undefined) {
+    images.push({
+      mimeType: screenshot.mimeType,
+      base64: screenshot.base64,
+      label: `Image ${images.length + 1}: screenshot of the display under the cursor (${screenshot.width}x${screenshot.height}), for broader context.`
+    });
+  }
+
+  return {
+    systemPrompt: getSystemPromptFor(request),
+    userText: buildContextText(request),
+    images
+  };
+}
+
+function toModelLabel(model: string): string {
+  const label = model
+    .trim()
+    .replace(/[^A-Za-z0-9._:/-]+/g, "-")
+    .slice(0, 128);
+
+  return label.length > 0 ? label : "unknown-model";
 }
 
 export function buildResponseContent(request: AskMauzRequest): ResponseInputMessageContentList {

@@ -1,6 +1,8 @@
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   AgentApprovalResponseSchema,
+  AiProvidersStatusRequestSchema,
+  AiProvidersStatusResponseSchema,
   AskMauzRequestSchema,
   ChatHistoryContinueRequestSchema,
   ChatHistoryDeleteRequestSchema,
@@ -10,15 +12,27 @@ import {
   IPC_CHANNELS,
   MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
+  SubscriptionCancelRequestSchema,
+  SubscriptionCodeRequestSchema,
+  SubscriptionConnectRequestSchema,
+  SubscriptionConnectStateSchema,
+  SubscriptionDisconnectRequestSchema,
+  TalkTranscribeRequestSchema,
+  TalkTranscribeResponseSchema,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
-import { getGatewayReadinessStatus } from "@mauzai/api/server";
+import {
+  getAiProvidersStatus,
+  getGatewayReadinessStatus,
+  type SubscriptionConnector
+} from "@mauzai/api/server";
 import type { AgentRunBridge } from "../agent/AgentRunBridge";
 import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
+import type { TalkTranscriber } from "../talk/TalkTranscriber";
 import { submitAskToLocalApi } from "./askApiClient";
 import { generateChatTitleFromLocalApi } from "./chatTitleApiClient";
 import { connectRealtimeToLocalApi } from "./realtimeApiClient";
@@ -32,6 +46,13 @@ type RegisterIpcHandlersOptions = {
   getSettings: () => Promise<MauzSettings>;
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
   agentRunBridge: AgentRunBridge;
+  getProvidersStatus?: typeof getAiProvidersStatus;
+  talkTranscriber?: Pick<TalkTranscriber, "transcribe">;
+  subscriptionConnector?: Pick<
+    SubscriptionConnector,
+    "connect" | "submitCode" | "cancel" | "disconnect" | "getState"
+  >;
+  openExternal?: (url: string) => Promise<void>;
 };
 
 const HANDLED_IPC_CHANNELS = [
@@ -52,7 +73,15 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.agentApprovalRespond,
   IPC_CHANNELS.agentStop,
-  IPC_CHANNELS.agentGatewayReadinessStatus
+  IPC_CHANNELS.agentGatewayReadinessStatus,
+  IPC_CHANNELS.providersStatus,
+  IPC_CHANNELS.providersConnect,
+  IPC_CHANNELS.providersConnectCode,
+  IPC_CHANNELS.providersConnectCancel,
+  IPC_CHANNELS.providersConnectOpenPage,
+  IPC_CHANNELS.providersDisconnect,
+  IPC_CHANNELS.talkTranscribe,
+  IPC_CHANNELS.talkCaptureContext
 ] as const;
 
 export function registerIpcHandlers({
@@ -63,7 +92,11 @@ export function registerIpcHandlers({
   localApiToken,
   getSettings,
   updateSettings,
-  agentRunBridge
+  agentRunBridge,
+  getProvidersStatus = getAiProvidersStatus,
+  talkTranscriber,
+  subscriptionConnector,
+  openExternal
 }: RegisterIpcHandlersOptions): void {
   for (const channel of HANDLED_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
@@ -128,6 +161,12 @@ export function registerIpcHandlers({
     assertTrustedSurface(event, ["popover"]);
     const request = AskMauzRequestSchema.parse(payload);
     const response = await submitAskToLocalApi(api, localApiToken, request);
+
+    // Spoken push-to-talk turns are part of a live voice session, not saved text chats.
+    if (request.responseStyle === "voice") {
+      return response;
+    }
+
     const fallbackTitle = buildFallbackChatTitle(request.question);
 
     try {
@@ -237,6 +276,75 @@ export function registerIpcHandlers({
       settings.assistantMode === "agentic" ? settings.backendBaseUrl.trim() || DEFAULT_HERMES_BASE_URL : "";
     const result = await getGatewayReadinessStatus(settings.assistantMode, baseUrl);
     return GatewayReadinessResultSchema.parse(result);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersStatus, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = AiProvidersStatusRequestSchema.parse(payload);
+    const status = await getProvidersStatus({ refresh: request?.refresh === true });
+
+    return AiProvidersStatusResponseSchema.parse(status);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnect, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = SubscriptionConnectRequestSchema.parse(payload);
+
+    return SubscriptionConnectStateSchema.parse(requireConnector().connect(request.providerId));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnectCode, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = SubscriptionCodeRequestSchema.parse(payload);
+    requireConnector().submitCode(request.connectId, request.code);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnectCancel, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    requireConnector().cancel(SubscriptionCancelRequestSchema.parse(payload).connectId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersConnectOpenPage, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const state = requireConnector().getState(SubscriptionCancelRequestSchema.parse(payload).connectId);
+
+    // Only the sign-in page the CLI printed can be opened, never a URL from the renderer.
+    if (state?.url?.startsWith("https://") === true && openExternal !== undefined) {
+      await openExternal(state.url);
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.providersDisconnect, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    const request = SubscriptionDisconnectRequestSchema.parse(payload);
+    await requireConnector().disconnect(request.providerId);
+
+    return AiProvidersStatusResponseSchema.parse(await getProvidersStatus({ refresh: true }));
+  });
+
+  function requireConnector(): NonNullable<RegisterIpcHandlersOptions["subscriptionConnector"]> {
+    if (subscriptionConnector === undefined) {
+      throw new Error("Connecting subscriptions is not available.");
+    }
+
+    return subscriptionConnector;
+  }
+
+  ipcMain.handle(IPC_CHANNELS.talkTranscribe, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
+    const request = TalkTranscribeRequestSchema.parse(payload);
+
+    if (talkTranscriber === undefined) {
+      throw new Error("Push to talk is not available in this build.");
+    }
+
+    return TalkTranscribeResponseSchema.parse(await talkTranscriber.transcribe(request));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.talkCaptureContext, async (event) => {
+    assertTrustedSurface(event, ["popover"]);
+    // Each spoken turn sees the screen as it is now, at the current pointer.
+    return contextCollector.collectForRealtime();
   });
 }
 
