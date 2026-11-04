@@ -18,6 +18,7 @@ const electronMock = vi.hoisted(() => {
 
     setAlwaysOnTop = vi.fn();
     setVisibleOnAllWorkspaces = vi.fn();
+    setContentProtection = vi.fn();
     setIgnoreMouseEvents = vi.fn();
     setPosition = vi.fn();
     setSize = vi.fn();
@@ -141,5 +142,44 @@ describe("PopoverWindowController", () => {
       expect(cueWindow?.isVisible()).toBe(false);
       return undefined;
     });
+  });
+
+  it("keeps a capture-excluded popover on screen while capturing", async () => {
+    const existingCount = electronMock.FakeBrowserWindow.instances.length;
+    const controller = new PopoverWindowController({
+      preloadPath: "/tmp/preload.js",
+      iconPath: "/tmp/mauzai.png",
+      rendererFile: "/tmp/index.html",
+      excludeFromCapture: true
+    });
+
+    await controller.showAt({ x: 100, y: 100 });
+    const popoverWin = electronMock.FakeBrowserWindow.instances[existingCount]!;
+
+    expect(popoverWin.setContentProtection).toHaveBeenCalledWith(true);
+    await controller.hideDuringCapture(async () => {
+      expect(popoverWin.isVisible()).toBe(true);
+      return undefined;
+    });
+  });
+
+  it("hides the popover during capture and restores it when capture exclusion is off", async () => {
+    const existingCount = electronMock.FakeBrowserWindow.instances.length;
+    const controller = new PopoverWindowController({
+      preloadPath: "/tmp/preload.js",
+      iconPath: "/tmp/mauzai.icns",
+      rendererFile: "/tmp/index.html",
+      excludeFromCapture: false
+    });
+
+    await controller.showAt({ x: 100, y: 100 });
+    const popoverWin = electronMock.FakeBrowserWindow.instances[existingCount]!;
+
+    expect(popoverWin.setContentProtection).not.toHaveBeenCalled();
+    await controller.hideDuringCapture(async () => {
+      expect(popoverWin.isVisible()).toBe(false);
+      return undefined;
+    });
+    expect(popoverWin.isVisible()).toBe(true);
   });
 });

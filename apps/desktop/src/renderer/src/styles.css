@@ -2368,12 +2368,17 @@ button {
 .settings-field span,
 .settings-check span,
 .settings-message,
+.settings-helper,
 .settings-footer span {
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 620;
   line-height: 1.25;
   letter-spacing: 0;
+}
+
+.settings-helper {
+  margin: 0;
 }
 
 .settings-field input,

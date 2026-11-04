@@ -22,6 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
     "@mauzai/shared": "workspace:*",
     "dotenv": "^17.4.2",
     "openai": "^6.38.0"

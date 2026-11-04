@@ -56,6 +56,37 @@ jobs:
       - name: Build smoke test
         run: pnpm smoke
 
+  windows:
+    name: Windows build and tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Lint runs on Ubuntu; Windows checkouts use CRLF line endings, which Prettier flags.
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build smoke test
+        run: pnpm smoke
+
   security-audit:
     name: Security audit
     runs-on: ubuntu-latest

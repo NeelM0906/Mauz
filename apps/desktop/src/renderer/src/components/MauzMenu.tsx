@@ -11,7 +11,7 @@ import {
   Wand2
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { MauzSettings } from "@mauzai/shared";
+import type { AiProvidersStatusResponse } from "@mauzai/shared";
 import type { LensAction } from "@renderer/state/useMauzStore";
 import { detectLensObject, toLensMemory } from "@renderer/lib/lensObject";
 import { mauzClient } from "@renderer/lib/mauzClient";
@@ -19,7 +19,6 @@ import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
 type MenuAction = LensAction | "task" | "talk";
-type AuthAction = "connect" | "disconnect";
 
 const LENS_ACTIONS: Array<{
   action: LensAction;
@@ -105,7 +104,26 @@ export function MauzMenu(): React.JSX.Element {
     setStatus
   } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<MenuAction | null>(null);
-  const [pendingAuthAction, setPendingAuthAction] = useState<AuthAction | null>(null);
+  const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+
+    void mauzClient.getProvidersStatus().then(
+      (status) => {
+        if (!disposed) {
+          setProvidersStatus(status);
+        }
+      },
+      () => {
+        // The status dot stays neutral; asking still reports a precise error.
+      }
+    );
+
+    return () => {
+      disposed = true;
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -157,32 +175,6 @@ export function MauzMenu(): React.JSX.Element {
       setMode("history");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz chat history failed.");
-    }
-  };
-
-  const handleOpenAiReconnect = async (): Promise<void> => {
-    setPendingAuthAction("connect");
-    setStatus(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({
-        openAiAuthDisconnected: false
-      });
-
-      setSettings(nextSettings);
-
-      if (nextSettings.apiKeyConfigured && settings?.apiKeyConfigured !== true) {
-        setStatus(getOpenAiReconnectMessage(nextSettings));
-        return;
-      }
-
-      const openedSettings = await mauzClient.openSettings();
-      setSettings(openedSettings);
-      setMode("settings");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "OpenAI reconnect failed.");
-    } finally {
-      setPendingAuthAction(null);
     }
   };
 
@@ -251,7 +243,8 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  const authState = getOpenAiAuthState(settings);
+  const providerState = getProviderState(providersStatus);
+  const providerLabel = getActiveProviderLabel(providersStatus);
 
   return (
     <section className="bubble-cluster-root" aria-label="Mauz menu">
@@ -274,18 +267,15 @@ export function MauzMenu(): React.JSX.Element {
           onClick={() => void handleLensAction("ask")}
         >
           <BrandLogo className="bubble-hub-logo" label="MauzAI" />
-          <span
-            className="bubble-auth-dot"
-            data-status={authState}
-            role="img"
-            aria-label={
-              authState === "connected"
-                ? "OpenAI connected"
-                : authState === "disconnected"
-                  ? "OpenAI disconnected"
-                  : "OpenAI not configured"
-            }
-          />
+          {providerState !== "unknown" ? (
+            <span
+              className="bubble-auth-dot"
+              data-status={providerState}
+              role="img"
+              aria-label={providerLabel ?? "No AI provider set up"}
+              title={providerLabel ?? "No AI provider set up"}
+            />
+          ) : null}
         </button>
 
         {LENS_ACTIONS.map((item, index) => {
@@ -372,16 +362,16 @@ export function MauzMenu(): React.JSX.Element {
         </button>
       </div>
 
-      {authState !== "connected" ? (
+      {providerState === "missing" ? (
         <button
           type="button"
           className="bubble-auth-pill"
-          aria-label="Connect OpenAI"
-          disabled={pendingAuthAction !== null}
-          onClick={() => void handleOpenAiReconnect()}
+          aria-label="Set up an AI provider"
+          disabled={pendingAction !== null}
+          onClick={() => void handleSettings()}
         >
           <KeyRound aria-hidden="true" size={11} />
-          {pendingAuthAction === "connect" ? "Opening..." : `${getOpenAiAuthActionLabel(settings)} OpenAI`}
+          Set up AI
         </button>
       ) : null}
 
@@ -394,34 +384,16 @@ export function MauzMenu(): React.JSX.Element {
   );
 }
 
-function getOpenAiAuthState(settings: MauzSettings | null): "connected" | "disconnected" | "missing" {
-  if (settings?.apiKeyConfigured === true) {
-    return "connected";
+function getProviderState(status: AiProvidersStatusResponse | null): "connected" | "missing" | "unknown" {
+  if (status === null) {
+    return "unknown";
   }
 
-  if (settings?.openAiAuthDisconnected === true) {
-    return "disconnected";
-  }
-
-  return "missing";
+  return status.activeProviderId === null ? "missing" : "connected";
 }
 
-function getOpenAiAuthActionLabel(settings: MauzSettings | null): string {
-  if (settings?.apiKeyConfigured === true || settings?.openAiAuthDisconnected === true) {
-    return "Reconnect";
-  }
+function getActiveProviderLabel(status: AiProvidersStatusResponse | null): string | null {
+  const active = status?.providers.find((provider) => provider.id === status.activeProviderId);
 
-  return "Connect";
-}
-
-function getOpenAiReconnectMessage(settings: MauzSettings): string {
-  if (settings.openAiCredentialSource === "saved") {
-    return "OpenAI reconnected with saved key.";
-  }
-
-  if (settings.openAiCredentialSource === "environment") {
-    return "OpenAI reconnected with launch key.";
-  }
-
-  return "OpenAI reconnected.";
+  return active === undefined ? null : `Answering with ${active.label} (${active.model})`;
 }

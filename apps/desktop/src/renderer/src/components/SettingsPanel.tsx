@@ -5,18 +5,25 @@ import {
   KeyRound,
   Lock,
   MousePointerClick,
+  RefreshCw,
   Save,
   Server,
   Settings2,
+  Sparkles,
   Trash2,
   Zap
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  AiFallbackPreference,
+  AiProviderId,
+  AiProviderPreference,
+  AiProvidersStatusResponse,
   GatewayReadinessResult,
   MauzSettings,
   MauzSettingsUpdate,
-  ShakeSensitivity
+  ShakeSensitivity,
+  TalkEngine
 } from "@mauzai/shared";
 import { DEFAULT_HERMES_BASE_URL } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
@@ -41,6 +48,20 @@ const SENSITIVITY_OPTIONS: Array<{
   }
 ];
 
+const AI_PROVIDER_CHOICES: Array<{ value: AiProviderId; label: string }> = [
+  { value: "claude-code", label: "Claude Code subscription" },
+  { value: "codex", label: "Codex (ChatGPT) subscription" },
+  { value: "anthropic", label: "Anthropic API key" },
+  { value: "openai", label: "OpenAI API key" }
+];
+const AI_PROVIDER_OPTIONS: Array<{ value: AiProviderPreference; label: string }> = [
+  { value: "auto", label: "Automatic (whichever is set up)" },
+  ...AI_PROVIDER_CHOICES
+];
+const TALK_ENGINE_OPTIONS: Array<{ value: TalkEngine; label: string }> = [
+  { value: "pipeline", label: "Push to talk (uses your AI provider)" },
+  { value: "realtime", label: "OpenAI Realtime voice (OpenAI key)" }
+];
 const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
 const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const UPCOMING_PROVIDER_OPTIONS = [
@@ -74,8 +95,28 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [gatewayReadiness, setGatewayReadiness] = useState<GatewayReadinessResult | null>(null);
   const [gatewayReadinessLoading, setGatewayReadinessLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
+  const [providersLoading, setProvidersLoading] = useState(false);
+  const [anthropicApiKeyDraft, setAnthropicApiKeyDraft] = useState("");
+  const [clearSavedAnthropicApiKey, setClearSavedAnthropicApiKey] = useState(false);
   const openAiApiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const gatewayReadinessRequestRef = useRef(0);
+
+  const loadProvidersStatus = useCallback(async (refresh: boolean): Promise<void> => {
+    setProvidersLoading(true);
+
+    try {
+      setProvidersStatus(await mauzClient.getProvidersStatus({ refresh }));
+    } catch {
+      setProvidersStatus(null);
+    } finally {
+      setProvidersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadProvidersStatus(false);
+  }, [loadProvidersStatus]);
 
   useEffect(() => {
     setDraft(settings);
@@ -254,9 +295,13 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         includeFullScreenshot: draft.includeFullScreenshot,
         assistantMode: draft.assistantMode,
         backendBaseUrl: draft.backendBaseUrl,
-        agentMode: draft.agentMode
+        agentMode: draft.agentMode,
+        aiProvider: draft.aiProvider,
+        aiFallbackProvider: draft.aiFallbackProvider,
+        talkEngine: draft.talkEngine
       };
       const trimmedApiKeyDraft = openAiApiKeyDraft.trim();
+      const trimmedAnthropicApiKeyDraft = anthropicApiKeyDraft.trim();
 
       if (trimmedApiKeyDraft.length > 0) {
         update.openAiApiKey = trimmedApiKeyDraft;
@@ -266,11 +311,22 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         update.clearOpenAiApiKey = true;
       }
 
+      if (trimmedAnthropicApiKeyDraft.length > 0) {
+        update.anthropicApiKey = trimmedAnthropicApiKeyDraft;
+      }
+
+      if (clearSavedAnthropicApiKey) {
+        update.clearAnthropicApiKey = true;
+      }
+
       const nextSettings = await mauzClient.updateSettings(update);
       setSettings(nextSettings);
       setOpenAiApiKeyDraft("");
       setClearSavedOpenAiApiKey(false);
+      setAnthropicApiKeyDraft("");
+      setClearSavedAnthropicApiKey(false);
       setSettingsMessage("Settings saved.");
+      void loadProvidersStatus(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update Mauz settings.";
 
@@ -290,6 +346,10 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
     );
   }
 
+  // A fallback only makes sense once more than one provider is set up.
+  const readyProviderCount = providersStatus?.providers.filter((provider) => provider.available).length ?? 0;
+  const showFallbackChoice = readyProviderCount > 1 || draft.aiFallbackProvider !== "none";
+
   return (
     <section className="settings-panel" data-chrome={chrome} aria-label="Mauz settings">
       <SettingsHeader chrome={chrome} onBack={handleBack} />
@@ -297,8 +357,152 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
       <div className="settings-content">
         <div className="settings-section">
           <div className="settings-label">
+            <Sparkles aria-hidden="true" size={15} />
+            <span>AI provider</span>
+          </div>
+          <label className="settings-field">
+            <span>Default provider</span>
+            <select
+              value={draft.aiProvider}
+              onChange={(event) => {
+                const aiProvider = event.target.value as AiProviderPreference;
+                updateDraft("aiProvider", aiProvider);
+
+                if (aiProvider === draft.aiFallbackProvider) {
+                  updateDraft("aiFallbackProvider", "none");
+                }
+              }}
+            >
+              {AI_PROVIDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {showFallbackChoice ? (
+            <label className="settings-field">
+              <span>Fallback provider</span>
+              <select
+                value={draft.aiFallbackProvider}
+                onChange={(event) =>
+                  updateDraft("aiFallbackProvider", event.target.value as AiFallbackPreference)
+                }
+              >
+                <option value="none">None</option>
+                {AI_PROVIDER_CHOICES.filter((option) => option.value !== draft.aiProvider).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className="auth-provider-list" aria-label="Detected AI providers" aria-busy={providersLoading}>
+            {providersStatus === null ? (
+              <p className="settings-helper">
+                {providersLoading
+                  ? "Checking Claude Code, Codex, and API keys..."
+                  : "Provider status unavailable."}
+              </p>
+            ) : (
+              providersStatus.providers.map((provider) => (
+                <div
+                  className="auth-provider-card"
+                  data-status={provider.available ? "active" : "missing"}
+                  key={provider.id}
+                >
+                  <div>
+                    <strong>{provider.label}</strong>
+                    <span>
+                      {provider.detail} Model: {provider.model}.
+                    </span>
+                  </div>
+                  <span className="provider-status">
+                    {provider.id === providersStatus.activeProviderId ? (
+                      <>
+                        <Check aria-hidden="true" size={12} />
+                        In use
+                      </>
+                    ) : provider.id === providersStatus.fallbackProviderId ? (
+                      "Fallback"
+                    ) : provider.available ? (
+                      "Ready"
+                    ) : (
+                      "Not set up"
+                    )}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="settings-inline-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={providersLoading}
+              onClick={() => void loadProvidersStatus(true)}
+            >
+              <RefreshCw aria-hidden="true" size={12} />
+              <span>{providersLoading ? "Checking" : "Check again"}</span>
+            </button>
+          </div>
+          <p className="settings-helper">
+            With one provider set up, Mauz uses it. With several, pick a default and a fallback that answers
+            when the default is not ready or fails.
+          </p>
+          <label className="settings-field api-key-field">
+            <span>Anthropic API key</span>
+            <input
+              type="password"
+              value={anthropicApiKeyDraft}
+              placeholder={
+                draft.anthropicKeyConfigured ? "Configured - enter a new key to replace" : "sk-ant-..."
+              }
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setAnthropicApiKeyDraft(event.target.value);
+                setClearSavedAnthropicApiKey(false);
+              }}
+            />
+          </label>
+          {draft.anthropicKeyConfigured ? (
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={saving || clearSavedAnthropicApiKey}
+                onClick={() => {
+                  setAnthropicApiKeyDraft("");
+                  setClearSavedAnthropicApiKey(true);
+                  setSettingsMessage("Saved Anthropic key will be cleared on Save.");
+                }}
+              >
+                <Trash2 aria-hidden="true" size={12} />
+                <span>{clearSavedAnthropicApiKey ? "Marked clear" : "Clear saved key"}</span>
+              </button>
+            </div>
+          ) : null}
+          <label className="settings-field">
+            <span>Talk uses</span>
+            <select
+              value={draft.talkEngine}
+              onChange={(event) => updateDraft("talkEngine", event.target.value as TalkEngine)}
+            >
+              {TALK_ENGINE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">
             <KeyRound aria-hidden="true" size={15} />
-            <span>Login</span>
+            <span>OpenAI API key</span>
           </div>
           <div className="auth-provider-list" aria-label="Model provider login options">
             <div className="auth-provider-card" data-status={getOpenAiAuthState(draft)} key="OpenAI login">

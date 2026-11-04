@@ -3,6 +3,7 @@ import type { MauzDesktopContext, PermissionError, Platform, PointerContext } fr
 import { ActiveWindowService, type ActiveWindowMetadata } from "./ActiveWindowService";
 import { SelectedTextService } from "./SelectedTextService";
 import { ScreenshotCaptureError, ScreenshotService } from "./ScreenshotService";
+import type { WindowsContextHelper } from "./WindowsContextHelper";
 
 const supportedPlatforms = new Set<NodeJS.Platform>(["darwin", "win32", "linux"]);
 
@@ -20,10 +21,13 @@ type ContextCollectorOptions = {
   activeWindowService?: ActiveWindowService;
   selectedTextService?: SelectedTextService;
   captureHider?: CaptureHider;
+  windowsContextHelper?: WindowsContextHelper | undefined;
+  ownProcessId?: number;
 };
 
 type ActivationSnapshot = ActiveWindowMetadata & {
   cursor: Point;
+  selectedText?: string | undefined;
 };
 
 type CollectPointerContextOptions = {
@@ -36,13 +40,17 @@ export class ContextCollector {
   private readonly activeWindowService: ActiveWindowService;
   private readonly selectedTextService: SelectedTextService;
   private readonly captureHider: CaptureHider | undefined;
+  private readonly ownProcessId: number;
   private activationSnapshot: ActivationSnapshot | null = null;
 
   constructor(options: ContextCollectorOptions = {}) {
     this.screenshotService = options.screenshotService ?? new ScreenshotService();
-    this.activeWindowService = options.activeWindowService ?? new ActiveWindowService();
-    this.selectedTextService = options.selectedTextService ?? new SelectedTextService();
+    this.activeWindowService =
+      options.activeWindowService ?? new ActiveWindowService({ windowsHelper: options.windowsContextHelper });
+    this.selectedTextService =
+      options.selectedTextService ?? new SelectedTextService({ windowsHelper: options.windowsContextHelper });
     this.captureHider = options.captureHider;
+    this.ownProcessId = options.ownProcessId ?? process.pid;
   }
 
   collectBasicContext(cursor: Point = screen.getCursorScreenPoint()): MauzDesktopContext {
@@ -96,10 +104,15 @@ export class ContextCollector {
 
   async prepareForActivation(cursor: Point): Promise<void> {
     const metadata = await this.captureActiveWindowMetadata();
+    // Held in memory only; it is sent to a model only if the user picks an action.
+    const selectedText = this.selectedTextService.capturesAtActivation
+      ? await this.captureSelectedText(metadata)
+      : undefined;
 
     this.activationSnapshot = withOptionalActivationFields({
       ...metadata,
-      cursor
+      cursor,
+      selectedText
     });
   }
 
@@ -128,7 +141,9 @@ export class ContextCollector {
         ? activationSnapshot.cursor
         : screen.getCursorScreenPoint();
     const basicContext = this.collectBasicContext(cursor);
-    const selectedText = await this.captureSelectedText(activeMetadata);
+    const selectedText = this.selectedTextService.capturesAtActivation
+      ? activationSnapshot?.selectedText
+      : await this.captureSelectedText(activeMetadata);
 
     return withOptionalContextFields({
       ...basicContext,
@@ -139,7 +154,11 @@ export class ContextCollector {
 
   private async captureActiveWindowMetadata(): Promise<ActiveWindowMetadata> {
     try {
-      return await this.activeWindowService.capture();
+      const metadata = await this.activeWindowService.capture();
+
+      // While a Mauz window has focus (later voice turns), Mauz itself is the frontmost app,
+      // which tells the model nothing about what the user is working on.
+      return metadata.activeApp?.processId === this.ownProcessId ? {} : metadata;
     } catch {
       return {};
     }
@@ -223,6 +242,10 @@ function withOptionalActivationFields(snapshot: ActivationSnapshot): ActivationS
 
   if (snapshot.activeWindow !== undefined) {
     nextSnapshot.activeWindow = snapshot.activeWindow;
+  }
+
+  if (snapshot.selectedText?.trim()) {
+    nextSnapshot.selectedText = snapshot.selectedText;
   }
 
   return nextSnapshot;

@@ -1,0 +1,387 @@
+import { tmpdir } from "node:os";
+import type {
+  AiFallbackPreference,
+  AiProviderId,
+  AiProviderKind,
+  AiProviderPreference,
+  AiProviderStatus,
+  AiProvidersStatusResponse
+} from "@mauzai/shared";
+import { NoAiProviderError } from "../errors";
+import { AnthropicApiProvider, DEFAULT_ANTHROPIC_ASK_MODEL } from "./anthropicProvider";
+import { ClaudeCodeProvider, DEFAULT_CLAUDE_CODE_MODEL } from "./claudeCodeProvider";
+import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from "./cliCommand";
+import { CodexProvider } from "./codexProvider";
+import { DEFAULT_OPENAI_ASK_MODEL, OpenAiApiProvider } from "./openaiProvider";
+import { parseJsonLine, runAndCollect, spawnCliProcess, type SpawnLike } from "./processRunner";
+import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult, ProviderDetection } from "./types";
+
+/**
+ * Auto order, used only when the default is "auto" and several providers are ready: a key
+ * the user added on purpose wins, then the subscriptions they are already signed in to.
+ */
+export const AUTO_PROVIDER_ORDER: readonly AiProviderId[] = ["anthropic", "openai", "claude-code", "codex"];
+
+const PROVIDER_LABELS: Record<AiProviderId, string> = {
+  "claude-code": "Claude Code subscription",
+  codex: "Codex (ChatGPT) subscription",
+  anthropic: "Anthropic API key",
+  openai: "OpenAI API key"
+};
+
+const PROVIDER_KINDS: Record<AiProviderId, AiProviderKind> = {
+  "claude-code": "subscription",
+  codex: "subscription",
+  anthropic: "api-key",
+  openai: "api-key"
+};
+
+const CLI_DETECTION_TTL_MS = 5 * 60_000;
+const CLI_STATUS_TIMEOUT_MS = 15_000;
+
+export type AnswerProviderRegistryOptions = {
+  env?: () => NodeJS.ProcessEnv;
+  spawn?: SpawnLike;
+  resolveCommand?: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
+  providers?: Partial<Record<AiProviderId, AnswerProvider>>;
+  now?: () => number;
+};
+
+export type ResolvedAnswerProviders = {
+  primary: AnswerProvider;
+  /** Used when the primary fails before streaming any text. */
+  fallback: AnswerProvider | null;
+};
+
+type CliDetectionCache = {
+  detectedAt: number;
+  promise: Promise<Record<"claude-code" | "codex", ProviderDetection>>;
+};
+
+export class AnswerProviderRegistry {
+  private readonly readEnv: () => NodeJS.ProcessEnv;
+  private readonly spawnProcess: SpawnLike;
+  private readonly resolveCommand: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
+  private readonly providers: Record<AiProviderId, AnswerProvider>;
+  private readonly now: () => number;
+  private cliDetection: CliDetectionCache | null = null;
+  private lastCliDetection: Record<"claude-code" | "codex", ProviderDetection> | null = null;
+
+  constructor(options: AnswerProviderRegistryOptions = {}) {
+    this.readEnv = options.env ?? (() => process.env);
+    this.spawnProcess = options.spawn ?? spawnCliProcess;
+    this.resolveCommand =
+      options.resolveCommand ??
+      ((name, env) =>
+        resolveCliCommand(name, {
+          env,
+          fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
+        }));
+    this.now = options.now ?? Date.now;
+    this.providers = {
+      "claude-code": options.providers?.["claude-code"] ?? new ClaudeCodeProvider({ env: this.readEnv }),
+      codex: options.providers?.codex ?? new CodexProvider({ env: this.readEnv }),
+      anthropic: options.providers?.anthropic ?? new AnthropicApiProvider({ env: this.readEnv }),
+      openai: options.providers?.openai ?? new OpenAiApiProvider({ env: this.readEnv })
+    };
+  }
+
+  /** Detects every provider; CLI sign-in checks are cached because each takes a couple of seconds. */
+  async getStatus(options: { refresh?: boolean } = {}): Promise<AiProvidersStatusResponse> {
+    const cli = await this.detectCliProviders(options.refresh === true);
+    const env = this.readEnv();
+    const detections: Record<AiProviderId, ProviderDetection> = {
+      ...cli,
+      anthropic: detectApiKey(env.ANTHROPIC_API_KEY, env.ANTHROPIC_ASK_MODEL, DEFAULT_ANTHROPIC_ASK_MODEL),
+      openai: detectApiKey(env.OPENAI_API_KEY, env.OPENAI_ASK_MODEL, DEFAULT_OPENAI_ASK_MODEL)
+    };
+    const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
+      id,
+      label: PROVIDER_LABELS[id],
+      kind: PROVIDER_KINDS[id],
+      ...detections[id]
+    }));
+    const preference = readPreference(env.MAUZ_AI_PROVIDER);
+    const fallbackPreference = readFallbackPreference(env.MAUZ_AI_FALLBACK_PROVIDER);
+    const { active, fallback } = pickProviders(preference, fallbackPreference, providers);
+
+    return {
+      preference,
+      fallbackPreference,
+      activeProviderId: active?.id ?? null,
+      fallbackProviderId: fallback?.id ?? null,
+      providers
+    };
+  }
+
+  /** Returns the providers that should answer now, or explains why none can. */
+  async resolve(): Promise<ResolvedAnswerProviders> {
+    const status = await this.getStatus();
+
+    if (status.activeProviderId !== null) {
+      return {
+        primary: this.providers[status.activeProviderId],
+        fallback: status.fallbackProviderId === null ? null : this.providers[status.fallbackProviderId]
+      };
+    }
+
+    if (status.preference !== "auto") {
+      const selected = status.providers.find((provider) => provider.id === status.preference);
+      throw new NoAiProviderError(
+        `${PROVIDER_LABELS[status.preference]} is selected in Settings but not ready: ${selected?.detail ?? "unavailable"}`
+      );
+    }
+
+    throw new NoAiProviderError();
+  }
+
+  /**
+   * Starts slow provider setup ahead of a likely question. Uses cached detection only,
+   * so it never blocks the caller.
+   */
+  prewarm(systemPrompt: string): void {
+    const cli = this.lastCliDetection;
+
+    if (cli === null) {
+      void this.detectCliProviders(false).catch(() => {});
+      return;
+    }
+
+    const env = this.readEnv();
+    const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
+      id,
+      label: PROVIDER_LABELS[id],
+      kind: PROVIDER_KINDS[id],
+      ...(id === "claude-code" || id === "codex"
+        ? cli[id]
+        : detectApiKey(id === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY, undefined, "unused"))
+    }));
+    const { active } = pickProviders(
+      readPreference(env.MAUZ_AI_PROVIDER),
+      readFallbackPreference(env.MAUZ_AI_FALLBACK_PROVIDER),
+      providers
+    );
+
+    if (active !== null) {
+      this.providers[active.id].prewarm?.(systemPrompt);
+    }
+  }
+
+  dispose(): void {
+    for (const provider of Object.values(this.providers)) {
+      provider.dispose?.();
+    }
+  }
+
+  private detectCliProviders(refresh: boolean): Promise<Record<"claude-code" | "codex", ProviderDetection>> {
+    const cached = this.cliDetection;
+
+    if (!refresh && cached !== null && this.now() - cached.detectedAt < CLI_DETECTION_TTL_MS) {
+      return cached.promise;
+    }
+
+    const promise = Promise.all([this.detectClaudeCode(), this.detectCodex()]).then(([claudeCode, codex]) => {
+      const detection = { "claude-code": claudeCode, codex };
+      this.lastCliDetection = detection;
+      return detection;
+    });
+
+    this.cliDetection = { detectedAt: this.now(), promise };
+    promise.catch(() => {
+      if (this.cliDetection?.promise === promise) {
+        this.cliDetection = null;
+      }
+    });
+
+    return promise;
+  }
+
+  private async detectClaudeCode(): Promise<ProviderDetection> {
+    const env = this.readEnv();
+    const model = env.MAUZ_CLAUDE_CODE_MODEL?.trim() || DEFAULT_CLAUDE_CODE_MODEL;
+    const command = this.resolveCommand(env.MAUZ_CLAUDE_CODE_PATH?.trim() || "claude", env);
+
+    if (command === null) {
+      return { available: false, detail: "Claude Code is not installed.", model };
+    }
+
+    try {
+      const output = await this.runStatusCommand(
+        command,
+        ["auth", "status"],
+        ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+      );
+      const status = parseJsonLine(output.stdout.trim());
+
+      if (status?.loggedIn === true) {
+        const plan = typeof status.subscriptionType === "string" ? ` (${status.subscriptionType} plan)` : "";
+        return { available: true, detail: `Signed in${plan}.`, model };
+      }
+
+      return { available: false, detail: "Not signed in. Run `claude` in a terminal to sign in.", model };
+    } catch (error) {
+      return { available: false, detail: describeDetectionError("Claude Code", error), model };
+    }
+  }
+
+  private async detectCodex(): Promise<ProviderDetection> {
+    const env = this.readEnv();
+    const model = env.MAUZ_CODEX_MODEL?.trim() || "default";
+    const command = this.resolveCommand(env.MAUZ_CODEX_PATH?.trim() || "codex", env);
+
+    if (command === null) {
+      return { available: false, detail: "Codex is not installed.", model };
+    }
+
+    try {
+      const output = await this.runStatusCommand(command, ["login", "status"], ["OPENAI_API_KEY"]);
+      const statusText = `${output.stdout}\n${output.stderr}`.trim();
+      const loggedIn = /logged in/i.test(statusText) && !/not logged in/i.test(statusText);
+
+      if (loggedIn) {
+        const via = /using (chatgpt|an api key)/i.exec(statusText)?.[1];
+        return {
+          available: true,
+          detail: via === undefined ? "Signed in." : `Signed in with ${via}.`,
+          model
+        };
+      }
+
+      return { available: false, detail: "Not signed in. Run `codex login` in a terminal.", model };
+    } catch (error) {
+      return { available: false, detail: describeDetectionError("Codex", error), model };
+    }
+  }
+
+  private async runStatusCommand(
+    command: ResolvedCliCommand,
+    subcommand: string[],
+    removeEnvKeys: readonly string[]
+  ): Promise<{ stdout: string; stderr: string }> {
+    const child = this.spawnProcess(command.command, [...command.args, ...subcommand], {
+      cwd: tmpdir(),
+      env: { ...buildCliEnvironment(this.readEnv(), removeEnvKeys), ...command.env }
+    });
+
+    return runAndCollect(child, { timeoutMs: CLI_STATUS_TIMEOUT_MS });
+  }
+}
+
+/**
+ * Picks the provider that answers and the one that backs it up. The default answers when it is
+ * ready; otherwise a ready fallback takes over. With a single provisioned provider, "auto" uses it.
+ */
+export function pickProviders(
+  preference: AiProviderPreference,
+  fallbackPreference: AiFallbackPreference,
+  providers: readonly AiProviderStatus[]
+): { active: AiProviderStatus | null; fallback: AiProviderStatus | null } {
+  const primary = pickProvider(preference, providers);
+  const fallback =
+    fallbackPreference === "none"
+      ? null
+      : (providers.find((provider) => provider.id === fallbackPreference && provider.available) ?? null);
+
+  if (primary === null) {
+    return { active: fallback, fallback: null };
+  }
+
+  return { active: primary, fallback: fallback?.id === primary.id ? null : fallback };
+}
+
+/**
+ * Answers with the primary provider and retries once with the fallback when the primary fails
+ * before any text reached the user. Cancellation is never retried.
+ */
+export async function answerWithFallback(
+  providers: ResolvedAnswerProviders,
+  prompt: AnswerPrompt,
+  options: AnswerOptions = {}
+): Promise<AnswerResult> {
+  let streamedText = false;
+  const onText =
+    options.onText === undefined
+      ? undefined
+      : (textSoFar: string): void => {
+          streamedText ||= textSoFar.length > 0;
+          options.onText?.(textSoFar);
+        };
+
+  try {
+    return await providers.primary.answer(prompt, { ...options, onText });
+  } catch (error) {
+    if (providers.fallback === null || streamedText || options.signal?.aborted === true) {
+      throw error;
+    }
+
+    return providers.fallback.answer(prompt, options);
+  }
+}
+
+export function pickProvider(
+  preference: AiProviderPreference,
+  providers: readonly AiProviderStatus[]
+): AiProviderStatus | null {
+  if (preference !== "auto") {
+    const selected = providers.find((provider) => provider.id === preference);
+    return selected?.available === true ? selected : null;
+  }
+
+  for (const id of AUTO_PROVIDER_ORDER) {
+    const provider = providers.find((candidate) => candidate.id === id);
+
+    if (provider?.available === true) {
+      return provider;
+    }
+  }
+
+  return null;
+}
+
+function readPreference(value: string | undefined): AiProviderPreference {
+  const normalized = value?.trim();
+
+  return normalized === "claude-code" ||
+    normalized === "codex" ||
+    normalized === "anthropic" ||
+    normalized === "openai"
+    ? normalized
+    : "auto";
+}
+
+function readFallbackPreference(value: string | undefined): AiFallbackPreference {
+  const normalized = value?.trim();
+
+  return normalized === "claude-code" ||
+    normalized === "codex" ||
+    normalized === "anthropic" ||
+    normalized === "openai"
+    ? normalized
+    : "none";
+}
+
+function detectApiKey(
+  apiKey: string | undefined,
+  configuredModel: string | undefined,
+  defaultModel: string
+): ProviderDetection {
+  const model = configuredModel?.trim() || defaultModel;
+
+  return apiKey?.trim()
+    ? { available: true, detail: "API key configured.", model }
+    : { available: false, detail: "No API key added.", model };
+}
+
+function describeDetectionError(name: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const detail = message.length <= 120 ? message : `${message.slice(0, 117)}...`;
+
+  return `Could not check ${name} sign-in: ${detail}`;
+}
+
+let defaultRegistry: AnswerProviderRegistry | null = null;
+
+export function getDefaultAnswerProviderRegistry(): AnswerProviderRegistry {
+  defaultRegistry ??= new AnswerProviderRegistry();
+  return defaultRegistry;
+}

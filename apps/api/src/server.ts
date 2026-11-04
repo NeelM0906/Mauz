@@ -2,8 +2,11 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { config as loadDotenv } from "dotenv";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { registerAskRoute, type AskMauzHandler } from "./routes/ask";
+import type { AiProvidersStatusResponse } from "@mauzai/shared";
+import { registerAskRoute, type AnswerStreamHooks, type AskMauzHandler } from "./routes/ask";
 import type { RunLifecycleHooks } from "./backend/askViaRuns";
+import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
+import { getDefaultAnswerProviderRegistry } from "./providers/registry";
 import { registerChatTitleRoute, type ChatTitleHandler } from "./routes/chatTitle";
 import { registerHealthzRoute } from "./routes/healthz";
 import { registerRealtimeRoute, type RealtimeConnectHandler } from "./routes/realtime";
@@ -14,9 +17,27 @@ export type {
   AgentApprovalChoice,
   RunActivityEvent
 } from "./backend/askViaRuns";
+export type { AnswerStreamHooks } from "./routes/ask";
+export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
 export { stopRun } from "./backend/runsClient";
 export type { RunsClientOptions } from "./backend/runsClient";
 export { getGatewayReadinessStatus } from "./backend/capabilities";
+
+/** Detects which AI providers (API keys, Claude Code, Codex) can answer right now. */
+export function getAiProvidersStatus(
+  options: { refresh?: boolean } = {}
+): Promise<AiProvidersStatusResponse> {
+  return getDefaultAnswerProviderRegistry().getStatus(options);
+}
+
+/** Starts slow provider setup (for example the Claude Code CLI) when a question is likely. */
+export function prewarmAnswerProvider(): void {
+  getDefaultAnswerProviderRegistry().prewarm(MAUZ_SYSTEM_PROMPT);
+}
+
+export function disposeAnswerProviders(): void {
+  getDefaultAnswerProviderRegistry().dispose();
+}
 
 export type CreateMauzApiServerOptions = {
   askHandler?: AskMauzHandler;
@@ -26,6 +47,7 @@ export type CreateMauzApiServerOptions = {
   logger?: boolean;
   loadEnv?: boolean;
   runHooks?: RunLifecycleHooks;
+  answerHooks?: AnswerStreamHooks;
 };
 
 export async function createMauzApiServer(
@@ -44,7 +66,8 @@ export async function createMauzApiServer(
   await registerAskRoute(app, {
     ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
     ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
-    ...(options.runHooks === undefined ? {} : { runHooks: options.runHooks })
+    ...(options.runHooks === undefined ? {} : { runHooks: options.runHooks }),
+    ...(options.answerHooks === undefined ? {} : { answerHooks: options.answerHooks })
   });
   await registerChatTitleRoute(app, {
     ...(options.chatTitleHandler === undefined ? {} : { chatTitleHandler: options.chatTitleHandler }),

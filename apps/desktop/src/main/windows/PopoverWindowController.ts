@@ -19,6 +19,13 @@ type PopoverWindowControllerOptions = {
   rendererUrl?: string;
   rendererFile: string;
   onHide?: (reason: HideReason) => void;
+  /**
+   * Exclude Mauz windows from screen capture (Windows display affinity) so screenshots can
+   * be taken without hiding the popover. Defaults to on for Windows.
+   */
+  excludeFromCapture?: boolean;
+  /** Takes keyboard focus when the OS refuses it to a background app (Windows foreground lock). */
+  forceForeground?: (nativeWindowHandle: bigint) => Promise<unknown>;
 };
 
 type ShowOptions = {
@@ -40,9 +47,11 @@ export class PopoverWindowController {
   private readonly options: PopoverWindowControllerOptions;
   private lastAnchorPoint: Point | null = null;
   private currentSize: Size = { ...MAUZ_POPUP_SIZE };
+  private readonly excludeFromCapture: boolean;
 
   constructor(options: PopoverWindowControllerOptions) {
     this.options = options;
+    this.excludeFromCapture = options.excludeFromCapture ?? process.platform === "win32";
   }
 
   async create(): Promise<void> {
@@ -81,6 +90,10 @@ export class PopoverWindowController {
     win.setAlwaysOnTop(true, "pop-up-menu");
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
+    if (this.excludeFromCapture) {
+      win.setContentProtection(true);
+    }
+
     win.on("blur", () => {
       this.hide("blur");
     });
@@ -113,6 +126,12 @@ export class PopoverWindowController {
     win.setPosition(position.x, position.y, false);
     win.show();
     win.focus();
+
+    // Not gated on win.isFocused(): on Windows it reports the thread's active window, which is
+    // true even when the foreground lock kept the popover behind the app the user was in.
+    if (this.options.forceForeground !== undefined) {
+      void this.options.forceForeground(readNativeWindowHandle(win)).catch(() => {});
+    }
 
     if (options.notifyActivation ?? true) {
       win.webContents.send(IPC_CHANNELS.activation);
@@ -168,10 +187,16 @@ export class PopoverWindowController {
 
   async hideDuringCapture<T>(operation: () => Promise<T>): Promise<T> {
     const win = this.requireWindow();
-    const wasVisible = win.isVisible();
-    const anchorPoint = this.lastAnchorPoint ?? screen.getCursorScreenPoint();
 
     this.hideTargetCue();
+
+    if (this.excludeFromCapture) {
+      // The popover is already invisible to screen capture, so it can stay on screen.
+      return operation();
+    }
+
+    const wasVisible = win.isVisible();
+    const anchorPoint = this.lastAnchorPoint ?? screen.getCursorScreenPoint();
 
     if (wasVisible) {
       win.hide();
@@ -288,6 +313,10 @@ export class PopoverWindowController {
     cue.setAlwaysOnTop(true, "screen-saver");
     cue.setIgnoreMouseEvents(true, { forward: true });
     cue.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+    if (this.excludeFromCapture) {
+      cue.setContentProtection(true);
+    }
     this.targetCueWindow = cue;
     await cue.loadURL(getTargetCueDataUrl());
 
@@ -316,6 +345,12 @@ function withRendererSurface(rendererUrl: string, surface: "popover"): string {
   url.searchParams.set("surface", surface);
 
   return url.toString();
+}
+
+function readNativeWindowHandle(win: BrowserWindow): bigint {
+  const handle = win.getNativeWindowHandle();
+
+  return handle.length >= 8 ? handle.readBigUInt64LE(0) : BigInt(handle.readUInt32LE(0));
 }
 
 function delay(ms: number): Promise<void> {

@@ -3,8 +3,11 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
 import {
+  AiFallbackPreferenceSchema,
+  AiProviderPreferenceSchema,
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
+  TalkEngineSchema,
   readBooleanEnv,
   type AgentMode,
   type AssistantMode,
@@ -22,6 +25,7 @@ type SettingsServiceOptions = {
   secretCodec?: SecretCodec;
   defaults?: StoredMauzSettings;
   environmentApiKey?: string | null | undefined;
+  environmentAnthropicApiKey?: string | null | undefined;
 };
 
 const SETTINGS_FILE_NAME = "mauz-settings.json";
@@ -42,13 +46,26 @@ type ApiKeySettingsUpdate = {
   clearOpenAiApiKey?: boolean | undefined;
 };
 
-type StoredMauzSettings = Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource"> & {
+type AnthropicKeySettingsUpdate = {
+  anthropicApiKey?: string | null | undefined;
+  clearAnthropicApiKey?: boolean | undefined;
+};
+
+type StoredMauzSettings = Omit<
+  MauzSettings,
+  "apiKeyConfigured" | "openAiCredentialSource" | "anthropicKeyConfigured"
+> & {
   encryptedOpenAiApiKey?: string | undefined;
+  encryptedAnthropicApiKey?: string | undefined;
   installId: string;
 };
 
-export type MauzRuntimeSettings = Omit<StoredMauzSettings, "encryptedOpenAiApiKey"> & {
+export type MauzRuntimeSettings = Omit<
+  StoredMauzSettings,
+  "encryptedOpenAiApiKey" | "encryptedAnthropicApiKey"
+> & {
   openAiApiKey?: string | undefined;
+  anthropicApiKey?: string | undefined;
 };
 
 export class SettingsService {
@@ -60,12 +77,17 @@ export class SettingsService {
   private readonly secretCodec: SecretCodec;
   private readonly defaults: StoredMauzSettings;
   private readonly environmentApiKey: string | undefined;
+  private readonly environmentAnthropicApiKey: string | undefined;
   private cachedSettings: StoredMauzSettings | null = null;
   private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(options: SettingsServiceOptions = {}) {
     const rawEnvironmentApiKey =
       "environmentApiKey" in options ? options.environmentApiKey : process.env.OPENAI_API_KEY;
+    const rawEnvironmentAnthropicApiKey =
+      "environmentAnthropicApiKey" in options
+        ? options.environmentAnthropicApiKey
+        : process.env.ANTHROPIC_API_KEY;
 
     this.settingsPath = options.settingsPath ?? join(app.getPath("userData"), SETTINGS_FILE_NAME);
     this.readTextFile = options.readTextFile ?? readFileUtf8;
@@ -75,21 +97,34 @@ export class SettingsService {
     this.secretCodec = options.secretCodec ?? createSafeStorageCodec();
     this.defaults = options.defaults ?? getDefaultSettings();
     this.environmentApiKey = normalizeApiKey(rawEnvironmentApiKey);
+    this.environmentAnthropicApiKey = normalizeApiKey(rawEnvironmentAnthropicApiKey);
   }
 
   async get(): Promise<MauzSettings> {
-    return toPublicSettings(await this.getStored(), this.environmentApiKey, this.secretCodec);
+    return toPublicSettings(
+      await this.getStored(),
+      this.environmentApiKey,
+      this.environmentAnthropicApiKey,
+      this.secretCodec
+    );
   }
 
   async getRuntime(): Promise<MauzRuntimeSettings> {
     const stored = await this.getStored();
-    const { encryptedOpenAiApiKey: _encryptedOpenAiApiKey, ...runtimeSettings } = stored;
+    const {
+      encryptedOpenAiApiKey: _encryptedOpenAiApiKey,
+      encryptedAnthropicApiKey: _encryptedAnthropicApiKey,
+      ...runtimeSettings
+    } = stored;
     const savedApiKey = decryptStoredApiKey(stored, this.secretCodec);
     const runtimeApiKey = stored.openAiAuthDisconnected ? undefined : (savedApiKey ?? this.environmentApiKey);
+    const anthropicApiKey =
+      decryptSecret(stored.encryptedAnthropicApiKey, this.secretCodec) ?? this.environmentAnthropicApiKey;
 
     return {
       ...runtimeSettings,
-      ...(runtimeApiKey ? { openAiApiKey: runtimeApiKey } : {})
+      ...(runtimeApiKey ? { openAiApiKey: runtimeApiKey } : {}),
+      ...(anthropicApiKey ? { anthropicApiKey } : {})
     };
   }
 
@@ -113,7 +148,11 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "assistantMode", parsedUpdate.assistantMode);
       applyDefinedSetting(nextSettings, "backendBaseUrl", parsedUpdate.backendBaseUrl);
       applyDefinedSetting(nextSettings, "agentMode", parsedUpdate.agentMode);
+      applyDefinedSetting(nextSettings, "aiProvider", parsedUpdate.aiProvider);
+      applyDefinedSetting(nextSettings, "aiFallbackProvider", parsedUpdate.aiFallbackProvider);
+      applyDefinedSetting(nextSettings, "talkEngine", parsedUpdate.talkEngine);
       applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
+      applyAnthropicKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
 
       await this.ensureDirectory(dirname(this.settingsPath));
       const tempPath = `${this.settingsPath}.${process.pid}.${Date.now()}.tmp`;
@@ -121,7 +160,12 @@ export class SettingsService {
       await this.renameFile(tempPath, this.settingsPath);
       this.cachedSettings = nextSettings;
 
-      return toPublicSettings(nextSettings, this.environmentApiKey, this.secretCodec);
+      return toPublicSettings(
+        nextSettings,
+        this.environmentApiKey,
+        this.environmentAnthropicApiKey,
+        this.secretCodec
+      );
     });
   }
 
@@ -217,14 +261,41 @@ function applyApiKeyUpdate(
   }
 
   if (!secretCodec.isAvailable()) {
-    throw new Error("Mauz could not save the OpenAI API key securely on this Mac.");
+    throw new Error("Mauz could not save the OpenAI API key securely on this computer.");
   }
 
   try {
     settings.encryptedOpenAiApiKey = secretCodec.encrypt(normalizedApiKey);
     settings.openAiAuthDisconnected = false;
   } catch {
-    throw new Error("Mauz could not save the OpenAI API key securely on this Mac.");
+    throw new Error("Mauz could not save the OpenAI API key securely on this computer.");
+  }
+}
+
+function applyAnthropicKeyUpdate(
+  settings: StoredMauzSettings,
+  update: AnthropicKeySettingsUpdate,
+  secretCodec: SecretCodec
+): void {
+  if (update.clearAnthropicApiKey === true || update.anthropicApiKey === null) {
+    delete settings.encryptedAnthropicApiKey;
+  }
+
+  const normalizedApiKey =
+    typeof update.anthropicApiKey === "string" ? normalizeApiKey(update.anthropicApiKey) : undefined;
+
+  if (normalizedApiKey === undefined) {
+    return;
+  }
+
+  if (!secretCodec.isAvailable()) {
+    throw new Error("Mauz could not save the Anthropic API key securely on this computer.");
+  }
+
+  try {
+    settings.encryptedAnthropicApiKey = secretCodec.encrypt(normalizedApiKey);
+  } catch {
+    throw new Error("Mauz could not save the Anthropic API key securely on this computer.");
   }
 }
 
@@ -251,6 +322,11 @@ function getDefaultSettings(): StoredMauzSettings {
         : ("simple" as AssistantMode),
     backendBaseUrl: process.env.MAUZ_BACKEND_BASE_URL?.trim() ?? "",
     agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? ("yolo" as AgentMode) : "approve",
+    aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim()),
+    aiFallbackProvider: AiFallbackPreferenceSchema.catch("none").parse(
+      process.env.MAUZ_AI_FALLBACK_PROVIDER?.trim()
+    ),
+    talkEngine: TalkEngineSchema.catch("pipeline").parse(process.env.MAUZ_TALK_ENGINE?.trim()),
     installId: randomUUID()
   };
 }
@@ -286,7 +362,8 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     ...parsedRecord,
     assistantMode,
     apiKeyConfigured: false,
-    openAiCredentialSource: "none"
+    openAiCredentialSource: "none",
+    anthropicKeyConfigured: false
   };
   const publicSettings = MauzSettingsSchema.safeParse(candidate);
 
@@ -298,6 +375,11 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     typeof parsedRecord.encryptedOpenAiApiKey === "string" &&
     parsedRecord.encryptedOpenAiApiKey.trim().length > 0
       ? parsedRecord.encryptedOpenAiApiKey.trim()
+      : undefined;
+  const encryptedAnthropicApiKey =
+    typeof parsedRecord.encryptedAnthropicApiKey === "string" &&
+    parsedRecord.encryptedAnthropicApiKey.trim().length > 0
+      ? parsedRecord.encryptedAnthropicApiKey.trim()
       : undefined;
 
   return {
@@ -315,11 +397,15 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     assistantMode: publicSettings.data.assistantMode,
     backendBaseUrl: publicSettings.data.backendBaseUrl,
     agentMode: publicSettings.data.agentMode,
+    aiProvider: publicSettings.data.aiProvider,
+    aiFallbackProvider: publicSettings.data.aiFallbackProvider,
+    talkEngine: publicSettings.data.talkEngine,
     installId:
       typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
         ? parsedRecord.installId.trim()
         : defaults.installId,
-    ...(encryptedOpenAiApiKey === undefined ? {} : { encryptedOpenAiApiKey })
+    ...(encryptedOpenAiApiKey === undefined ? {} : { encryptedOpenAiApiKey }),
+    ...(encryptedAnthropicApiKey === undefined ? {} : { encryptedAnthropicApiKey })
   };
 }
 
@@ -345,9 +431,13 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
 function toPublicSettings(
   settings: StoredMauzSettings,
   environmentApiKey: string | undefined,
+  environmentAnthropicApiKey: string | undefined,
   secretCodec: SecretCodec
 ): MauzSettings {
   const openAiCredentialSource = getOpenAiCredentialSource(settings, environmentApiKey, secretCodec);
+  const anthropicKeyConfigured =
+    decryptSecret(settings.encryptedAnthropicApiKey, secretCodec) !== undefined ||
+    environmentAnthropicApiKey !== undefined;
 
   return {
     nativeShakeEnabled: settings.nativeShakeEnabled,
@@ -365,7 +455,11 @@ function toPublicSettings(
     apiKeyConfigured: openAiCredentialSource !== "none",
     assistantMode: settings.assistantMode,
     backendBaseUrl: settings.backendBaseUrl,
-    agentMode: settings.agentMode
+    agentMode: settings.agentMode,
+    aiProvider: settings.aiProvider,
+    aiFallbackProvider: settings.aiFallbackProvider,
+    anthropicKeyConfigured,
+    talkEngine: settings.talkEngine
   };
 }
 
@@ -390,12 +484,16 @@ function getOpenAiCredentialSource(
 }
 
 function decryptStoredApiKey(settings: StoredMauzSettings, secretCodec: SecretCodec): string | undefined {
-  if (settings.encryptedOpenAiApiKey === undefined || !secretCodec.isAvailable()) {
+  return decryptSecret(settings.encryptedOpenAiApiKey, secretCodec);
+}
+
+function decryptSecret(encryptedValue: string | undefined, secretCodec: SecretCodec): string | undefined {
+  if (encryptedValue === undefined || !secretCodec.isAvailable()) {
     return undefined;
   }
 
   try {
-    return normalizeApiKey(secretCodec.decrypt(settings.encryptedOpenAiApiKey));
+    return normalizeApiKey(secretCodec.decrypt(encryptedValue));
   } catch {
     return undefined;
   }
