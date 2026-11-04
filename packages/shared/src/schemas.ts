@@ -57,6 +57,49 @@ export const OpenAiCredentialSourceSchema = z.enum(["none", "environment", "save
 
 export const AssistantModeSchema = z.enum(["simple", "agentic"]);
 export const AgentModeSchema = z.enum(["approve", "yolo"]);
+export const TalkEngineSchema = z.enum(["pipeline", "realtime"]);
+
+export const AiProviderIdSchema = z.enum(["claude-code", "codex", "anthropic", "openai"]);
+export const AiProviderPreferenceSchema = z.union([z.literal("auto"), AiProviderIdSchema]);
+export const AiProviderKindSchema = z.enum(["subscription", "api-key"]);
+
+export const AiProviderStatusSchema = z.object({
+  id: AiProviderIdSchema,
+  label: z.string().min(1).max(80),
+  kind: AiProviderKindSchema,
+  available: z.boolean(),
+  detail: z.string().max(200),
+  model: z.string().max(MAX_MODEL_NAME_CHARS)
+});
+
+export const AiProvidersStatusResponseSchema = z.object({
+  preference: AiProviderPreferenceSchema,
+  activeProviderId: AiProviderIdSchema.nullable(),
+  providers: z.array(AiProviderStatusSchema)
+});
+
+export const AiProvidersStatusRequestSchema = z
+  .object({
+    refresh: z.boolean().optional()
+  })
+  .optional();
+
+const MAX_AUDIO_BASE64_CHARS = 12_000_000;
+
+export const TalkTranscribeRequestSchema = z.object({
+  audioBase64: z.string().min(1).max(MAX_AUDIO_BASE64_CHARS),
+  mimeType: z.literal("audio/wav")
+});
+
+export const TalkTranscribeResponseSchema = z.object({
+  text: z.string().max(MAX_QUESTION_CHARS),
+  engine: z.enum(["openai", "windows"])
+});
+
+export const AskAnswerDeltaSchema = z.object({
+  requestId: z.string().min(1).max(128),
+  text: z.string().max(MAX_ANSWER_CHARS)
+});
 
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
@@ -74,17 +117,23 @@ export const MauzSettingsSchema = z.object({
   apiKeyConfigured: z.boolean(),
   assistantMode: AssistantModeSchema,
   backendBaseUrl: z.string().trim().max(400),
-  agentMode: AgentModeSchema
+  agentMode: AgentModeSchema,
+  aiProvider: AiProviderPreferenceSchema,
+  anthropicKeyConfigured: z.boolean(),
+  talkEngine: TalkEngineSchema
 });
 
 export const MauzSettingsUpdateSchema = MauzSettingsSchema.omit({
   apiKeyConfigured: true,
-  openAiCredentialSource: true
+  openAiCredentialSource: true,
+  anthropicKeyConfigured: true
 })
   .partial()
   .extend({
     openAiApiKey: z.string().nullable().optional(),
-    clearOpenAiApiKey: z.boolean().optional()
+    clearOpenAiApiKey: z.boolean().optional(),
+    anthropicApiKey: z.string().nullable().optional(),
+    clearAnthropicApiKey: z.boolean().optional()
   });
 
 export const MouseMoveSampleSchema = z.object({
@@ -177,7 +226,9 @@ export const AskMauzRequestSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   context: MauzDesktopContextSchema,
   conversationMessages: z.array(ChatMessageSchema).max(MAX_CONVERSATION_MESSAGES).optional(),
-  sessionId: z.string().trim().min(1).max(128).optional()
+  sessionId: z.string().trim().min(1).max(128).optional(),
+  requestId: z.string().trim().min(1).max(128).optional(),
+  responseStyle: z.enum(["text", "voice"]).optional()
 });
 
 export const AskMauzResponseSchema = z.object({

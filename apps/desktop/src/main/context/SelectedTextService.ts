@@ -1,9 +1,11 @@
 import { runJavaScriptForAutomation, type AppleScriptRunner } from "./AppleScriptRunner";
+import type { WindowsContextHelper } from "./WindowsContextHelper";
 
 type SelectedTextServiceOptions = {
   platform?: NodeJS.Platform;
   runner?: AppleScriptRunner;
   maxLength?: number;
+  windowsHelper?: Pick<WindowsContextHelper, "getSelectedText"> | undefined;
 };
 
 type SelectedTextTarget = {
@@ -113,14 +115,29 @@ export class SelectedTextService {
   private readonly platform: NodeJS.Platform;
   private readonly runner: AppleScriptRunner;
   private readonly maxLength: number;
+  private readonly windowsHelper: Pick<WindowsContextHelper, "getSelectedText"> | undefined;
 
   constructor(options: SelectedTextServiceOptions = {}) {
     this.platform = options.platform ?? process.platform;
     this.runner = options.runner ?? runJavaScriptForAutomation;
     this.maxLength = options.maxLength ?? DEFAULT_MAX_SELECTED_TEXT_LENGTH;
+    this.windowsHelper = options.windowsHelper;
+  }
+
+  /**
+   * Windows UI Automation reads the selection from whatever has keyboard focus, which is
+   * Mauz itself once the popover opens, so it must be read at activation. macOS asks the
+   * target process directly and can read it later.
+   */
+  get capturesAtActivation(): boolean {
+    return this.platform === "win32";
   }
 
   async capture(target: SelectedTextTarget = {}): Promise<string | undefined> {
+    if (this.platform === "win32") {
+      return this.captureWindows();
+    }
+
     if (this.platform !== "darwin") {
       return undefined;
     }
@@ -136,6 +153,20 @@ export class SelectedTextService {
       }
 
       return trimmedText.slice(0, this.maxLength);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async captureWindows(): Promise<string | undefined> {
+    if (this.windowsHelper === undefined) {
+      return undefined;
+    }
+
+    try {
+      const selectedText = await this.windowsHelper.getSelectedText();
+
+      return selectedText === undefined ? undefined : selectedText.slice(0, this.maxLength);
     } catch {
       return undefined;
     }

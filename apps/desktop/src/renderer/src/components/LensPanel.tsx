@@ -105,8 +105,18 @@ export function LensPanel(): React.JSX.Element {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runActivities, setRunActivities] = useState<ActivityEntry[]>([]);
   const [activityExpanded, setActivityExpanded] = useState(false);
+  const [streamingAnswer, setStreamingAnswer] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const activitySeqRef = useRef(0);
+  const askRequestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return mauzClient.onAnswerDelta(({ requestId, text }) => {
+      if (requestId === askRequestIdRef.current) {
+        setStreamingAnswer(text);
+      }
+    });
+  }, []);
 
   const action = ACTION_UI[selectedLensAction];
   const ActionIcon = action.icon;
@@ -189,7 +199,10 @@ export function LensPanel(): React.JSX.Element {
     }
 
     const prompt = getLensActionQuestion(selectedLensAction, lensObject, pinnedLensObject, question);
+    const requestId = crypto.randomUUID();
 
+    askRequestIdRef.current = requestId;
+    setStreamingAnswer(null);
     setAskLoading(true);
     setAskError(null);
     setAskAnswer(null);
@@ -198,7 +211,8 @@ export function LensPanel(): React.JSX.Element {
     try {
       const response = await mauzClient.submitAsk({
         question: prompt,
-        context: currentContext
+        context: currentContext,
+        requestId
       });
 
       setAskAnswer(response.answer);
@@ -207,6 +221,8 @@ export function LensPanel(): React.JSX.Element {
     } catch (error) {
       setAskError(error instanceof Error ? error.message : "Mauz Lens failed.");
     } finally {
+      askRequestIdRef.current = null;
+      setStreamingAnswer(null);
       setAskLoading(false);
     }
   };
@@ -360,6 +376,9 @@ export function LensPanel(): React.JSX.Element {
           <ApprovalCard description={approvalRequest.description} onChoice={handleApprovalChoice} />
         ) : null}
         {askError !== null ? <p className="ask-error">{askError}</p> : null}
+        {askLoading && askAnswer === null && streamingAnswer !== null ? (
+          <FormattedAnswer answer={streamingAnswer} />
+        ) : null}
         {askAnswer !== null ? (
           <>
             {askConversationTitle !== null ? (
@@ -368,7 +387,7 @@ export function LensPanel(): React.JSX.Element {
             <FormattedAnswer answer={askAnswer} />
           </>
         ) : null}
-        {askError === null && askAnswer === null && !askLoading ? (
+        {askError === null && askAnswer === null && streamingAnswer === null && !askLoading ? (
           <p className="ask-empty">{action.emptyState}</p>
         ) : null}
       </div>

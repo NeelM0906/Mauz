@@ -82,6 +82,51 @@ export type AskMauzRequest = {
   context: MauzDesktopContext;
   conversationMessages?: ChatMessage[] | undefined;
   sessionId?: string | undefined;
+  requestId?: string | undefined;
+  responseStyle?: AskResponseStyle | undefined;
+};
+
+/** "voice" answers are written to be spoken aloud (Talk); "text" answers may use Markdown. */
+export type AskResponseStyle = "text" | "voice";
+
+export type AskAnswerDelta = {
+  requestId: string;
+  text: string;
+};
+
+export type AiProviderId = "claude-code" | "codex" | "anthropic" | "openai";
+export type AiProviderPreference = "auto" | AiProviderId;
+export type AiProviderKind = "subscription" | "api-key";
+
+export type AiProviderStatus = {
+  id: AiProviderId;
+  label: string;
+  kind: AiProviderKind;
+  available: boolean;
+  detail: string;
+  model: string;
+};
+
+export type AiProvidersStatusResponse = {
+  preference: AiProviderPreference;
+  activeProviderId: AiProviderId | null;
+  providers: AiProviderStatus[];
+};
+
+export type AiProvidersStatusRequest = {
+  refresh?: boolean | undefined;
+};
+
+export type TalkTranscribeRequest = {
+  audioBase64: string;
+  mimeType: "audio/wav";
+};
+
+export type TalkTranscriptionEngine = "openai" | "windows";
+
+export type TalkTranscribeResponse = {
+  text: string;
+  engine: TalkTranscriptionEngine;
 };
 
 export type AskMauzResponse = {
@@ -188,6 +233,7 @@ export type OpenAiCredentialSource = "none" | "environment" | "saved";
 
 export type AssistantMode = "simple" | "agentic";
 export type AgentMode = "approve" | "yolo";
+export type TalkEngine = "pipeline" | "realtime";
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
@@ -206,13 +252,18 @@ export type MauzSettings = {
   assistantMode: AssistantMode;
   backendBaseUrl: string;
   agentMode: AgentMode;
+  aiProvider: AiProviderPreference;
+  anthropicKeyConfigured: boolean;
+  talkEngine: TalkEngine;
 };
 
 export type MauzSettingsUpdate = Partial<
-  Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource">
+  Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource" | "anthropicKeyConfigured">
 > & {
   openAiApiKey?: string | null | undefined;
   clearOpenAiApiKey?: boolean | undefined;
+  anthropicApiKey?: string | null | undefined;
+  clearAnthropicApiKey?: boolean | undefined;
 };
 
 export type MauzSettingsOpenOptions = {
@@ -264,6 +315,14 @@ export type MauzBridge = {
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;
+    onDelta(callback: (payload: AskAnswerDelta) => void): () => void;
+  };
+  providers: {
+    status(payload?: AiProvidersStatusRequest): Promise<AiProvidersStatusResponse>;
+  };
+  talk: {
+    transcribe(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse>;
+    captureContext(): Promise<MauzDesktopContext>;
   };
   history: {
     list(): Promise<ChatHistoryListResponse>;

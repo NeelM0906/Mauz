@@ -1,11 +1,13 @@
 import { MauzDesktopContextSchema, type MauzDesktopContext } from "@mauzai/shared";
 import { runJavaScriptForAutomation, type AppleScriptRunner } from "./AppleScriptRunner";
+import type { WindowsContextHelper } from "./WindowsContextHelper";
 
 export type ActiveWindowMetadata = Pick<MauzDesktopContext, "activeApp" | "activeWindow">;
 
 type ActiveWindowServiceOptions = {
   platform?: NodeJS.Platform;
   runner?: AppleScriptRunner;
+  windowsHelper?: Pick<WindowsContextHelper, "getActiveWindow"> | undefined;
 };
 
 const ACTIVE_WINDOW_SCRIPT = String.raw`
@@ -63,13 +65,19 @@ function run() {
 export class ActiveWindowService {
   private readonly platform: NodeJS.Platform;
   private readonly runner: AppleScriptRunner;
+  private readonly windowsHelper: Pick<WindowsContextHelper, "getActiveWindow"> | undefined;
 
   constructor(options: ActiveWindowServiceOptions = {}) {
     this.platform = options.platform ?? process.platform;
     this.runner = options.runner ?? runJavaScriptForAutomation;
+    this.windowsHelper = options.windowsHelper;
   }
 
   async capture(): Promise<ActiveWindowMetadata> {
+    if (this.platform === "win32") {
+      return this.captureWindows();
+    }
+
     if (this.platform !== "darwin") {
       return {};
     }
@@ -80,6 +88,34 @@ export class ActiveWindowService {
         activeApp: true,
         activeWindow: true
       }).safeParse(JSON.parse(output || "{}"));
+
+      return parsed.success ? parsed.data : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private async captureWindows(): Promise<ActiveWindowMetadata> {
+    if (this.windowsHelper === undefined) {
+      return {};
+    }
+
+    try {
+      const window = await this.windowsHelper.getActiveWindow();
+      const parsed = MauzDesktopContextSchema.pick({
+        activeApp: true,
+        activeWindow: true
+      }).safeParse({
+        activeApp: {
+          name: window.processName,
+          bundleId: window.executable,
+          processId: window.processId
+        },
+        activeWindow: {
+          title: window.title,
+          bounds: window.bounds
+        }
+      });
 
       return parsed.success ? parsed.data : {};
     } catch {

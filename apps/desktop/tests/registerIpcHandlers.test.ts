@@ -14,7 +14,12 @@ vi.mock("electron", () => ({
 }));
 vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
 vi.mock("@mauzai/api/server", () => ({
-  getGatewayReadinessStatus: getGatewayReadinessStatusMock
+  getGatewayReadinessStatus: getGatewayReadinessStatusMock,
+  getAiProvidersStatus: vi.fn(async () => ({
+    preference: "auto",
+    activeProviderId: null,
+    providers: []
+  }))
 }));
 
 import {
@@ -47,7 +52,10 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.agentApprovalRespond,
   IPC_CHANNELS.agentStop,
-  IPC_CHANNELS.agentGatewayReadinessStatus
+  IPC_CHANNELS.agentGatewayReadinessStatus,
+  IPC_CHANNELS.providersStatus,
+  IPC_CHANNELS.talkTranscribe,
+  IPC_CHANNELS.talkCaptureContext
 ] as const;
 
 describe("registerIpcHandlers", () => {
@@ -346,6 +354,32 @@ describe("registerIpcHandlers", () => {
     expect(capturedAskBody.sessionId).toBe("conv-42");
   });
 
+  it("returns AI provider status and forwards refresh requests", async () => {
+    const getProvidersStatus = vi.fn(async () => ({
+      preference: "auto" as const,
+      activeProviderId: "claude-code" as const,
+      providers: [
+        {
+          id: "claude-code" as const,
+          label: "Claude Code subscription",
+          kind: "subscription" as const,
+          available: true,
+          detail: "Signed in (max plan).",
+          model: "sonnet"
+        }
+      ]
+    }));
+
+    registerIpcHandlers({ ...createOptions(), getProvidersStatus });
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.providersStatus);
+
+    await expect(handler(createInvokeEvent("desktop"), { refresh: true })).resolves.toMatchObject({
+      activeProviderId: "claude-code"
+    });
+    expect(getProvidersStatus).toHaveBeenCalledWith({ refresh: true });
+  });
+
   it("returns gateway readiness status for simple mode", async () => {
     const options = createOptions();
 
@@ -384,7 +418,10 @@ describe("registerIpcHandlers", () => {
       apiKeyConfigured: false,
       assistantMode: "agentic",
       backendBaseUrl: "http://gateway.test/v1",
-      agentMode: "approve"
+      agentMode: "approve",
+      aiProvider: "auto",
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline"
     });
 
     getGatewayReadinessStatusMock.mockResolvedValueOnce({
@@ -422,7 +459,10 @@ describe("registerIpcHandlers", () => {
       apiKeyConfigured: false,
       assistantMode: "agentic",
       backendBaseUrl: "",
-      agentMode: "approve"
+      agentMode: "approve",
+      aiProvider: "auto",
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline"
     });
 
     getGatewayReadinessStatusMock.mockResolvedValueOnce({
@@ -568,7 +608,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       apiKeyConfigured: false,
       assistantMode: "simple" as const,
       backendBaseUrl: "",
-      agentMode: "approve" as const
+      agentMode: "approve" as const,
+      aiProvider: "auto" as const,
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline" as const
     })),
     updateSettings: vi.fn(async (update) => ({
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
@@ -586,7 +629,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       apiKeyConfigured: false,
       assistantMode: update.assistantMode ?? ("simple" as const),
       backendBaseUrl: update.backendBaseUrl ?? "",
-      agentMode: update.agentMode ?? ("approve" as const)
+      agentMode: update.agentMode ?? ("approve" as const),
+      aiProvider: update.aiProvider ?? ("auto" as const),
+      anthropicKeyConfigured: false,
+      talkEngine: update.talkEngine ?? ("pipeline" as const)
     }))
   };
 }

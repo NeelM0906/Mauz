@@ -3,14 +3,17 @@ import {
   AskMauzRequestSchema,
   AskMauzResponseSchema,
   LOCAL_API_TOKEN_HEADER,
+  type AskAnswerDelta,
   type AskMauzRequest,
   type AskMauzResponse
 } from "@mauzai/shared";
 import {
   AgentRunStoppedError,
   AgentRunUnwatchableError,
+  AiProviderError,
   BackendUnreachableError,
-  MissingOpenAIKeyError
+  MissingOpenAIKeyError,
+  NoAiProviderError
 } from "../errors";
 import { askMauz } from "../openai/askMauz";
 import { detectBackendCapabilities } from "../backend/capabilities";
@@ -18,17 +21,23 @@ import { askViaRuns, type RunLifecycleHooks } from "../backend/askViaRuns";
 
 export type AskMauzHandler = (request: AskMauzRequest) => Promise<AskMauzResponse>;
 
+export type AnswerStreamHooks = {
+  /** Receives the answer text so far for requests that carry a requestId. */
+  onAnswerText?(payload: AskAnswerDelta): void;
+};
+
 export type RegisterAskRouteOptions = {
   askHandler?: AskMauzHandler;
   authToken?: string;
   runHooks?: RunLifecycleHooks;
+  answerHooks?: AnswerStreamHooks;
 };
 
 export async function registerAskRoute(
   app: FastifyInstance,
   options: RegisterAskRouteOptions = {}
 ): Promise<void> {
-  const askHandler = options.askHandler ?? createDefaultAskHandler(options.runHooks);
+  const askHandler = options.askHandler ?? createDefaultAskHandler(options.runHooks, options.answerHooks);
 
   app.post("/api/ask", async (request, reply) => {
     if (options.authToken !== undefined && request.headers[LOCAL_API_TOKEN_HEADER] !== options.authToken) {
@@ -53,10 +62,14 @@ export async function registerAskRoute(
       const response = AskMauzResponseSchema.parse(await askHandler(parsed.data));
       return reply.send(response);
     } catch (error) {
-      if (error instanceof MissingOpenAIKeyError) {
+      if (error instanceof MissingOpenAIKeyError || error instanceof NoAiProviderError) {
         return reply.status(503).send({
           error: error.message
         });
+      }
+
+      if (error instanceof AiProviderError) {
+        return reply.status(502).send({ error: error.message });
       }
 
       if (error instanceof BackendUnreachableError) {
@@ -78,7 +91,10 @@ export async function registerAskRoute(
   });
 }
 
-export function createDefaultAskHandler(runHooks: RunLifecycleHooks | undefined): AskMauzHandler {
+export function createDefaultAskHandler(
+  runHooks: RunLifecycleHooks | undefined,
+  answerHooks?: AnswerStreamHooks
+): AskMauzHandler {
   return async (request) => {
     const baseUrl = process.env.MAUZ_BACKEND_BASE_URL?.trim();
 
@@ -100,7 +116,15 @@ export function createDefaultAskHandler(runHooks: RunLifecycleHooks | undefined)
       }
     }
 
-    return askMauz(request);
+    const requestId = request.requestId;
+    const onAnswerText = answerHooks?.onAnswerText;
+
+    return askMauz(
+      request,
+      requestId !== undefined && onAnswerText !== undefined
+        ? { onText: (text) => onAnswerText({ requestId, text }) }
+        : {}
+    );
   };
 }
 

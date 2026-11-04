@@ -4,6 +4,7 @@ import { ChatHistoryPanel } from "./components/ChatHistoryPanel";
 import { DesktopApp } from "./components/DesktopApp";
 import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
+import { PushToTalkPanel } from "./components/PushToTalkPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TaskPanel } from "./components/TaskPanel";
 import { TalkPanel } from "./components/TalkPanel";
@@ -15,6 +16,7 @@ function App(): React.JSX.Element {
   const surface = getRendererSurface();
   const mode = useMauzStore((state) => state.mode);
   const reset = useMauzStore((state) => state.reset);
+  const talkEngine = useMauzStore((state) => state.settings?.talkEngine ?? "pipeline");
 
   React.useEffect(() => {
     if (surface === "desktop") {
@@ -82,7 +84,8 @@ function App(): React.JSX.Element {
   }
 
   if (mode === "talk") {
-    return <TalkPanel />;
+    // Push to talk works with any AI provider; OpenAI Realtime is opt-in and needs an OpenAI key.
+    return talkEngine === "realtime" ? <TalkPanel /> : <PushToTalkPanel />;
   }
 
   return <MauzMenu />;

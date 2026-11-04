@@ -3,6 +3,9 @@ import type {
   AgentApprovalPayload,
   AgentRunActivityPayload,
   AgentRunStatePayload,
+  AiProvidersStatusRequest,
+  AiProvidersStatusResponse,
+  AskAnswerDelta,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -21,12 +24,15 @@ import type {
   PermissionError,
   RealtimeConnectRequest,
   RealtimeConnectResponse,
-  RealtimeSessionResponse
+  RealtimeSessionResponse,
+  TalkTranscribeRequest,
+  TalkTranscribeResponse
 } from "@mauzai/shared";
 import {
   AgentApprovalPayloadSchema,
   AgentRunActivityPayloadSchema,
   AgentRunStatePayloadSchema,
+  AskAnswerDeltaSchema,
   IPC_CHANNELS,
   MauzSettingsSchema,
   PermissionErrorSchema
@@ -43,7 +49,24 @@ const mauzApi: MauzBridge = {
   },
   ask: {
     submit: (payload: AskMauzRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>
+      ipcRenderer.invoke(IPC_CHANNELS.askSubmit, payload) as Promise<AskMauzResponse>,
+    onDelta: (callback: (payload: AskAnswerDelta) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
+        const parsed = AskAnswerDeltaSchema.safeParse(payload);
+        if (parsed.success) callback(parsed.data);
+      };
+      ipcRenderer.on(IPC_CHANNELS.askDelta, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.askDelta, listener);
+    }
+  },
+  providers: {
+    status: (payload?: AiProvidersStatusRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.providersStatus, payload) as Promise<AiProvidersStatusResponse>
+  },
+  talk: {
+    transcribe: (payload: TalkTranscribeRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.talkTranscribe, payload) as Promise<TalkTranscribeResponse>,
+    captureContext: () => ipcRenderer.invoke(IPC_CHANNELS.talkCaptureContext) as Promise<MauzDesktopContext>
   },
   history: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryList) as Promise<ChatHistoryListResponse>,

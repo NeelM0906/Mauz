@@ -2,6 +2,8 @@ import type {
   AgentApprovalPayload,
   AgentRunActivityPayload,
   AgentRunStatePayload,
+  AiProvidersStatusResponse,
+  AskAnswerDelta,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -21,7 +23,9 @@ import type {
   PermissionError,
   RealtimeConnectRequest,
   RealtimeConnectResponse,
-  RealtimeSessionResponse
+  RealtimeSessionResponse,
+  TalkTranscribeRequest,
+  TalkTranscribeResponse
 } from "@mauzai/shared";
 
 type WindowWithOptionalBridge = Window & {
@@ -43,7 +47,21 @@ const browserPreviewBridge: MauzBridge = {
           "Browser preview is connected. Run the Electron app to ask Mauz with live screenshot context.",
         model: "preview"
       };
-    }
+    },
+    onDelta: (_callback: (payload: AskAnswerDelta) => void) => () => {}
+  },
+  providers: {
+    status: async () => ({
+      preference: "auto",
+      activeProviderId: null,
+      providers: []
+    })
+  },
+  talk: {
+    transcribe: async () => {
+      throw new Error("Run the Electron app to talk to Mauz.");
+    },
+    captureContext: async () => collectPreviewContext()
   },
   history: {
     list: async () => ({
@@ -87,7 +105,10 @@ const browserPreviewBridge: MauzBridge = {
       apiKeyConfigured: false,
       assistantMode: "simple",
       backendBaseUrl: "",
-      agentMode: "approve"
+      agentMode: "approve",
+      aiProvider: "auto",
+      anthropicKeyConfigured: false,
+      talkEngine: "pipeline"
     }),
     update: async (payload: MauzSettingsUpdate) => {
       const openAiAuthDisconnected = payload.openAiAuthDisconnected ?? false;
@@ -111,7 +132,10 @@ const browserPreviewBridge: MauzBridge = {
         apiKeyConfigured: openAiCredentialSource !== "none",
         assistantMode: payload.assistantMode ?? "simple",
         backendBaseUrl: payload.backendBaseUrl ?? "",
-        agentMode: payload.agentMode ?? "approve"
+        agentMode: payload.agentMode ?? "approve",
+        aiProvider: payload.aiProvider ?? "auto",
+        anthropicKeyConfigured: (payload.anthropicApiKey?.trim().length ?? 0) > 0,
+        talkEngine: payload.talkEngine ?? "pipeline"
       };
     }
   },
@@ -194,6 +218,18 @@ export const mauzClient = {
   },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);
+  },
+  onAnswerDelta(callback: (payload: AskAnswerDelta) => void): () => void {
+    return getBridge().ask.onDelta(callback);
+  },
+  getProvidersStatus(options: { refresh?: boolean } = {}): Promise<AiProvidersStatusResponse> {
+    return getBridge().providers.status(options);
+  },
+  transcribeTalk(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse> {
+    return getBridge().talk.transcribe(payload);
+  },
+  captureTalkContext(): Promise<MauzDesktopContext> {
+    return getBridge().talk.captureContext();
   },
   listChatHistory(): Promise<ChatHistoryListResponse> {
     return getBridge().history.list();

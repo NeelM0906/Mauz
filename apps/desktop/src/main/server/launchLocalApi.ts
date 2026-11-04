@@ -1,4 +1,4 @@
-import { createMauzApiServer, type RunLifecycleHooks } from "@mauzai/api/server";
+import { createMauzApiServer, type AnswerStreamHooks, type RunLifecycleHooks } from "@mauzai/api/server";
 import { DEFAULT_MAUZ_API_PORT } from "@mauzai/shared";
 
 export type LocalApiHandle = {
@@ -11,6 +11,7 @@ export type LaunchLocalApiOptions = {
   authToken: string;
   maxPortAttempts?: number;
   runHooks?: RunLifecycleHooks;
+  answerHooks?: AnswerStreamHooks;
 };
 
 const DEFAULT_MAX_PORT_ATTEMPTS = 20;
@@ -22,7 +23,8 @@ export async function launchLocalApi(options: LaunchLocalApiOptions): Promise<Lo
   for (const port of candidatePorts) {
     const app = await createMauzApiServer({
       authToken: options.authToken,
-      ...(options.runHooks === undefined ? {} : { runHooks: options.runHooks })
+      ...(options.runHooks === undefined ? {} : { runHooks: options.runHooks }),
+      ...(options.answerHooks === undefined ? {} : { answerHooks: options.answerHooks })
     });
 
     try {
