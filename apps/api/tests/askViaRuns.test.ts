@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
 import { askViaRuns } from "../src/backend/askViaRuns";
+import { MAUZ_SYSTEM_PROMPT, MAUZ_VOICE_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
 
 // Intersection type so vi.fn().mock.calls is accessible while satisfying typeof fetch
 type MockedFetch = typeof fetch & ReturnType<typeof vi.fn>;
@@ -45,6 +46,26 @@ const BASE_OPTIONS = {
 } as const;
 
 describe("askViaRuns", () => {
+  it("sends the spoken-style instructions for Talk turns", async () => {
+    const completed = ['{"event":"run.completed","run_id":"run_1","output":"answer text"}'];
+    const voiceFetch = runsFetchMock(completed);
+    const textFetch = runsFetchMock(completed);
+
+    await askViaRuns(
+      { ...buildRequest(), responseStyle: "voice" },
+      { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl: voiceFetch }
+    );
+    await askViaRuns(buildRequest(), { ...BASE_OPTIONS, agentMode: "yolo", fetchImpl: textFetch });
+
+    const runBody = (fetchImpl: MockedFetch): { instructions: string } => {
+      const call = fetchImpl.mock.calls.find(([url]) => String(url).endsWith("/runs"));
+      return JSON.parse(call![1].body as string) as { instructions: string };
+    };
+
+    expect(runBody(voiceFetch).instructions).toBe(MAUZ_VOICE_SYSTEM_PROMPT);
+    expect(runBody(textFetch).instructions).toBe(MAUZ_SYSTEM_PROMPT);
+  });
+
   it("returns the run output as the answer", async () => {
     const fetchImpl = runsFetchMock([
       '{"event":"run.completed","run_id":"run_1","output":"answer text","usage":{"total_tokens":9}}'

@@ -38,6 +38,8 @@ export function PushToTalkPanel(): React.JSX.Element {
   const historyRef = useRef<ChatMessage[]>([]);
   const speechRef = useRef<SpeechQueue | null>(null);
   const requestIdRef = useRef<string | null>(null);
+  // Bumped whenever a turn is abandoned, so slow transcriptions and answers for it are dropped.
+  const turnGenerationRef = useRef(0);
   const hasScreenContext = getPrimaryImage(initialContext) !== undefined;
 
   const upsertCue = useCallback((cue: TranscriptCue): void => {
@@ -62,10 +64,16 @@ export function PushToTalkPanel(): React.JSX.Element {
 
   const runTurn = useCallback(
     async (recording: Blob): Promise<void> => {
+      const generation = turnGenerationRef.current;
+      const isAbandoned = (): boolean => generation !== turnGenerationRef.current;
       setTurnState("transcribing");
 
       try {
         const audio = await recordingToWav(recording);
+
+        if (isAbandoned()) {
+          return;
+        }
 
         if (audio.durationMs < MIN_RECORDING_MS) {
           setTurnState("ready");
@@ -77,6 +85,10 @@ export function PushToTalkPanel(): React.JSX.Element {
           mimeType: "audio/wav"
         });
         const question = transcription.text.trim();
+
+        if (isAbandoned()) {
+          return;
+        }
 
         if (question.length === 0) {
           setTurnState("ready");
@@ -92,6 +104,10 @@ export function PushToTalkPanel(): React.JSX.Element {
         // The first turn uses the context captured when Talk opened; later turns look again.
         const context = pendingContextRef.current ?? (await mauzClient.captureTalkContext());
         pendingContextRef.current = null;
+
+        if (isAbandoned()) {
+          return;
+        }
         const speech = new SpeechQueue({
           onStart: () => {
             if (requestIdRef.current === requestId) {
@@ -130,6 +146,10 @@ export function PushToTalkPanel(): React.JSX.Element {
           setTurnState("ready");
         }
       } catch (caught) {
+        if (isAbandoned()) {
+          return;
+        }
+
         setTurnState("error");
         setError(caught instanceof Error ? caught.message : "Mauz could not finish that turn.");
       }
@@ -137,12 +157,43 @@ export function PushToTalkPanel(): React.JSX.Element {
     [upsertCue]
   );
 
+  /** The microphone is only open while Space is held, so the OS mic indicator matches. */
+  const releaseMicrophone = useCallback((): void => {
+    for (const track of streamRef.current?.getTracks() ?? []) {
+      track.stop();
+    }
+
+    streamRef.current = null;
+  }, []);
+
+  /** Stops speaking, drops any in-flight answer, and discards a recording in progress. */
+  const stopTalk = useCallback((): void => {
+    turnGenerationRef.current += 1;
+    speechRef.current?.cancel();
+    requestIdRef.current = null;
+    listeningRef.current = false;
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+
+    if (recorder !== null && recorder.state !== "inactive") {
+      recorder.onstop = null;
+      recorder.stop();
+    }
+
+    releaseMicrophone();
+    setTurnState("ready");
+  }, [releaseMicrophone]);
+
+  useEffect(() => mauzClient.onPopoverHidden(stopTalk), [stopTalk]);
+
   const startListening = useCallback(async (): Promise<void> => {
     if (listeningRef.current) {
       return;
     }
 
-    // Talking over Mauz interrupts it.
+    // Talking over Mauz interrupts it, including a turn that is still being transcribed.
+    turnGenerationRef.current += 1;
+    const generation = turnGenerationRef.current;
     speechRef.current?.cancel();
     requestIdRef.current = null;
     listeningRef.current = true;
@@ -150,16 +201,20 @@ export function PushToTalkPanel(): React.JSX.Element {
     setTurnState("listening");
 
     try {
-      streamRef.current ??= await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
       });
 
-      if (!listeningRef.current) {
-        setTurnState("ready");
+      // Space was released, pressed again, or Talk was hidden while the microphone was opening.
+      if (!listeningRef.current || generation !== turnGenerationRef.current) {
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
         return;
       }
 
-      const recorder = new MediaRecorder(streamRef.current);
+      streamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -170,10 +225,11 @@ export function PushToTalkPanel(): React.JSX.Element {
       recorder.start();
     } catch {
       listeningRef.current = false;
+      releaseMicrophone();
       setTurnState("error");
       setError("Mauz could not use the microphone. Check your microphone privacy settings.");
     }
-  }, []);
+  }, [releaseMicrophone]);
 
   const stopListening = useCallback(async (): Promise<void> => {
     if (!listeningRef.current) {
@@ -185,6 +241,7 @@ export function PushToTalkPanel(): React.JSX.Element {
     recorderRef.current = null;
 
     if (recorder === null || recorder.state === "inactive") {
+      releaseMicrophone();
       setTurnState("ready");
       return;
     }
@@ -194,8 +251,9 @@ export function PushToTalkPanel(): React.JSX.Element {
       recorder.stop();
     });
 
+    releaseMicrophone();
     await runTurn(recording);
-  }, [runTurn]);
+  }, [releaseMicrophone, runTurn]);
 
   useEffect(() => {
     const isTyping = (target: EventTarget | null): boolean =>
@@ -224,25 +282,16 @@ export function PushToTalkPanel(): React.JSX.Element {
     };
   }, [startListening, stopListening]);
 
-  useEffect(() => {
-    return () => {
-      speechRef.current?.cancel();
-      requestIdRef.current = null;
-      listeningRef.current = false;
-
-      if (recorderRef.current !== null && recorderRef.current.state !== "inactive") {
-        recorderRef.current.stop();
-      }
-
-      for (const track of streamRef.current?.getTracks() ?? []) {
-        track.stop();
-      }
-    };
-  }, []);
+  useEffect(() => stopTalk, [stopTalk]);
 
   const handleBack = async (): Promise<void> => {
     await mauzClient.showMenu();
     backToMenu();
+  };
+
+  const handleClose = (): void => {
+    stopTalk();
+    void mauzClient.close();
   };
 
   return (
@@ -263,12 +312,7 @@ export function PushToTalkPanel(): React.JSX.Element {
             <p>Hold Space to talk. Point at things while you speak.</p>
           </div>
         </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauzClient.close()}
-        >
+        <button className="icon-button" type="button" aria-label="Close Mauz" onClick={handleClose}>
           <X aria-hidden="true" size={16} />
         </button>
       </header>
@@ -326,7 +370,7 @@ export function PushToTalkPanel(): React.JSX.Element {
           <Mic aria-hidden="true" size={15} />
           <span>{turnState === "listening" ? "Listening..." : "Hold to talk"}</span>
         </button>
-        <button type="button" className="danger-button" onClick={() => void mauzClient.close()}>
+        <button type="button" className="danger-button" onClick={handleClose}>
           <Square aria-hidden="true" size={15} />
           <span>Stop</span>
         </button>

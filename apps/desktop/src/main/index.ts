@@ -97,6 +97,13 @@ async function bootstrap(): Promise<void> {
       if (reason === "explicit") {
         void agentRunBridge.stopActiveRun();
       }
+
+      // Hidden panels stay mounted; let Talk stop speaking and release the microphone.
+      const webContents = popover?.getWebContents();
+
+      if (webContents !== null && webContents?.isDestroyed() === false) {
+        webContents.send(IPC_CHANNELS.menuHidden);
+      }
     },
     excludeFromCapture: readBooleanEnv(process.env.MAUZ_EXCLUDE_FROM_CAPTURE, process.platform === "win32"),
     ...(process.platform === "win32"

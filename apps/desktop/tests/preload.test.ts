@@ -88,4 +88,20 @@ describe("preload agent event bridge", () => {
       label: "Reading file"
     });
   });
+
+  it("tells the renderer when the popover is hidden and can unsubscribe", async () => {
+    await import("../src/preload/index");
+    const mauzApi = electron.getMauzApi() as MauzBridge;
+    const onHidden = vi.fn();
+
+    const unsubscribe = mauzApi.menu.onHidden(onHidden);
+    electron.emit(IPC_CHANNELS.menuHidden, undefined);
+    unsubscribe();
+
+    expect(onHidden).toHaveBeenCalledOnce();
+    expect(electron.ipcRenderer.removeListener).toHaveBeenCalledWith(
+      IPC_CHANNELS.menuHidden,
+      expect.any(Function)
+    );
+  });
 });

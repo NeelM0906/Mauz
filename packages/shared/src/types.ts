@@ -359,6 +359,8 @@ export type MauzBridge = {
     startAsk(): Promise<MauzDesktopContext>;
     startTalk(): Promise<MauzDesktopContext>;
     setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
+    /** The popover was hidden (closed, Escape, or lost focus); stop audio and microphone use. */
+    onHidden(callback: () => void): () => void;
   };
   ask: {
     submit(payload: AskMauzRequest): Promise<AskMauzResponse>;

@@ -40,7 +40,8 @@ const browserPreviewBridge: MauzBridge = {
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
     startTalk: async () => collectPreviewContext(),
-    setLensExpanded: async (_payload: MauzLensResizeRequest) => {}
+    setLensExpanded: async (_payload: MauzLensResizeRequest) => {},
+    onHidden: () => () => {}
   },
   ask: {
     submit: async (_payload: AskMauzRequest) => {
@@ -234,6 +235,9 @@ export const mauzClient = {
   },
   submitAsk(payload: AskMauzRequest): Promise<AskMauzResponse> {
     return getBridge().ask.submit(payload);
+  },
+  onPopoverHidden(callback: () => void): () => void {
+    return getBridge().menu.onHidden(callback);
   },
   onAnswerDelta(callback: (payload: AskAnswerDelta) => void): () => void {
     return getBridge().ask.onDelta(callback);

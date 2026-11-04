@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
 import { askMauz, buildContextText, buildResponseContent } from "../src/openai/askMauz";
-import { MAUZ_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
+import { MAUZ_SYSTEM_PROMPT, MAUZ_VOICE_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
 import { clearBackendCapabilitiesCache } from "../src/backend/capabilities";
 import { BackendUnreachableError, MissingOpenAIKeyError } from "../src/errors";
 
@@ -185,6 +185,28 @@ describe("askMauz with configurable backend", () => {
       "X-Hermes-Session-Id": "conv-1",
       "X-Hermes-Session-Key": "install-uuid"
     });
+  });
+
+  it("uses the spoken-style prompt for Talk turns sent to a gateway", async () => {
+    const create = vi.fn().mockResolvedValue({ output_text: "ok", usage: undefined });
+    const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
+
+    await askMauz(
+      { ...buildRequest(), responseStyle: "voice" },
+      {
+        client: { responses: { create } } as never,
+        baseUrl: "http://localhost:8642/v1",
+        fetchImpl: fetchMock
+      }
+    );
+    await askMauz(buildRequest(), {
+      client: { responses: { create } } as never,
+      baseUrl: "http://localhost:8642/v1",
+      fetchImpl: fetchMock
+    });
+
+    expect(create.mock.calls[0]?.[0].input[0]).toEqual({ role: "system", content: MAUZ_VOICE_SYSTEM_PROMPT });
+    expect(create.mock.calls[1]?.[0].input[0]).toEqual({ role: "system", content: MAUZ_SYSTEM_PROMPT });
   });
 
   it("omits the session key header without a backend api key", async () => {

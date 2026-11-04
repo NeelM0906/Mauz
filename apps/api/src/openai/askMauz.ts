@@ -2,7 +2,7 @@ import OpenAI, { APIConnectionError } from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import type { AskMauzRequest, AskMauzResponse, MauzDesktopContext, ScreenshotPayload } from "@mauzai/shared";
 import { BackendUnreachableError, MissingOpenAIKeyError } from "../errors";
-import { MAUZ_SYSTEM_PROMPT, MAUZ_VOICE_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
+import { getSystemPromptFor } from "../prompts/mauzSystemPrompt";
 import { type BackendCapabilities, detectBackendCapabilities } from "../backend/capabilities";
 import {
   answerWithFallback,
@@ -70,7 +70,7 @@ export async function askMauz(
         input: [
           {
             role: "system",
-            content: MAUZ_SYSTEM_PROMPT
+            content: getSystemPromptFor(request)
           },
           {
             role: "user",
@@ -143,7 +143,7 @@ export function buildAnswerPrompt(request: AskMauzRequest): AnswerPrompt {
   }
 
   return {
-    systemPrompt: request.responseStyle === "voice" ? MAUZ_VOICE_SYSTEM_PROMPT : MAUZ_SYSTEM_PROMPT,
+    systemPrompt: getSystemPromptFor(request),
     userText: buildContextText(request),
     images
   };

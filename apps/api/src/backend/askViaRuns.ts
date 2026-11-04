@@ -1,5 +1,5 @@
 import type { AskMauzRequest, AskMauzResponse } from "@mauzai/shared";
-import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
+import { getSystemPromptFor } from "../prompts/mauzSystemPrompt";
 import { buildResponseContent } from "../openai/askMauz";
 import { AgentRunStoppedError, AgentRunUnwatchableError } from "../errors";
 import { getRunStatus, resolveRunApproval, startRun, stopRun, streamRunEvents } from "./runsClient";
@@ -77,7 +77,7 @@ export async function askViaRuns(
   const { runId } = await startRun({
     ...clientOptions,
     input: [{ role: "user", content: buildResponseContent(request) }],
-    instructions: MAUZ_SYSTEM_PROMPT,
+    instructions: getSystemPromptFor(request),
     ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
     ...(options.apiKey !== undefined && options.installId !== undefined
       ? { sessionKey: options.installId }

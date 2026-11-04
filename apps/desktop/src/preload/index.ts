@@ -51,7 +51,12 @@ const mauzApi: MauzBridge = {
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
     startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
     setLensExpanded: (payload: MauzLensResizeRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>
+      ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>,
+    onHidden: (callback: () => void) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(IPC_CHANNELS.menuHidden, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.menuHidden, listener);
+    }
   },
   ask: {
     submit: (payload: AskMauzRequest) =>
