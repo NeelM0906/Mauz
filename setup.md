@@ -126,15 +126,35 @@ export OPENAI_REALTIME_MODEL="gpt-realtime-2"
 
 ## Send to agent
 
-Send to agent hands a task to a coding agent installed on your computer:
+Send to agent hands a task to a coding agent installed on your computer. Mauz writes the brief (your task plus the selected text, pointed element, page, and window it captured) and the screenshot to a temporary folder, then starts the agent in the folder you pick.
 
-| Agent       | How Mauz starts it                                                    |
+On Windows, when the agent's desktop app is installed, the task starts as a new thread in that app, in the background. No terminal opens, no window appears, and focus stays where it was. Open the agent's app to follow the thread.
+
+- **Hermes:** Mauz runs the Hermes CLI hidden, as a one-off run. The Hermes app reads from the same local service, so the thread appears in its sidebar as a normal visible thread.
+- **Claude:** Mauz runs Claude Code headless in your folder, then hands the session to Claude desktop. Claude desktop gets a startup flag that keeps its window hidden, and the session appears in its Code list.
+- **Codex:** Mauz creates the thread with your task queued on it, then sends a "wake" link that makes the Codex app run it. That link never shows the Codex window.
+
+If Claude or Codex is closed, it starts hidden in the tray and runs the task. If an agent's desktop app isn't installed, and on macOS, Mauz opens the agent in a new terminal window instead (Windows Terminal or PowerShell on Windows, Terminal on macOS):
+
+| Agent       | Terminal command                                                      |
 | ----------- | --------------------------------------------------------------------- |
 | Hermes      | `hermes chat --query-file <brief> --image <screenshot> --in <folder>` |
 | Claude Code | `claude --add-dir <brief folder> "Read the task brief in …"`          |
 | Codex       | `codex -C <folder> "Read the task brief in …" -i <screenshot>`        |
 
-Mauz writes the brief (your task plus the selected text, pointed element, page, and window it captured) and the screenshot to a temporary folder, then opens the agent in a new terminal window (Windows Terminal or PowerShell on Windows, Terminal on macOS). The agent runs with its own settings and permissions. Mauz does not monitor it, approve its actions, or show its results; follow along in the agent's window.
+Mauz does not monitor the agent, approve its actions, or show its results. Each agent applies its own permissions:
+
+- **Claude:** a background run can't stop to ask you, so it may edit files in the chosen folder. Anything else that needs approval, such as shell commands not already allowed, is refused rather than asked.
+- **Codex:** the thread uses the Codex app's own defaults (for example "ask before acting" with a read-only sandbox). Any approval prompt waits in that thread in the app.
+- **Hermes:** dangerous commands are refused by default in one-off runs. Mauz does not pass Hermes' auto-approve flag.
+
+Good to know:
+
+- Claude desktop picks up the session as soon as Claude Code starts writing it. If you reply in Claude desktop while the background run is still going, both write to the same session. If the Claude window happens to be open, it may switch to the new session, but it won't come to the front.
+- The Codex wake link and Claude's hidden-startup flag are undocumented parts of those apps, so an app update could break them.
+- If an agent doesn't start, its output is in `agent.log` next to the brief in `%TEMP%\mauz-handoff`.
+
+How it works in detail: [docs/superpowers/specs/2026-11-05-send-to-agent-desktop-handoff-design.md](docs/superpowers/specs/2026-11-05-send-to-agent-desktop-handoff-design.md).
 
 Choose the agent under **Settings → Task agent**. **Automatic** uses the first one installed, in the order Hermes, Claude Code, Codex. Mauz looks for each CLI on your PATH and in its usual install folders.
 

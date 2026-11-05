@@ -172,7 +172,7 @@ async function bootstrap(): Promise<void> {
   });
   subscriptionConnector = createSubscriptionConnector(broadcastSubscriptionConnectState);
 
-  const taskAgentLauncher = new TaskAgentLauncher();
+  const taskAgentLauncher = new TaskAgentLauncher({ openExternal: (url) => shell.openExternal(url) });
   taskAgentLauncher.startHandoffCleanup();
 
   registerIpcHandlers({

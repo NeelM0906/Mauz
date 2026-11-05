@@ -6,9 +6,11 @@ import type { MauzDesktopContext } from "@mauzai/shared";
 import {
   buildAgentArguments,
   buildAgentEnvironment,
+  buildHiddenStartCommand,
   buildPowerShellLauncher,
   buildShellLauncher,
-  TaskAgentLauncher
+  TaskAgentLauncher,
+  threadTitle
 } from "../src/main/agent/TaskAgentLauncher";
 
 const CONTEXT: MauzDesktopContext = {
@@ -166,6 +168,178 @@ describe("TaskAgentLauncher", () => {
       expect(script).toContain("'--image'");
     }
   );
+
+  // The desktop-app routes are Windows-only and use real Windows paths.
+  it.runIf(process.platform === "win32")(
+    "starts Hermes as a hidden one-shot when the Hermes desktop app is installed",
+    async () => {
+      const home = createHome();
+      const folder = join(home, "work");
+      mkdirSync(folder);
+      const appData = join(home, "roaming");
+      const startHidden = vi.fn(async () => {});
+      const startProcess = vi.fn(async () => {});
+      const launcher = new TaskAgentLauncher({
+        platform: "win32",
+        env: { PATH: "", LOCALAPPDATA: join(home, "local"), APPDATA: appData, MAUZ_LOCAL_TOKEN: "x" },
+        homeDirectory: home,
+        tempDirectory: createHome(),
+        pathExists: (path) =>
+          path === join(home, "local", "hermes", "bin", "hermes.exe") ||
+          path === folder ||
+          path === join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Hermes.lnk"),
+        startProcess,
+        startHidden
+      });
+
+      await expect(
+        launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
+      ).resolves.toEqual({ agentLabel: "Hermes" });
+
+      expect(startProcess).not.toHaveBeenCalled();
+      const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
+        string,
+        string[],
+        { cwd: string; logPath: string; env: NodeJS.ProcessEnv }
+      ];
+      const handoff = join(options.logPath, "..");
+
+      expect(executable).toBe(join(home, "local", "hermes", "bin", "hermes.exe"));
+      expect(args).toEqual([
+        "chat",
+        "-Q",
+        "--source",
+        "cli",
+        "--query-file",
+        join(handoff, "task.md"),
+        "--image",
+        join(handoff, "screen.png"),
+        "--in",
+        folder
+      ]);
+      expect(options.cwd).toBe(folder);
+      expect(options.env.MAUZ_LOCAL_TOKEN).toBeUndefined();
+    }
+  );
+
+  it.runIf(process.platform === "win32")(
+    "runs Claude Code headless and hands the session to Claude desktop without showing it",
+    async () => {
+      const home = createHome();
+      const folder = join(home, "work");
+      mkdirSync(folder);
+      const localAppData = join(home, "local");
+      mkdirSync(join(localAppData, "Microsoft", "WindowsApps", "Claude_pzs8sxrjxfjjc"), { recursive: true });
+      const startHidden = vi.fn(async () => {});
+      const startProcess = vi.fn(async () => {});
+      const launcher = new TaskAgentLauncher({
+        platform: "win32",
+        env: { PATH: "", LOCALAPPDATA: localAppData },
+        homeDirectory: home,
+        tempDirectory: createHome(),
+        pathExists: (path) => path === join(home, ".local", "bin", "claude.exe") || existsSync(path),
+        startProcess,
+        startHidden,
+        // Claude Code writes its transcript a moment after it starts.
+        sleep: async () => {
+          const [, args] = startHidden.mock.calls[0] as unknown as [string, string[]];
+          const sessionId = args[args.indexOf("--session-id") + 1];
+          mkdirSync(join(home, ".claude", "projects", "C--work"), { recursive: true });
+          writeFileSync(join(home, ".claude", "projects", "C--work", `${sessionId}.jsonl`), "{}\n");
+        }
+      });
+
+      await expect(
+        launcher.launch({ agentId: "claude-code", folder, task: "Fix this error", context: CONTEXT })
+      ).resolves.toEqual({ agentLabel: "Claude Code" });
+      await launcher.settled();
+
+      const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
+        string,
+        string[],
+        { cwd: string; logPath: string; stdinPath: string }
+      ];
+      const handoff = join(options.logPath, "..");
+      const sessionId = args[args.indexOf("--session-id") + 1] ?? "";
+
+      expect(executable).toBe(join(home, ".local", "bin", "claude.exe"));
+      expect(args).toEqual([
+        "-p",
+        "--session-id",
+        sessionId,
+        "--permission-mode",
+        "acceptEdits",
+        "--add-dir",
+        handoff,
+        "--output-format",
+        "json"
+      ]);
+      expect(options.stdinPath).toBe(join(handoff, "task.md"));
+      expect(options.cwd).toBe(folder);
+      expect(startProcess).toHaveBeenCalledWith(
+        join(localAppData, "Microsoft", "WindowsApps", "claude-desktop.exe"),
+        ["--startup", `claude://resume?session=${sessionId}`],
+        expect.anything()
+      );
+    }
+  );
+
+  it.runIf(process.platform === "win32")(
+    "queues the task on a new Codex thread and wakes the Codex desktop app",
+    async () => {
+      const home = createHome();
+      const folder = join(home, "work");
+      mkdirSync(folder);
+      const localAppData = join(home, "local");
+      mkdirSync(join(localAppData, "Microsoft", "WindowsApps", "OpenAI.Codex_2p2nqsd0c76g0"), {
+        recursive: true
+      });
+      const queueCodexThread = vi.fn(async () => "thread-1");
+      const openExternal = vi.fn(async () => {});
+      const launcher = new TaskAgentLauncher({
+        platform: "win32",
+        env: { PATH: "", LOCALAPPDATA: localAppData },
+        homeDirectory: home,
+        tempDirectory: createHome(),
+        pathExists: existsSync,
+        findCodexAppExecutable: async () => "C:\\Codex\\codex.exe",
+        queueCodexThread,
+        openExternal
+      });
+
+      // The Codex app alone counts as installed: it brings its own codex.exe.
+      expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
+      await expect(
+        launcher.launch({ agentId: "codex", folder, task: "Fix this error\nin the parser", context: CONTEXT })
+      ).resolves.toEqual({ agentLabel: "Codex" });
+
+      const [executable, request] = queueCodexThread.mock.calls[0] as unknown as [
+        string,
+        { folder: string; title: string; text: string; imagePath: string }
+      ];
+
+      expect(executable).toBe("C:\\Codex\\codex.exe");
+      expect(request.folder).toBe(folder);
+      expect(request.title).toBe("Fix this error");
+      expect(request.text).toContain("<task>\nFix this error\nin the parser\n</task>");
+      expect(request.imagePath.endsWith("screen.png")).toBe(true);
+      expect(openExternal).toHaveBeenCalledWith("codex://threads/wake/thread-1");
+    }
+  );
+
+  it("builds a hidden background start and short thread titles", () => {
+    expect(
+      buildHiddenStartCommand("C:\\a b\\claude.exe", ["-p", "x"], {
+        logPath: "C:\\h\\agent.log",
+        stdinPath: "C:\\h\\task.md"
+      })
+    ).toBe(
+      '/d /s /c "start "" /b "C:\\a b\\claude.exe" "-p" "x" <"C:\\h\\task.md" >"C:\\h\\agent.log" 2>&1"'
+    );
+    expect(() => buildHiddenStartCommand("x", ['a"b'], { logPath: "l" })).toThrow();
+    expect(threadTitle("  \n")).toBe("Task from Mauz");
+    expect(threadTitle("a".repeat(80))).toBe(`${"a".repeat(59)}…`);
+  });
 
   it("refuses an agent that is not installed or a folder that is gone", async () => {
     const launcher = new TaskAgentLauncher({
