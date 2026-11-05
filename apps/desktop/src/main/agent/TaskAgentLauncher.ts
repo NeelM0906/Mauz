@@ -353,7 +353,9 @@ export class TaskAgentLauncher {
 
     if (this.platform === "win32") {
       const scriptPath = this.path.join(launch.handoffDirectory, "launch.ps1");
-      writeFileSync(scriptPath, buildPowerShellLauncher(launch), "utf8");
+      // Windows PowerShell 5.1 reads a script without a BOM as the ANSI code page, which turns
+      // the "→" in the title into bytes that include a curly quote and breaks the string.
+      writeFileSync(scriptPath, `﻿${buildPowerShellLauncher(launch)}`, "utf8");
       // `start` gives PowerShell its own console window (Windows Terminal when that is the default).
       await this.startProcess(
         "cmd.exe",
@@ -415,7 +417,8 @@ export function buildPowerShellLauncher(launch: {
   executable: string;
   args: string[];
 }): string {
-  const quote = (value: string): string => `'${value.replace(/'/g, "''")}'`;
+  // PowerShell also ends a single-quoted string at curly single quotes, so double those too.
+  const quote = (value: string): string => `'${value.replace(/['‘’‚‛]/g, "$&$&")}'`;
 
   return [
     `$Host.UI.RawUI.WindowTitle = ${quote(launch.title)}`,

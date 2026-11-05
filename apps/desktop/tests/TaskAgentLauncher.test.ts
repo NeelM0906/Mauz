@@ -146,6 +146,9 @@ describe("TaskAgentLauncher", () => {
     const brief = readFileSync(join(handoff, "task.md"), "utf8");
     const script = readFileSync(scriptPath, "utf8");
 
+    // Windows PowerShell 5.1 needs the BOM to read the "→" in the title as UTF-8.
+    expect([...readFileSync(scriptPath).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(script).toContain("$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'");
     expect(brief).toContain("<task>\nFix this error\n</task>");
     expect(brief).toContain("<selected_text>\nTypeError: x is undefined\n</selected_text>");
     expect(brief).toContain(`<image>${join(handoff, "screen.png")} (crop framed on the pointed element`);
@@ -210,6 +213,11 @@ describe("agent command lines", () => {
       })
     ).toBe(
       "$Host.UI.RawUI.WindowTitle = 'Mauz'\r\nSet-Location -LiteralPath 'C:\\it''s here'\r\n& 'C:\\a b\\x.exe' 'y'\r\n"
+    );
+    expect(
+      buildPowerShellLauncher({ title: "Mauz → Hermes", folder: "C:\\Bob’s", executable: "x", args: [] })
+    ).toBe(
+      "$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'\r\nSet-Location -LiteralPath 'C:\\Bob’’s'\r\n& 'x'\r\n"
     );
     expect(buildShellLauncher({ folder: "/it's", executable: "/bin/claude", args: ["a b"] })).toBe(
       "#!/bin/bash\ncd '/it'\\''s' || exit 1\n'/bin/claude' 'a b'\n"
