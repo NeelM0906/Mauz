@@ -76,7 +76,7 @@ export function formatScreenBlock(context: MauzDesktopContext, imageNote?: strin
   const windowLine = describeWindow(context);
 
   if (windowLine !== undefined) {
-    sections.push(`<window>${windowLine}</window>`);
+    sections.push(`<window>${escapeBlockTags(windowLine)}</window>`);
   }
 
   const selectedText = (context.selectedText ?? pointer?.selectedText)?.trim();
@@ -194,7 +194,18 @@ function describeWindow(context: MauzDesktopContext): string | undefined {
 function tag(open: string, body: string): string {
   const name = open.split(" ")[0];
 
-  return `<${open}>\n${normalize(body)}\n</${name}>`;
+  return `<${open}>\n${normalize(escapeBlockTags(body))}\n</${name}>`;
+}
+
+const BLOCK_TAG_PATTERN =
+  /<(?=\/?\s*(?:screen|task|window|selected_text|pointed_element|browser_page|ocr|image)\b)/gi;
+
+/**
+ * Captured text is untrusted. Escapes anything that reads as one of the tags Mauz uses, so
+ * text such as `</screen>` on a web page cannot close the block and pose as instructions.
+ */
+export function escapeBlockTags(text: string): string {
+  return text.replace(BLOCK_TAG_PATTERN, "&lt;");
 }
 
 function normalize(text: string): string {
