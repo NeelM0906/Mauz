@@ -172,6 +172,9 @@ async function bootstrap(): Promise<void> {
   });
   subscriptionConnector = createSubscriptionConnector(broadcastSubscriptionConnectState);
 
+  const taskAgentLauncher = new TaskAgentLauncher({ openExternal: (url) => shell.openExternal(url) });
+  taskAgentLauncher.startHandoffCleanup();
+
   registerIpcHandlers({
     popover,
     contextCollector,
@@ -181,7 +184,7 @@ async function bootstrap(): Promise<void> {
     getSettings: () => settingsService!.get(),
     updateSettings: applySettingsUpdate,
     taskAgents: {
-      launcher: new TaskAgentLauncher({ openExternal: (url) => shell.openExternal(url) }),
+      launcher: taskAgentLauncher,
       pickFolder: async (surface) => {
         const options: Electron.OpenDialogOptions = {
           title: "Pick a folder for the agent",
