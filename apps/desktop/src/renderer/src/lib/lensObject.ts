@@ -1,7 +1,23 @@
-import type { MauzDesktopContext } from "@mauzai/shared";
+import { describeElement, type MauzDesktopContext, type ScreenshotPayload } from "@mauzai/shared";
 import type { LensAction, LensMemory } from "@renderer/state/useMauzStore";
 
-export type LensObjectType = "selected-text" | "cursor-area" | "screen" | "window" | "cursor";
+export type LensObjectType =
+  | "selected-text"
+  | "element"
+  | "cursor-area"
+  | "screen"
+  | "window"
+  | "cursor"
+  | "blocked"
+  | "page"
+  | "region";
+
+/** One line of "What Mauz saw": exactly what is sent with a question. */
+export type CaptureDetail = {
+  label: string;
+  text?: string | undefined;
+  image?: ScreenshotPayload | undefined;
+};
 
 export type LensObject = {
   id: string;
@@ -26,11 +42,26 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
     };
   }
 
+  if (context.captureBlocked !== undefined) {
+    return {
+      id: createLensId(context, "blocked"),
+      type: "blocked",
+      label: `Capture blocked in ${context.captureBlocked.appName}`,
+      summary:
+        "This app is on your never-capture list. Mauz sends no screenshot, text, or window title from it.",
+      confidence: 0,
+      privacyMode: "Nothing captured",
+      suggestedActions: ["ask"]
+    };
+  }
+
   const selectedText = context.selectedText ?? context.pointer?.selectedText;
   const activeApp = context.activeApp ?? context.pointer?.activeApp;
   const activeWindow = context.activeWindow ?? context.pointer?.activeWindow;
-  const appName = activeApp?.name?.trim() || "current app";
+  const target = context.pointer?.target;
+  const appName = target?.window?.appName?.trim() || activeApp?.name?.trim() || "current app";
   const windowTitle = activeWindow?.title?.trim() || undefined;
+  const imageMode = describeImageMode(context);
 
   if (selectedText?.trim()) {
     return {
@@ -39,8 +70,70 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       label: `Selected text in ${appName}`,
       summary: truncateText(selectedText.trim(), 160),
       confidence: 96,
-      privacyMode: "Selected text + cursor crop",
+      privacyMode: imageMode === undefined ? "Selected text" : `Selected text + ${imageMode}`,
       suggestedActions: ["explain", "transform", "remember", "compare"]
+    };
+  }
+
+  const ocrText = context.pointer?.ocrText;
+
+  if (context.pointer?.cursorCropFocus?.kind === "region") {
+    return {
+      id: createLensId(context, "region"),
+      type: "region",
+      label: `Selected area in ${appName}`,
+      summary:
+        ocrText === undefined ? "Mauz will answer about the area you selected." : truncateText(ocrText, 160),
+      confidence: 94,
+      privacyMode: ocrText === undefined ? "Selected area" : "Selected area + recognized text",
+      suggestedActions: ["ask", "explain", "transform", "remember", "compare"]
+    };
+  }
+
+  const page = context.pointer?.page;
+
+  if (page !== undefined) {
+    const product = page.product;
+    const price = product?.price ?? product?.lowPrice;
+    const name = product?.name ?? page.title ?? getHost(page.url);
+
+    return {
+      id: createLensId(context, "page"),
+      type: "page",
+      label: `${truncateText(name, 60)} in ${page.browser}`,
+      summary: truncateText(
+        product !== undefined && price !== undefined
+          ? [
+              product.brand,
+              product.name,
+              `${price}${product.priceCurrency ? ` ${product.priceCurrency}` : ""}`
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : (page.element?.text ?? page.around ?? page.url),
+        160
+      ),
+      confidence: 95,
+      privacyMode: imageMode === undefined ? "Page data" : `Page data + ${imageMode}`,
+      suggestedActions: ["ask", "explain", "remember", "compare"]
+    };
+  }
+
+  if (target !== undefined) {
+    const element = target.element;
+    const text = element.text ?? element.value ?? target.container?.text ?? element.name;
+
+    return {
+      id: createLensId(context, "element"),
+      type: "element",
+      label: `${describeElement(element)} in ${appName}`,
+      summary:
+        text === undefined
+          ? `Mauz read the ${element.role.toLowerCase()} under the pointer from ${appName}.`
+          : truncateText(text, 160),
+      confidence: 92,
+      privacyMode: imageMode === undefined ? "Element text" : `Element text + ${imageMode}`,
+      suggestedActions: ["ask", "explain", "remember", "compare"]
     };
   }
 
@@ -49,12 +142,12 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       id: createLensId(context, "cursor-area"),
       type: "cursor-area",
       label: windowTitle === undefined ? `Cursor area in ${appName}` : `Cursor area in ${windowTitle}`,
-      summary: `A crop around the pointer at ${formatCursor(context)} is ready for object-aware help.`,
+      summary:
+        ocrText === undefined
+          ? `A crop around the pointer at ${formatCursor(context)} is ready for object-aware help.`
+          : truncateText(ocrText, 160),
       confidence: 84,
-      privacyMode:
-        context.pointer.screenshot === undefined
-          ? "Cursor crop only"
-          : "Cursor crop + local screenshot metadata",
+      privacyMode: `${imageMode ?? "Cursor crop"}${ocrText === undefined ? "" : " + recognized text"}`,
       suggestedActions: ["ask", "explain", "remember", "compare"]
     };
   }
@@ -63,10 +156,10 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
     return {
       id: createLensId(context, "screen"),
       type: "screen",
-      label: `Screen context near ${appName}`,
-      summary: `Mauz has broad screen context at ${formatCursor(context)}.`,
+      label: `Window near ${appName}`,
+      summary: `Mauz has an image of the window under the pointer at ${formatCursor(context)}.`,
       confidence: 72,
-      privacyMode: "Screenshot attached",
+      privacyMode: imageMode ?? "Window image",
       suggestedActions: ["ask", "remember"]
     };
   }
@@ -140,6 +233,133 @@ function appendPinnedObject(question: string, pinnedObject: LensMemory | null): 
   }
 
   return `${question}\n\nPinned "this" for reference: ${pinnedObject.label}. ${pinnedObject.summary}`;
+}
+
+/** What a question about this context sends, item by item, for the "What Mauz saw" list. */
+export function describeCapture(context: MauzDesktopContext | null): CaptureDetail[] {
+  if (context === null) {
+    return [];
+  }
+
+  if (context.captureBlocked !== undefined) {
+    return [
+      {
+        label: `Blocked: ${context.captureBlocked.appName}`,
+        text: "Nothing was captured from this app."
+      }
+    ];
+  }
+
+  const details: CaptureDetail[] = [];
+  const selectedText = context.selectedText ?? context.pointer?.selectedText;
+  const target = context.pointer?.target;
+
+  if (selectedText?.trim()) {
+    details.push({ label: "Selected text", text: truncateText(selectedText, 300) });
+  }
+
+  const page = context.pointer?.page;
+
+  if (page !== undefined) {
+    details.push({ label: `Page: ${truncateText(page.title ?? getHost(page.url), 80)}`, text: page.url });
+
+    if (page.product !== undefined) {
+      details.push({
+        label: "Product data",
+        text: truncateText(
+          Object.entries(page.product)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join("; "),
+          300
+        )
+      });
+    }
+
+    if (page.element !== undefined) {
+      details.push({
+        label: `Pointed on the page: <${page.element.tag}>`,
+        ...(page.element.text === undefined ? {} : { text: truncateText(page.element.text, 300) })
+      });
+    }
+
+    if (page.text !== undefined) {
+      details.push({
+        label: `Page text, ${page.text.length} characters`,
+        text: truncateText(page.text, 300)
+      });
+    }
+  }
+
+  if (target !== undefined) {
+    const element = target.element;
+    const text = element.text ?? element.value;
+
+    details.push({
+      label: `Element: ${describeElement(element)}`,
+      ...(text === undefined ? {} : { text: truncateText(text, 300) })
+    });
+
+    if (target.container !== undefined) {
+      details.push({
+        label: `Around it: ${describeElement(target.container)}`,
+        ...(target.container.text === undefined ? {} : { text: truncateText(target.container.text, 300) })
+      });
+    }
+  }
+
+  const image = context.pointer?.cursorCrop ?? context.pointer?.screenshot ?? context.screenshot;
+
+  if (image !== undefined) {
+    details.push({
+      label: `Image: ${describeImageMode(context) ?? "screenshot"}, ${image.width}x${image.height}`,
+      image
+    });
+  }
+
+  if (context.pointer?.ocrText !== undefined) {
+    details.push({ label: "Recognized text (OCR)", text: truncateText(context.pointer.ocrText, 300) });
+  }
+
+  const window = target?.window;
+  const activeWindow = context.activeWindow ?? context.pointer?.activeWindow;
+  const windowTitle = window?.title ?? activeWindow?.title;
+
+  if (windowTitle?.trim()) {
+    details.push({ label: `Window: ${truncateText(windowTitle, 80)}` });
+  }
+
+  if (details.length === 0) {
+    details.push({ label: "Cursor position only" });
+  }
+
+  return details;
+}
+
+function describeImageMode(context: MauzDesktopContext): string | undefined {
+  const pointer = context.pointer;
+
+  if (pointer?.cursorCrop !== undefined) {
+    switch (pointer.cursorCropFocus?.kind) {
+      case "element":
+        return "element crop";
+      case "pointer-area":
+        return "area around pointer";
+      case "region":
+        return "selected area";
+      default:
+        return "cursor crop";
+    }
+  }
+
+  return pointer?.screenshot !== undefined || context.screenshot !== undefined ? "window image" : undefined;
+}
+
+function getHost(url: string): string {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
 }
 
 function createLensId(context: MauzDesktopContext, type: LensObjectType): string {

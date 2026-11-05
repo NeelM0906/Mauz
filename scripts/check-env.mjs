@@ -6,7 +6,6 @@ const documentedRequiredKeys = [
   "OPENAI_API_KEY",
   "OPENAI_ASK_MODEL",
   "OPENAI_ASK_MAX_OUTPUT_TOKENS",
-  "OPENAI_INCLUDE_FULL_SCREENSHOT",
   "OPENAI_CHAT_TITLE_MODEL",
   "OPENAI_REALTIME_MODEL",
   "OPENAI_REALTIME_VOICE",
@@ -26,6 +25,9 @@ const intentionallyUndocumentedEnvKeys = new Set([
   "GITHUB_REPOSITORY",
   "GITHUB_TOKEN",
   "MAUZAI_APP_OUTPUT",
+  // Set by the browser native host launcher that Mauz writes.
+  "MAUZ_BROWSER_PIPE",
+  "MAUZ_BROWSER_TOKEN",
   "PROTECTED_BRANCH"
 ]);
 const sourceFilePattern = /\.(?:cjs|mjs|js|jsx|ts|tsx)$/;

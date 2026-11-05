@@ -124,6 +124,13 @@ export const AskAnswerDeltaSchema = z.object({
   text: z.string().max(MAX_ANSWER_CHARS)
 });
 
+export const MAX_CAPTURE_BLOCKED_APPS = 50;
+export const MAX_CAPTURE_BLOCKED_ENTRY_CHARS = 120;
+
+export const CaptureBlockedAppsSchema = z
+  .array(z.string().trim().min(1).max(MAX_CAPTURE_BLOCKED_ENTRY_CHARS))
+  .max(MAX_CAPTURE_BLOCKED_APPS);
+
 export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
@@ -136,7 +143,8 @@ export const MauzSettingsSchema = z.object({
   realtimeModel: ModelNameSchema,
   realtimeVoice: VoiceNameSchema,
   realtimeReasoningEffort: RealtimeReasoningEffortSchema,
-  includeFullScreenshot: z.boolean(),
+  captureBlockedApps: CaptureBlockedAppsSchema,
+  captureBlockedSites: CaptureBlockedAppsSchema,
   apiKeyConfigured: z.boolean(),
   assistantMode: AssistantModeSchema,
   backendBaseUrl: z.string().trim().max(400),
@@ -180,6 +188,82 @@ export const MacInputAgentEventSchema = z.discriminatedUnion("type", [
   MacInputAgentPermissionErrorEventSchema
 ]);
 
+const MAX_TARGET_TEXT_CHARS = 4_000;
+const MAX_TARGET_VALUE_CHARS = 2_000;
+
+export const PointerTargetElementSchema = z.object({
+  role: z.string().min(1).max(80),
+  name: WindowTextSchema.optional(),
+  value: z.string().max(MAX_TARGET_VALUE_CHARS).optional(),
+  text: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
+  bounds: BoundsSchema.optional()
+});
+
+export const PointerTargetSchema = z.object({
+  source: z.enum(["windows-uia", "macos-ax", "browser"]),
+  element: PointerTargetElementSchema,
+  container: PointerTargetElementSchema.optional(),
+  window: z
+    .object({
+      title: WindowTextSchema.optional(),
+      appName: WindowTextSchema.optional(),
+      executable: WindowTextSchema.optional(),
+      processId: z.number().int().nonnegative().optional(),
+      bounds: BoundsSchema.optional()
+    })
+    .optional()
+});
+
+export const CursorCropFocusSchema = z.object({
+  kind: z.enum(["element", "pointer-area", "region"]),
+  pointer: CursorPositionSchema
+});
+
+export const CaptureBlockedSchema = z.object({
+  appName: WindowTextSchema
+});
+
+const MAX_PAGE_TEXT_CHARS = 8_000;
+const MAX_URL_CHARS = 2_000;
+const ProductFieldSchema = z.string().max(300).optional();
+
+export const BrowserProductSchema = z.object({
+  name: ProductFieldSchema,
+  brand: ProductFieldSchema,
+  sku: ProductFieldSchema,
+  gtin: ProductFieldSchema,
+  color: ProductFieldSchema,
+  size: ProductFieldSchema,
+  material: ProductFieldSchema,
+  price: ProductFieldSchema,
+  priceCurrency: ProductFieldSchema,
+  lowPrice: ProductFieldSchema,
+  highPrice: ProductFieldSchema,
+  availability: ProductFieldSchema,
+  rating: ProductFieldSchema,
+  reviewCount: ProductFieldSchema,
+  seller: ProductFieldSchema
+});
+
+export const BrowserPageSchema = z.object({
+  browser: z.string().min(1).max(80),
+  url: z.string().min(1).max(MAX_URL_CHARS),
+  title: WindowTextSchema.optional(),
+  selection: UserTextSchema.optional(),
+  element: z
+    .object({
+      tag: z.string().min(1).max(40),
+      role: z.string().max(80).optional(),
+      text: z.string().max(MAX_TARGET_VALUE_CHARS).optional(),
+      href: z.string().max(MAX_URL_CHARS).optional(),
+      alt: WindowTextSchema.optional()
+    })
+    .optional(),
+  around: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
+  text: z.string().max(MAX_PAGE_TEXT_CHARS).optional(),
+  product: BrowserProductSchema.optional()
+});
+
 export const PointerContextSchema = z.object({
   cursor: CursorPositionSchema,
   display: z
@@ -203,7 +287,11 @@ export const PointerContextSchema = z.object({
     })
     .optional(),
   selectedText: UserTextSchema.optional(),
+  target: PointerTargetSchema.optional(),
   cursorCrop: ScreenshotPayloadSchema.optional(),
+  cursorCropFocus: CursorCropFocusSchema.optional(),
+  ocrText: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
+  page: BrowserPageSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional()
 });
 
@@ -234,7 +322,8 @@ export const MauzDesktopContextSchema = z.object({
   selectedText: UserTextSchema.optional(),
   pointer: PointerContextSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional(),
-  screenshotError: PermissionErrorSchema.optional()
+  screenshotError: PermissionErrorSchema.optional(),
+  captureBlocked: CaptureBlockedSchema.optional()
 });
 
 export const ChatRoleSchema = z.enum(["user", "assistant"]);

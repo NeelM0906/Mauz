@@ -1218,6 +1218,72 @@ button {
   color: var(--accent-answer);
 }
 
+.capture-details {
+  flex: 0 0 auto;
+  border: 1px solid var(--accent-answer-border);
+  border-radius: 7px;
+  background: var(--accent-answer-bg);
+  color: var(--accent-answer-text);
+  font-size: 10px;
+}
+
+.capture-details summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+
+.capture-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.capture-details summary svg {
+  color: var(--accent-answer);
+}
+
+.capture-details ul {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.capture-details li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.capture-details strong {
+  color: var(--text-primary);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.capture-details p {
+  margin: 0;
+  font-weight: 540;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.capture-details img {
+  max-width: 100%;
+  max-height: 120px;
+  justify-self: start;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+}
+
 .lens-remember-card {
   flex: 0 0 auto;
   display: grid;
@@ -2366,7 +2432,6 @@ button {
 }
 
 .settings-field span,
-.settings-check span,
 .settings-message,
 .settings-helper,
 .settings-footer span {
@@ -2413,14 +2478,24 @@ button {
   font-size: 10px;
 }
 
-.settings-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.settings-textarea {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
 }
 
-.settings-check input {
-  accent-color: var(--accent-answer);
+.settings-textarea:focus {
+  border-color: var(--accent-answer-border);
+  box-shadow: 0 0 0 3px var(--accent-answer-bg-strong);
 }
 
 .settings-footer {

@@ -6,6 +6,7 @@ import type {
   AiProvidersStatusRequest,
   AiProvidersStatusResponse,
   AskAnswerDelta,
+  BrowserExtensionStatus,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -50,6 +51,8 @@ const mauzApi: MauzBridge = {
     close: () => ipcRenderer.invoke(IPC_CHANNELS.menuClose) as Promise<void>,
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
     startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
+    selectRegion: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.menuSelectRegion) as Promise<MauzDesktopContext | null>,
     setLensExpanded: (payload: MauzLensResizeRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>,
     onHidden: (callback: () => void) => {
@@ -96,6 +99,10 @@ const mauzApi: MauzBridge = {
     transcribe: (payload: TalkTranscribeRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.talkTranscribe, payload) as Promise<TalkTranscribeResponse>,
     captureContext: () => ipcRenderer.invoke(IPC_CHANNELS.talkCaptureContext) as Promise<MauzDesktopContext>
+  },
+  browser: {
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.browserStatus) as Promise<BrowserExtensionStatus>,
+    openExtensionFolder: () => ipcRenderer.invoke(IPC_CHANNELS.browserOpenExtensionFolder) as Promise<void>
   },
   history: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryList) as Promise<ChatHistoryListResponse>,

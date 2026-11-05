@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Mauz",
+  "description": "Lets Mauz read the page under your pointer when you ask it about that page.",
+  "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAscaNUT+r1SREMfUzLUJrOtjg8Egz5NJ7v8wZwFLSvM+0pvQ3xX/wviJ4ync/62TnurpglgDG6Q6F2cf3JsEY9SY0YF0zsnzZDAlRKA8ZtKjqY1CN4KcmRZpOpdRXpMUuxSfWoVXxw54ELxo/o2MVHTFCzQSnJ0RwCllffPQ0WL5WMX5pA2LNls6m0YCFzM9QaxtL/M7LAWAP/DM3nZaDE9XX5p11ZKCeddX7Ny+9dJLRAoj4772aDCzDCobWU3EdVnOYbprCULYeszcaSsGI60cgk8A9ImDTVTj0k/9jBhA7OIq/uukWWAeMIIkgWj4emOZCBo8jDVTeS39vS0I3PQIDAQAB",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["nativeMessaging", "scripting", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["page.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "128": "icons/mauz-128.png"
+  },
+  "minimum_chrome_version": "116"
+}

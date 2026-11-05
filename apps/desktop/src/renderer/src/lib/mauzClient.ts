@@ -4,6 +4,7 @@ import type {
   AgentRunStatePayload,
   AiProvidersStatusResponse,
   AskAnswerDelta,
+  BrowserExtensionStatus,
   AskMauzRequest,
   AskMauzResponse,
   ChatConversation,
@@ -40,6 +41,7 @@ const browserPreviewBridge: MauzBridge = {
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
     startTalk: async () => collectPreviewContext(),
+    selectRegion: async () => collectPreviewContext(),
     setLensExpanded: async (_payload: MauzLensResizeRequest) => {},
     onHidden: () => () => {}
   },
@@ -77,6 +79,10 @@ const browserPreviewBridge: MauzBridge = {
       throw new Error("Run the Electron app to talk to Mauz.");
     },
     captureContext: async () => collectPreviewContext()
+  },
+  browser: {
+    status: async () => ({ connectedBrowsers: [], extensionPath: null, hostRegistered: false }),
+    openExtensionFolder: async () => {}
   },
   history: {
     list: async () => ({
@@ -116,7 +122,8 @@ const browserPreviewBridge: MauzBridge = {
       realtimeModel: "gpt-realtime-2",
       realtimeVoice: "marin",
       realtimeReasoningEffort: "low",
-      includeFullScreenshot: false,
+      captureBlockedApps: [],
+      captureBlockedSites: [],
       apiKeyConfigured: false,
       assistantMode: "simple",
       backendBaseUrl: "",
@@ -144,7 +151,8 @@ const browserPreviewBridge: MauzBridge = {
         realtimeModel: payload.realtimeModel ?? "gpt-realtime-2",
         realtimeVoice: payload.realtimeVoice ?? "marin",
         realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
-        includeFullScreenshot: payload.includeFullScreenshot ?? false,
+        captureBlockedApps: payload.captureBlockedApps ?? [],
+        captureBlockedSites: payload.captureBlockedSites ?? [],
         apiKeyConfigured: openAiCredentialSource !== "none",
         assistantMode: payload.assistantMode ?? "simple",
         backendBaseUrl: payload.backendBaseUrl ?? "",
@@ -229,6 +237,15 @@ export const mauzClient = {
   },
   startTalk(): Promise<MauzDesktopContext> {
     return getBridge().menu.startTalk();
+  },
+  selectRegion(): Promise<MauzDesktopContext | null> {
+    return getBridge().menu.selectRegion();
+  },
+  getBrowserExtensionStatus(): Promise<BrowserExtensionStatus> {
+    return getBridge().browser.status();
+  },
+  openBrowserExtensionFolder(): Promise<void> {
+    return getBridge().browser.openExtensionFolder();
   },
   setLensExpanded(payload: MauzLensResizeRequest): Promise<void> {
     return getBridge().menu.setLensExpanded(payload);

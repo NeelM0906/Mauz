@@ -8,6 +8,7 @@ import {
   ScanSearch,
   Settings,
   Sparkles,
+  SquareDashedMousePointer,
   Wand2
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -18,7 +19,7 @@ import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = LensAction | "task" | "talk";
+type MenuAction = LensAction | "task" | "talk" | "region";
 
 const LENS_ACTIONS: Array<{
   action: LensAction;
@@ -58,7 +59,7 @@ const LENS_ACTIONS: Array<{
   }
 ];
 
-type BubbleKey = LensAction | "task" | "talk" | "history" | "settings";
+type BubbleKey = LensAction | "task" | "talk" | "history" | "settings" | "region";
 
 // Bubble offsets from the cluster center (arc radius ~110px).
 const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
@@ -70,7 +71,8 @@ const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
   task: { tx: 0, ty: 118 },
   talk: { tx: -80, ty: 107 },
   history: { tx: -95, ty: 55 },
-  settings: { tx: -110, ty: 0 }
+  settings: { tx: -110, ty: 0 },
+  region: { tx: 110, ty: 0 }
 };
 
 const BUBBLE_STAGGER_MS = 30;
@@ -228,6 +230,33 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
+  const handleRegion = async (): Promise<void> => {
+    setPendingAction("region");
+    setStatus(null);
+    setAskAnswer(null);
+    setAskConversationTitle(null);
+    setAskError(null);
+    setAskLoading(false);
+
+    try {
+      const context = await mauzClient.selectRegion();
+
+      // Cancelled: the menu comes back as it was.
+      if (context === null) {
+        return;
+      }
+
+      setCurrentContext(context);
+      setSelectedLensAction("ask");
+      await mauzClient.setLensExpanded({ expanded: true });
+      setMode("lens");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Mauz could not capture that area.");
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
   const handleTalk = async (): Promise<void> => {
     setPendingAction("talk");
     setStatus(null);
@@ -329,6 +358,22 @@ export function MauzMenu(): React.JSX.Element {
           <Mic aria-hidden="true" size={18} />
           <span className="bubble-label" aria-hidden="true">
             {pendingAction === "talk" ? "Opening voice..." : "Talk"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="bubble"
+          data-size="sm"
+          data-pending={pendingAction === "region" ? "true" : undefined}
+          aria-label="Select an area of the screen"
+          disabled={pendingAction !== null}
+          onClick={() => void handleRegion()}
+          style={bubbleStyle("region", 8, 40)}
+        >
+          <SquareDashedMousePointer aria-hidden="true" size={15} />
+          <span className="bubble-label" aria-hidden="true">
+            {pendingAction === "region" ? "Selecting..." : "Select area"}
           </span>
         </button>
 
