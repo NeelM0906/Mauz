@@ -28,7 +28,6 @@ import {
   loadOrCreateBrowserToken,
   registerNativeHost
 } from "./context/BrowserBridge";
-import { ChatHistoryService } from "./chat/ChatHistoryService";
 import { ContextCollector } from "./context/ContextCollector";
 import { WindowsContextHelper } from "./context/WindowsContextHelper";
 import { CursorPollingInputProvider } from "./input/CursorPollingInputProvider";
@@ -45,18 +44,14 @@ import {
   type LocalApiHandle
 } from "./server/launchLocalApi";
 import { SettingsService, type MauzRuntimeSettings } from "./settings/SettingsService";
-import { DesktopWindowController } from "./windows/DesktopWindowController";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
-import { RegionSelector } from "./windows/RegionSelector";
 import { TrayController } from "./windows/TrayController";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-let desktopWindow: DesktopWindowController | null = null;
 let popover: PopoverWindowController | null = null;
 let apiHandle: LocalApiHandle | null = null;
 let contextCollector: ContextCollector | null = null;
-let chatHistoryService: ChatHistoryService | null = null;
 let settingsService: SettingsService | null = null;
 let windowsContextHelper: WindowsContextHelper | null = null;
 let browserBridge: BrowserBridge | null = null;
@@ -84,25 +79,17 @@ async function bootstrap(): Promise<void> {
 
   configureAppIdentity(appIconPath);
 
-  desktopWindow = new DesktopWindowController({
-    preloadPath,
-    rendererFile,
-    iconPath: appIconPath,
-    ...(rendererUrl === undefined ? {} : { rendererUrl })
-  });
-
   const excludeFromCapture = readBooleanEnv(
     process.env.MAUZ_EXCLUDE_FROM_CAPTURE,
     process.platform === "win32"
   );
-  const regionSelector = new RegionSelector({ iconPath: appIconPath, excludeFromCapture });
 
   popover = new PopoverWindowController({
     preloadPath,
     rendererFile,
     iconPath: appIconPath,
     onHide: () => {
-      // Hidden panels stay mounted; let Talk stop speaking and release the microphone.
+      // Hidden panels stay mounted; let Dictate release the microphone.
       const webContents = popover?.getWebContents();
 
       if (webContents !== null && webContents?.isDestroyed() === false) {
@@ -160,7 +147,6 @@ async function bootstrap(): Promise<void> {
   }
 
   apiHandle = launchedApi;
-  chatHistoryService = ChatHistoryService.fromUserDataDir(app.getPath("userData"));
   const initialSettings = await settingsService.get();
   currentSettings = initialSettings;
   contextCollector = new ContextCollector({
@@ -178,25 +164,21 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers({
     popover,
     contextCollector,
-    chatHistory: chatHistoryService,
     api: apiHandle,
     localApiToken,
     getSettings: () => settingsService!.get(),
     updateSettings: applySettingsUpdate,
     taskAgents: {
       launcher: taskAgentLauncher,
-      pickFolder: async (surface) => {
+      pickFolder: async () => {
         const options: Electron.OpenDialogOptions = {
           title: "Pick a folder for the agent",
           properties: ["openDirectory"]
         };
-        const desktopWindowHandle = desktopWindow?.getWindow() ?? null;
         const result =
-          surface === "popover" && popover !== null
+          popover !== null
             ? await popover.withDialog((parent) => dialog.showOpenDialog(parent, options))
-            : desktopWindowHandle !== null
-              ? await dialog.showOpenDialog(desktopWindowHandle, options)
-              : await dialog.showOpenDialog(options);
+            : await dialog.showOpenDialog(options);
 
         return result.canceled ? null : (result.filePaths[0] ?? null);
       }
@@ -221,26 +203,13 @@ async function bootstrap(): Promise<void> {
           await shell.openPath(extensionPath);
         }
       }
-    },
-    selectRegion: async (collect) => {
-      const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-
-      popover?.hide("region");
-
-      try {
-        const region = await regionSelector.select(display);
-
-        return region === null ? null : await collect(region);
-      } finally {
-        await popover?.showAtLastAnchor({ notifyActivation: false, preserveSize: true });
-      }
     }
   });
   startInputProviders(initialSettings);
   trayController = new TrayController({
     iconPath: getTrayIconPath(),
     onOpenMauz: () => void handleActivation(screen.getCursorScreenPoint()),
-    onOpenSettings: () => void desktopWindow?.show(),
+    onOpenSettings: () => void openSettings(),
     onToggleShake: (enabled) => {
       void applySettingsUpdate({ nativeShakeEnabled: enabled }).catch(() => {});
     },
@@ -248,7 +217,17 @@ async function bootstrap(): Promise<void> {
     onQuit: () => app.quit()
   });
   trayController.create();
-  await desktopWindow.show();
+  await openSettings();
+}
+
+/** Shows Settings in the popover at the pointer (startup, tray, a second launch). */
+async function openSettings(): Promise<void> {
+  if (popover === null) {
+    return;
+  }
+
+  await popover.showAt(screen.getCursorScreenPoint(), { notifyActivation: false });
+  popover.getWebContents()?.send(IPC_CHANNELS.openSettings);
 }
 
 async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSettings> {
@@ -305,12 +284,7 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   }
 
   process.env.MAUZ_AI_PROVIDER = settings.aiProvider;
-  process.env.MAUZ_AI_FALLBACK_PROVIDER = settings.aiFallbackProvider;
   process.env.OPENAI_ASK_MODEL = settings.askModel;
-  process.env.OPENAI_CHAT_TITLE_MODEL = settings.chatTitleModel;
-  process.env.OPENAI_REALTIME_MODEL = settings.realtimeModel;
-  process.env.OPENAI_REALTIME_VOICE = settings.realtimeVoice;
-  process.env.OPENAI_REALTIME_REASONING_EFFORT = settings.realtimeReasoningEffort;
 
   process.env.MAUZ_INSTALL_ID = settings.installId;
 }
@@ -544,15 +518,11 @@ async function shutdownResources(): Promise<void> {
   }
 
   const currentPopover = popover;
-  const currentDesktopWindow = desktopWindow;
-  desktopWindow = null;
   popover = null;
   contextCollector = null;
-  chatHistoryService = null;
   settingsService = null;
 
   try {
-    currentDesktopWindow?.destroy();
     currentPopover?.destroy();
   } catch (error: unknown) {
     reportShutdownError("destroy application windows", error);
@@ -623,16 +593,16 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    void desktopWindow?.show();
+    void openSettings();
   });
 
   void app.whenReady().then(startBootstrap);
 
   app.on("activate", () => {
-    if (desktopWindow === null || popover === null) {
+    if (popover === null) {
       startBootstrap();
     } else {
-      void desktopWindow.show();
+      void openSettings();
     }
   });
 

@@ -1,14 +1,13 @@
 import { BriefcaseBusiness, Mic, ScanSearch } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AiProvidersStatusResponse } from "@mauzai/shared";
-import type { LensAction } from "@renderer/state/useMauzStore";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = LensAction | "task" | "dictate";
-
 type BubbleKey = "ask" | "task" | "dictate";
+
+const PANEL_FOR_BUBBLE = { ask: "lens", task: "task", dictate: "dictate" } as const;
 
 // Bubble offsets from the cluster center.
 const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
@@ -35,16 +34,14 @@ export function MauzMenu(): React.JSX.Element {
     settings,
     status,
     setAskAnswer,
-    setAskConversationTitle,
     setAskError,
     setAskLoading,
     setCurrentContext,
     setMode,
-    setSelectedLensAction,
     setSettings,
     setStatus
   } = useMauzStore();
-  const [pendingAction, setPendingAction] = useState<MenuAction | null>(null);
+  const [pendingAction, setPendingAction] = useState<BubbleKey | null>(null);
   const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
 
   useEffect(() => {
@@ -106,36 +103,11 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  const handleLensAction = async (action: LensAction): Promise<void> => {
-    setPendingAction(action);
+  /** Captures what is under the pointer now; the panel's question or task is about it. */
+  const openPanel = async (bubble: BubbleKey): Promise<void> => {
+    setPendingAction(bubble);
     setStatus(null);
     setAskAnswer(null);
-    setAskConversationTitle(null);
-    setAskError(null);
-    setAskLoading(false);
-
-    try {
-      const context = await mauzClient.startAsk();
-
-      setCurrentContext(context);
-      setSelectedLensAction(action);
-
-      await mauzClient.setLensExpanded({
-        expanded: true
-      });
-      setMode("lens");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Mauz action failed.");
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const handleTask = async (): Promise<void> => {
-    setPendingAction("task");
-    setStatus(null);
-    setAskAnswer(null);
-    setAskConversationTitle(null);
     setAskError(null);
     setAskLoading(false);
 
@@ -143,28 +115,7 @@ export function MauzMenu(): React.JSX.Element {
       const context = await mauzClient.startAsk();
       setCurrentContext(context);
       await mauzClient.setLensExpanded({ expanded: true });
-      setMode("task");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Mauz action failed.");
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const handleDictate = async (): Promise<void> => {
-    setPendingAction("dictate");
-    setStatus(null);
-    setAskAnswer(null);
-    setAskConversationTitle(null);
-    setAskError(null);
-    setAskLoading(false);
-
-    try {
-      // What is under the pointer now is what the dictated question or task is about.
-      const context = await mauzClient.startAsk();
-      setCurrentContext(context);
-      await mauzClient.setLensExpanded({ expanded: true });
-      setMode("dictate");
+      setMode(PANEL_FOR_BUBBLE[bubble]);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {
@@ -214,7 +165,7 @@ export function MauzMenu(): React.JSX.Element {
           data-pending={pendingAction === "ask" ? "true" : undefined}
           aria-label="Ask about what's on screen"
           disabled={pendingAction !== null}
-          onClick={() => void handleLensAction("ask")}
+          onClick={() => void openPanel("ask")}
           style={bubbleStyle("ask", 0)}
         >
           <ScanSearch aria-hidden="true" size={18} />
@@ -230,7 +181,7 @@ export function MauzMenu(): React.JSX.Element {
           data-pending={pendingAction === "task" ? "true" : undefined}
           aria-label="Send to agent"
           disabled={pendingAction !== null}
-          onClick={() => void handleTask()}
+          onClick={() => void openPanel("task")}
           style={bubbleStyle("task", 1)}
         >
           <BriefcaseBusiness aria-hidden="true" size={18} />
@@ -245,7 +196,7 @@ export function MauzMenu(): React.JSX.Element {
           data-pending={pendingAction === "dictate" ? "true" : undefined}
           aria-label="Dictate"
           disabled={pendingAction !== null}
-          onClick={() => void handleDictate()}
+          onClick={() => void openPanel("dictate")}
           style={bubbleStyle("dictate", 2)}
         >
           <Mic aria-hidden="true" size={18} />

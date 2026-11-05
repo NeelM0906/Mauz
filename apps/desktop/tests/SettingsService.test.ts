@@ -276,19 +276,6 @@ describe("SettingsService", () => {
     expect(writes.at(-1)).not.toContain("encryptedOpenAiApiKey");
   });
 
-  it("keeps OpenAI auth mode on the API key path", async () => {
-    const { service } = createSettingsService({
-      settingsJson: JSON.stringify(DEFAULT_SETTINGS)
-    });
-
-    await expect(service.update({ openAiAuthMode: "api-key" })).resolves.toMatchObject({
-      openAiAuthMode: "api-key"
-    });
-    await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiAuthMode: "api-key"
-    });
-  });
-
   it("serializes concurrent updates so neither change is lost", async () => {
     const files = new Map<string, string>();
     files.set(
@@ -334,28 +321,24 @@ describe("SettingsService", () => {
     expect(runtime.installId).toBe(knownId);
   });
 
-  it("migrates unsupported account auth mode settings to the API key path", async () => {
-    const accountSettings = createSettingsService({
+  it("loads settings saved by older versions and drops removed fields", async () => {
+    const { service } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        openAiAuthMode: "account-login"
+        askModel: "gpt-5.5",
+        openAiAuthMode: "account-login",
+        chatTitleModel: "gpt-5.4-nano",
+        realtimeVoice: "marin",
+        aiFallbackProvider: "codex",
+        talkEngine: "realtime"
       })
     });
-    const legacySettings = createSettingsService({
-      settingsJson: JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        openAiAuthMode: "openai-auth"
-      })
-    });
+    const settings = await service.get();
 
-    await expect(accountSettings.service.get()).resolves.toMatchObject({
-      openAiAuthMode: "api-key"
-    });
-    await expect(legacySettings.service.get()).resolves.toMatchObject({
-      openAiAuthMode: "api-key"
-    });
-    expect(accountSettings.writes.at(-1)).toContain('"openAiAuthMode": "api-key"');
-    expect(legacySettings.writes.at(-1)).toContain('"openAiAuthMode": "api-key"');
+    expect(settings.askModel).toBe("gpt-5.5");
+    expect(settings).not.toHaveProperty("openAiAuthMode");
+    expect(settings).not.toHaveProperty("talkEngine");
+    expect(settings).not.toHaveProperty("aiFallbackProvider");
   });
 });
 
@@ -436,13 +419,8 @@ const DEFAULT_SETTINGS = {
   nativeShakeEnabled: true,
   devHotkeyEnabled: true,
   shakeSensitivity: "normal",
-  openAiAuthMode: "api-key",
   openAiAuthDisconnected: false,
   askModel: "gpt-5.4-mini",
-  chatTitleModel: "gpt-5.4-nano",
-  realtimeModel: "gpt-realtime-2",
-  realtimeVoice: "marin",
-  realtimeReasoningEffort: "low",
   captureBlockedApps: [],
   captureBlockedSites: []
 } as const;

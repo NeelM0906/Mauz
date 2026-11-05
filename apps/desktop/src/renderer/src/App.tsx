@@ -1,33 +1,31 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { ChatHistoryPanel } from "./components/ChatHistoryPanel";
-import { DesktopApp } from "./components/DesktopApp";
 import { DictatePanel } from "./components/DictatePanel";
 import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
-import { PushToTalkPanel } from "./components/PushToTalkPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TaskPanel } from "./components/TaskPanel";
-import { TalkPanel } from "./components/TalkPanel";
 import { mauzClient } from "./lib/mauzClient";
 import { useMauzStore } from "./state/useMauzStore";
 import "./styles.css";
 
 function App(): React.JSX.Element {
-  const surface = getRendererSurface();
   const mode = useMauzStore((state) => state.mode);
   const reset = useMauzStore((state) => state.reset);
-  const talkEngine = useMauzStore((state) => state.settings?.talkEngine ?? "pipeline");
+  const setMode = useMauzStore((state) => state.setMode);
 
   React.useEffect(() => {
-    if (surface === "desktop") {
-      return;
-    }
-
     return mauzClient.onActivation(() => {
       reset();
     });
-  }, [reset, surface]);
+  }, [reset]);
+
+  React.useEffect(() => {
+    return mauzClient.onOpenSettings(() => {
+      reset();
+      setMode("settings");
+    });
+  }, [reset, setMode]);
 
   React.useEffect(() => {
     return mauzClient.onPermissionError((error) => {
@@ -37,15 +35,12 @@ function App(): React.JSX.Element {
 
   // Focus the primary heading of the newly mounted panel on each mode switch
   React.useEffect(() => {
-    if (surface === "desktop") return;
     const el = document.querySelector<HTMLElement>('h1[tabindex="-1"]');
     el?.focus();
-  }, [mode, surface]);
+  }, [mode]);
 
   // Global Escape key: step back (panel → menu) or close (menu → closed)
   React.useEffect(() => {
-    if (surface === "desktop") return;
-
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== "Escape") return;
       const target = e.target as HTMLElement;
@@ -62,11 +57,7 @@ function App(): React.JSX.Element {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [surface]);
-
-  if (surface === "desktop") {
-    return <DesktopApp />;
-  }
+  }, []);
 
   if (mode === "lens") {
     return <LensPanel />;
@@ -84,22 +75,7 @@ function App(): React.JSX.Element {
     return <SettingsPanel />;
   }
 
-  if (mode === "history") {
-    return <ChatHistoryPanel allowContinue={false} />;
-  }
-
-  if (mode === "talk") {
-    // Push to talk works with any AI provider; OpenAI Realtime is opt-in and needs an OpenAI key.
-    return talkEngine === "realtime" ? <TalkPanel /> : <PushToTalkPanel />;
-  }
-
   return <MauzMenu />;
-}
-
-function getRendererSurface(): "desktop" | "popover" {
-  const surface = new URLSearchParams(window.location.search).get("surface");
-
-  return surface === "desktop" ? "desktop" : "popover";
 }
 
 const rootElement = document.getElementById("root");

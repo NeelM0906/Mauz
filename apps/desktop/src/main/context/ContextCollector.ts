@@ -53,8 +53,6 @@ type ContextCollectorOptions = {
 type Readings = {
   target?: PointerTarget | undefined;
   page?: BrowserPage | undefined;
-  /** Other app windows the capture covers (a selected area's corners). */
-  otherWindows?: Array<PointerTarget["window"]> | undefined;
   /** A never-capture site open in a browser involved in this capture. Kept on this computer. */
   blockedSite?: string | undefined;
   /** The Windows helper could not say which app is under the pointer. */
@@ -72,14 +70,8 @@ type ActivationSnapshot = ActiveWindowMetadata & {
   readings: Readings;
 };
 
-type CollectPointerContextOptions = {
+type CollectOptions = {
   useActivationSnapshot?: boolean | undefined;
-  useActivationCursor?: boolean | undefined;
-};
-
-type CollectOptions = CollectPointerContextOptions & {
-  /** A screen area the user selected; replaces the pointer as what "this" means. */
-  region?: Bounds | undefined;
 };
 
 type AskBaseContext = {
@@ -121,26 +113,11 @@ export class ContextCollector {
     };
   }
 
-  async collectForAsk(options: CollectPointerContextOptions = {}): Promise<MauzDesktopContext> {
-    return this.collectWithPointerContext(options);
-  }
-
-  async collectForRealtime(): Promise<MauzDesktopContext> {
-    return this.collectWithPointerContext({
-      useActivationCursor: false
-    });
-  }
-
-  /** Context for a screen area the user dragged out (DIPs). */
-  async collectForRegion(region: Bounds): Promise<MauzDesktopContext> {
-    return this.collectWithPointerContext({ useActivationSnapshot: false, region });
-  }
-
   discardActivationSnapshot(): void {
     this.activationSnapshot = null;
   }
 
-  private async collectWithPointerContext(options: CollectOptions = {}): Promise<MauzDesktopContext> {
+  async collectForAsk(options: CollectOptions = {}): Promise<MauzDesktopContext> {
     const { context, readings } = await this.collectAskBaseContext(options);
     const { target, page } = readings;
     const blocked = this.findBlocked(context, readings);
@@ -150,10 +127,7 @@ export class ContextCollector {
       return { ...this.collectBasicContext(context.cursor), captureBlocked: { appName: blocked } };
     }
 
-    const focus: PointerCaptureFocus = {
-      ...getCaptureFocus(target),
-      ...(options.region === undefined ? {} : { region: options.region })
-    };
+    const focus = getCaptureFocus(target);
     const capture = async () => this.screenshotService.capturePointerContext(context.cursor, focus);
 
     try {
@@ -163,7 +137,7 @@ export class ContextCollector {
           : await this.captureHider.hideDuringCapture(capture);
 
       const pointerContext = mergePointerMetadata(pointer, context, target, page);
-      const ocrText = await this.recognizeText(pointerContext, options.region !== undefined);
+      const ocrText = await this.recognizeText(pointerContext);
 
       if (ocrText !== undefined) {
         pointerContext.ocrText = ocrText;
@@ -195,7 +169,7 @@ export class ContextCollector {
       ? await this.captureSelectedText(metadata)
       : undefined;
     // Read before the popover opens over the pointer.
-    const readings = await this.captureReadings(cursor, metadata, { includePage: true, foregroundPage });
+    const readings = await this.captureReadings(cursor, metadata, foregroundPage);
 
     this.activationSnapshot = withOptionalActivationFields({
       ...metadata,
@@ -225,24 +199,13 @@ export class ContextCollector {
       activationSnapshot === null
         ? await this.captureActiveWindowMetadata()
         : getActivationMetadata(activationSnapshot);
-    const cursor =
-      options.region !== undefined
-        ? getCenter(options.region)
-        : activationSnapshot !== null && options.useActivationCursor !== false
-          ? activationSnapshot.cursor
-          : screen.getCursorScreenPoint();
+    const cursor = activationSnapshot?.cursor ?? screen.getCursorScreenPoint();
     const basicContext = this.collectBasicContext(cursor);
     const selectedText = this.selectedTextService.capturesAtActivation
       ? activationSnapshot?.selectedText
       : await this.captureSelectedText(activeMetadata);
-    // Later Talk turns and selected areas have no snapshot; read what is on screen now.
-    const readings =
-      activationSnapshot === null
-        ? await this.captureReadings(cursor, activeMetadata, {
-            includePage: options.region === undefined,
-            extraPoints: options.region === undefined ? [] : getCorners(options.region)
-          })
-        : activationSnapshot.readings;
+    // Without a snapshot (it was discarded or already used), read what is on screen now.
+    const readings = activationSnapshot?.readings ?? (await this.captureReadings(cursor, activeMetadata));
 
     return {
       context: withOptionalContextFields({
@@ -261,48 +224,26 @@ export class ContextCollector {
   private async captureReadings(
     cursor: Point,
     metadata: ActiveWindowMetadata,
-    options: {
-      includePage: boolean;
-      extraPoints?: readonly Point[];
-      foregroundPage?: Promise<BrowserPageResult | undefined> | undefined;
-    }
+    foregroundPage: Promise<BrowserPageResult | undefined> = this.readBrowserPage(
+      metadata.activeApp?.bundleId
+    )
   ): Promise<Readings> {
     const foregroundExecutable = metadata.activeApp?.bundleId;
-    const foregroundPage = options.foregroundPage ?? this.readBrowserPage(foregroundExecutable);
     const lookup = await this.captureTarget(cursor);
-    const extraLookups: TargetLookup[] = [];
-
-    for (const point of options.extraPoints ?? []) {
-      extraLookups.push(await this.captureTarget(point));
-    }
-
     const pointerExecutable = lookup.target?.window?.executable;
-    const otherExecutables = [
-      pointerExecutable,
-      ...extraLookups.map((extra) => extra.target?.window?.executable)
-    ].filter(
-      (executable, index, all): executable is string =>
-        executable !== undefined &&
-        !sameApp(executable, foregroundExecutable) &&
-        all.findIndex((other) => other !== undefined && sameApp(other, executable)) === index
-    );
-    const [foregroundResult, ...otherResults] = await Promise.all([
-      foregroundPage,
-      ...otherExecutables.map((executable) => this.readBrowserPage(executable))
-    ]);
-    const results = [foregroundResult, ...otherResults];
-    const blockedSite = results.map((result) => getBlockedHost(result)).find(isDefined);
-    const pointerResult =
+    // A browser under the pointer that is not in front is asked too.
+    const pointerPage =
       pointerExecutable === undefined || sameApp(pointerExecutable, foregroundExecutable)
-        ? foregroundResult
-        : otherResults[otherExecutables.findIndex((executable) => sameApp(executable, pointerExecutable))];
+        ? undefined
+        : this.readBrowserPage(pointerExecutable);
+    const [foregroundResult, pointerResult] = await Promise.all([foregroundPage, pointerPage]);
+    const blockedSite = getBlockedHost(foregroundResult) ?? getBlockedHost(pointerResult);
 
     return {
       target: lookup.target,
-      page: options.includePage ? getPage(pointerResult) : undefined,
-      otherWindows: extraLookups.map((extra) => extra.target?.window).filter(isDefined),
+      page: getPage(pointerPage === undefined ? foregroundResult : pointerResult),
       blockedSite,
-      appUnknown: lookup.failed || extraLookups.some((extra) => extra.failed)
+      appUnknown: lookup.failed
     };
   }
 
@@ -310,7 +251,7 @@ export class ContextCollector {
     try {
       const metadata = await this.activeWindowService.capture();
 
-      // While a Mauz window has focus (later voice turns), Mauz itself is the frontmost app,
+      // While a Mauz window has focus (no activation snapshot), Mauz itself is the frontmost app,
       // which tells the model nothing about what the user is working on.
       return metadata.activeApp?.processId === this.ownProcessId ? {} : metadata;
     } catch {
@@ -357,15 +298,15 @@ export class ContextCollector {
     }
   }
 
-  /** OCR for apps that expose no text, and always for a selected area. */
-  private async recognizeText(pointer: PointerContext, isRegion: boolean): Promise<string | undefined> {
+  /** OCR for apps that expose no text. */
+  private async recognizeText(pointer: PointerContext): Promise<string | undefined> {
     const crop = pointer.cursorCrop;
 
     if (this.windowsHelper === undefined || crop === undefined) {
       return undefined;
     }
 
-    if (!isRegion && (pointer.page !== undefined || hasAppText(pointer.target))) {
+    if (pointer.page !== undefined || hasAppText(pointer.target)) {
       return undefined;
     }
 
@@ -385,10 +326,10 @@ export class ContextCollector {
     );
     const candidates = [
       { name: context.activeApp?.name, keys: [context.activeApp?.bundleId, context.activeApp?.name] },
-      ...[readings.target?.window, ...(readings.otherWindows ?? [])].map((window) => ({
-        name: window?.appName,
-        keys: [window?.executable, window?.appName]
-      }))
+      {
+        name: readings.target?.window?.appName,
+        keys: [readings.target?.window?.executable, readings.target?.window?.appName]
+      }
     ];
 
     for (const candidate of candidates) {
@@ -429,22 +370,6 @@ function sameApp(a: string | undefined, b: string | undefined): boolean {
   return a !== undefined && b !== undefined && normalizeAppKey(a) === normalizeAppKey(b);
 }
 
-/** Points just inside a selected area's corners, to find every app it covers. */
-function getCorners(bounds: Bounds): Point[] {
-  const inset = Math.min(4, bounds.width / 4, bounds.height / 4);
-  const left = bounds.x + inset;
-  const top = bounds.y + inset;
-  const right = bounds.x + bounds.width - inset;
-  const bottom = bounds.y + bounds.height - inset;
-
-  return [
-    { x: left, y: top },
-    { x: right, y: top },
-    { x: left, y: bottom },
-    { x: right, y: bottom }
-  ];
-}
-
 function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
 }
@@ -455,10 +380,6 @@ function getBlockedHost(result: BrowserPageResult | undefined): string | undefin
 
 function getPage(result: BrowserPageResult | undefined): BrowserPage | undefined {
   return result !== undefined && "page" in result ? result.page : undefined;
-}
-
-function getCenter(bounds: Bounds): Point {
-  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
 }
 
 function getCaptureFocus(target: PointerTarget | undefined): PointerCaptureFocus {

@@ -7,12 +7,7 @@ import {
   type AskMauzRequest,
   type AskMauzResponse
 } from "@mauzai/shared";
-import {
-  AiProviderError,
-  BackendUnreachableError,
-  MissingOpenAIKeyError,
-  NoAiProviderError
-} from "../errors";
+import { AiProviderError, MissingOpenAIKeyError, NoAiProviderError } from "../errors";
 import { askMauz } from "../openai/askMauz";
 
 export type AskMauzHandler = (request: AskMauzRequest) => Promise<AskMauzResponse>;
@@ -65,10 +60,6 @@ export async function registerAskRoute(
 
       if (error instanceof AiProviderError) {
         return reply.status(502).send({ error: error.message });
-      }
-
-      if (error instanceof BackendUnreachableError) {
-        return reply.status(503).send({ error: error.message });
       }
 
       return reply.status(502).send({

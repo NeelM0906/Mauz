@@ -3,9 +3,6 @@ import {
   AiProvidersStatusRequestSchema,
   AiProvidersStatusResponseSchema,
   AskMauzRequestSchema,
-  ChatHistoryContinueRequestSchema,
-  ChatHistoryDeleteRequestSchema,
-  ChatHistoryGetRequestSchema,
   IPC_CHANNELS,
   MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
@@ -21,26 +18,21 @@ import {
   TaskFoldersResponseSchema,
   TaskSendRequestSchema,
   TaskSendResponseSchema,
-  type Bounds,
   type BrowserExtensionStatus,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
 import { getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
 import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
-import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
 import type { TalkTranscriber } from "../talk/TalkTranscriber";
 import { submitAskToLocalApi } from "./askApiClient";
-import { generateChatTitleFromLocalApi } from "./chatTitleApiClient";
-import { connectRealtimeToLocalApi } from "./realtimeApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
-  chatHistory: ChatHistoryService;
   api: LocalApiHandle;
   localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
@@ -56,8 +48,8 @@ type RegisterIpcHandlersOptions = {
       | "defaultFolder"
       | "launch"
     >;
-    /** Opens a folder dialog over the asking surface; null when cancelled. */
-    pickFolder(surface: "popover" | "desktop"): Promise<string | null>;
+    /** Opens a folder dialog over the popover; null when cancelled. */
+    pickFolder(): Promise<string | null>;
   };
   getProvidersStatus?: typeof getAiProvidersStatus;
   talkTranscriber?: Pick<TalkTranscriber, "transcribe">;
@@ -66,11 +58,6 @@ type RegisterIpcHandlersOptions = {
     "connect" | "submitCode" | "cancel" | "disconnect" | "getState"
   >;
   openExternal?: (url: string) => Promise<void>;
-  /**
-   * Hides the popover, lets the user drag a rectangle (screen DIPs), runs `collect` on it while
-   * the popover is still hidden, then shows the popover again. Null when the user cancels.
-   */
-  selectRegion?: <T>(collect: (region: Bounds) => Promise<T>) => Promise<T | null>;
   browserExtension?: {
     status(): BrowserExtensionStatus;
     openExtensionFolder(): Promise<void>;
@@ -81,19 +68,10 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuShowMenu,
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
-  IPC_CHANNELS.menuStartTalk,
-  IPC_CHANNELS.menuSelectRegion,
   IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
-  IPC_CHANNELS.chatHistoryList,
-  IPC_CHANNELS.chatHistoryGet,
-  IPC_CHANNELS.chatHistoryContinue,
-  IPC_CHANNELS.chatHistoryDelete,
-  IPC_CHANNELS.chatHistoryClear,
-  IPC_CHANNELS.realtimeCreateSession,
-  IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.taskAgents,
   IPC_CHANNELS.taskFolders,
   IPC_CHANNELS.taskPickFolder,
@@ -105,7 +83,6 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.providersConnectOpenPage,
   IPC_CHANNELS.providersDisconnect,
   IPC_CHANNELS.talkTranscribe,
-  IPC_CHANNELS.talkCaptureContext,
   IPC_CHANNELS.browserStatus,
   IPC_CHANNELS.browserOpenExtensionFolder
 ] as const;
@@ -113,7 +90,6 @@ const HANDLED_IPC_CHANNELS = [
 export function registerIpcHandlers({
   popover,
   contextCollector,
-  chatHistory,
   api,
   localApiToken,
   getSettings,
@@ -123,7 +99,6 @@ export function registerIpcHandlers({
   talkTranscriber,
   subscriptionConnector,
   openExternal,
-  selectRegion,
   browserExtension
 }: RegisterIpcHandlersOptions): void {
   for (const channel of HANDLED_IPC_CHANNELS) {
@@ -131,41 +106,22 @@ export function registerIpcHandlers({
   }
 
   ipcMain.handle(IPC_CHANNELS.menuShowMenu, (event) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     popover.resizeForMenu();
   });
 
   ipcMain.handle(IPC_CHANNELS.menuClose, (event) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     contextCollector.discardActivationSnapshot();
     popover.hide();
   });
 
   ipcMain.handle(IPC_CHANNELS.menuStartAsk, async (event) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     return contextCollector.collectForAsk();
   });
-  ipcMain.handle(IPC_CHANNELS.menuStartTalk, async (event) => {
-    assertTrustedSurface(event, ["popover"]);
-    const context = await contextCollector.collectForRealtime();
-    popover.resizeForRealtime();
-    return context;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.menuSelectRegion, async (event) => {
-    assertTrustedSurface(event, ["popover"]);
-
-    if (selectRegion === undefined) {
-      throw new Error("Selecting an area is not available.");
-    }
-
-    contextCollector.discardActivationSnapshot();
-
-    return selectRegion((region) => contextCollector.collectForRegion(region));
-  });
-
   ipcMain.handle(IPC_CHANNELS.menuSetLensExpanded, (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     const request = MauzLensResizeRequestSchema.parse(payload);
 
     if (request.expanded) {
@@ -177,9 +133,9 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event, payload: unknown) => {
-    const surface = getTrustedSurface(event);
+    assertTrustedSender(event);
 
-    if (surface === "popover" && shouldResizeForSettingsOpen(payload)) {
+    if (shouldResizeForSettingsOpen(payload)) {
       popover.resizeForSettings();
     }
 
@@ -187,7 +143,7 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (event, payload: unknown) => {
-    getTrustedSurface(event);
+    assertTrustedSender(event);
     const parsedPayload = MauzSettingsUpdateSchema.safeParse(payload);
 
     if (!parsedPayload.success) {
@@ -198,108 +154,13 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     const request = AskMauzRequestSchema.parse(payload);
-    const response = await submitAskToLocalApi(api, localApiToken, request);
-
-    // Spoken push-to-talk turns are part of a live voice session, not saved text chats.
-    if (request.responseStyle === "voice") {
-      return response;
-    }
-
-    const fallbackTitle = buildFallbackChatTitle(request.question);
-
-    try {
-      const conversation = await chatHistory.saveAskConversation({
-        question: request.question,
-        answer: response.answer,
-        title: fallbackTitle
-      });
-
-      queueGeneratedTitleUpdate(api, localApiToken, chatHistory, conversation.id, {
-        question: request.question,
-        answer: response.answer
-      });
-
-      return {
-        ...response,
-        conversationId: conversation.id,
-        conversationTitle: fallbackTitle
-      };
-    } catch {
-      return response;
-    }
-  });
-
-  ipcMain.handle(IPC_CHANNELS.chatHistoryList, async (event) => {
-    const surface = getTrustedSurface(event);
-
-    if (surface === "popover") {
-      popover.resizeForHistory();
-    }
-
-    return chatHistory.list();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.chatHistoryGet, async (event, payload: unknown) => {
-    getTrustedSurface(event);
-    const request = ChatHistoryGetRequestSchema.parse(payload);
-
-    return chatHistory.get(request.id);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.chatHistoryContinue, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["desktop"]);
-    const request = ChatHistoryContinueRequestSchema.parse(payload);
-    const conversation = await chatHistory.get(request.id);
-    const context = await contextCollector.collectForAsk({
-      useActivationSnapshot: false
-    });
-    const response = await submitAskToLocalApi(api, localApiToken, {
-      question: request.question,
-      context,
-      conversationMessages: conversation.messages,
-      sessionId: request.id
-    });
-    const updatedConversation = await chatHistory.appendAskTurn(request.id, {
-      question: request.question,
-      answer: response.answer
-    });
-
-    return {
-      conversation: updatedConversation,
-      answer: response.answer,
-      model: response.model
-    };
-  });
-
-  ipcMain.handle(IPC_CHANNELS.chatHistoryDelete, async (event, payload: unknown) => {
-    getTrustedSurface(event);
-    const request = ChatHistoryDeleteRequestSchema.parse(payload);
-
-    await chatHistory.delete(request.id);
-    return chatHistory.list();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.chatHistoryClear, async (event) => {
-    getTrustedSurface(event);
-
-    await chatHistory.clear();
-    return chatHistory.list();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.realtimeCreateSession, (event) => {
-    getTrustedSurface(event);
-    throw new Error("Mauz uses the Realtime WebRTC unified connection path.");
-  });
-
-  ipcMain.handle(IPC_CHANNELS.realtimeConnect, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
-    return connectRealtimeToLocalApi(api, localApiToken, payload);
+    return submitAskToLocalApi(api, localApiToken, request);
   });
 
   ipcMain.handle(IPC_CHANNELS.taskAgents, async (event) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     const settings = await getSettings();
     const agents = taskAgents.launcher.listAgents();
 
@@ -310,7 +171,7 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.taskFolders, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     const { agentId } = TaskFoldersRequestSchema.parse(payload);
     const settings = await getSettings();
     const launcher = taskAgents.launcher;
@@ -341,12 +202,12 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.taskPickFolder, async (event) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
-    return taskAgents.pickFolder(getTrustedSurface(event));
+    assertTrustedSender(event);
+    return taskAgents.pickFolder();
   });
 
   ipcMain.handle(IPC_CHANNELS.taskSend, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     const request = TaskSendRequestSchema.parse(payload);
     const result = await taskAgents.launcher.launch(request);
     const settings = await getSettings();
@@ -359,7 +220,7 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.providersStatus, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     const request = AiProvidersStatusRequestSchema.parse(payload);
     const status = await getProvidersStatus({ refresh: request?.refresh === true });
 
@@ -367,25 +228,25 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.providersConnect, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     const request = SubscriptionConnectRequestSchema.parse(payload);
 
     return SubscriptionConnectStateSchema.parse(requireConnector().connect(request.providerId));
   });
 
   ipcMain.handle(IPC_CHANNELS.providersConnectCode, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     const request = SubscriptionCodeRequestSchema.parse(payload);
     requireConnector().submitCode(request.connectId, request.code);
   });
 
   ipcMain.handle(IPC_CHANNELS.providersConnectCancel, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     requireConnector().cancel(SubscriptionCancelRequestSchema.parse(payload).connectId);
   });
 
   ipcMain.handle(IPC_CHANNELS.providersConnectOpenPage, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     const state = requireConnector().getState(SubscriptionCancelRequestSchema.parse(payload).connectId);
 
     // Only the sign-in page the CLI printed can be opened, never a URL from the renderer.
@@ -395,7 +256,7 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.providersDisconnect, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     const request = SubscriptionDisconnectRequestSchema.parse(payload);
     await requireConnector().disconnect(request.providerId);
 
@@ -411,24 +272,18 @@ export function registerIpcHandlers({
   }
 
   ipcMain.handle(IPC_CHANNELS.talkTranscribe, async (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
+    assertTrustedSender(event);
     const request = TalkTranscribeRequestSchema.parse(payload);
 
     if (talkTranscriber === undefined) {
-      throw new Error("Push to talk is not available in this build.");
+      throw new Error("Dictation is not available in this build.");
     }
 
     return TalkTranscribeResponseSchema.parse(await talkTranscriber.transcribe(request));
   });
 
-  ipcMain.handle(IPC_CHANNELS.talkCaptureContext, async (event) => {
-    assertTrustedSurface(event, ["popover"]);
-    // Each spoken turn sees the screen as it is now, at the current pointer.
-    return contextCollector.collectForRealtime();
-  });
-
   ipcMain.handle(IPC_CHANNELS.browserStatus, (event): BrowserExtensionStatus => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
 
     return (
       browserExtension?.status() ?? { connectedBrowsers: [], extensionPath: null, hostRegistered: false }
@@ -436,22 +291,12 @@ export function registerIpcHandlers({
   });
 
   ipcMain.handle(IPC_CHANNELS.browserOpenExtensionFolder, async (event) => {
-    assertTrustedSurface(event, ["popover", "desktop"]);
+    assertTrustedSender(event);
     await browserExtension?.openExtensionFolder();
   });
 }
 
-type RendererSurface = "desktop" | "popover";
-
-function assertTrustedSurface(event: IpcMainInvokeEvent, allowed: readonly RendererSurface[]): void {
-  const surface = getTrustedSurface(event);
-
-  if (!allowed.includes(surface)) {
-    throw new Error("Mauz rejected an IPC request from the wrong renderer surface.");
-  }
-}
-
-function getTrustedSurface(event: IpcMainInvokeEvent | undefined): RendererSurface {
+function assertTrustedSender(event: IpcMainInvokeEvent | undefined): void {
   if (event === undefined) {
     throw new Error("Mauz rejected an IPC request without renderer metadata.");
   }
@@ -459,16 +304,8 @@ function getTrustedSurface(event: IpcMainInvokeEvent | undefined): RendererSurfa
   const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
 
   try {
-    const url = new URL(frameUrl);
-
-    if (!isTrustedRendererOrigin(url)) {
-      throw new Error("untrusted origin");
-    }
-
-    const surface = url.searchParams.get("surface");
-
-    if (surface === "desktop" || surface === "popover") {
-      return surface;
+    if (isTrustedRendererOrigin(new URL(frameUrl))) {
+      return;
     }
   } catch {
     // Fall through to the generic rejection below.
@@ -500,33 +337,4 @@ function shouldResizeForSettingsOpen(payload: unknown): boolean {
   }
 
   return payload.resizePopover !== false;
-}
-
-function queueGeneratedTitleUpdate(
-  api: LocalApiHandle,
-  localApiToken: string,
-  chatHistory: ChatHistoryService,
-  conversationId: string,
-  payload: { question: string; answer: string }
-): void {
-  void generateChatTitleFromLocalApi(api, localApiToken, payload)
-    .then(async (response) => {
-      await chatHistory.updateTitle(conversationId, response.title);
-    })
-    .catch(() => {
-      // Title generation is deliberately off the answer path.
-    });
-}
-
-function buildFallbackChatTitle(question: string): string {
-  const words = question
-    .replace(/["'`]/g, "")
-    .replace(/[.,:;!?()[\]{}]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 7);
-
-  return words.length > 0 ? words.join(" ") : "Untitled Mauz Chat";
 }

@@ -74,8 +74,6 @@ export type PointerCaptureFocus = {
   targets?: readonly Bounds[] | undefined;
   /** The window under the pointer; crops stay inside it. */
   window?: Bounds | undefined;
-  /** An area the user selected; cropped exactly, ignoring the targets and the window. */
-  region?: Bounds | undefined;
 };
 
 export class ScreenshotCaptureError extends Error {
@@ -132,11 +130,7 @@ export class ScreenshotService {
     const frame = getFrame(point, displayBounds, focus.window);
 
     try {
-      const region = focus.region === undefined ? undefined : intersect(focus.region, displayBounds);
-      const { rect, kind } =
-        region === undefined
-          ? chooseCropRect(point, frame, focus.targets ?? [])
-          : { rect: region, kind: "region" as const };
+      const { rect, kind } = chooseCropRect(point, frame, focus.targets ?? []);
       const crop = fitWithin(cropImage(source.thumbnail, rect, displayBounds), MAX_CROP_OUTPUT_SIZE);
       const cropSize = crop.getSize();
 
@@ -148,12 +142,7 @@ export class ScreenshotService {
           y: Math.round(((point.y - rect.y) * cropSize.height) / Math.max(rect.height, 1))
         }
       } satisfies CursorCropFocus;
-    } catch (error) {
-      // The user asked about exactly that area; a wider image would show more than they chose.
-      if (focus.region !== undefined) {
-        throw error;
-      }
-
+    } catch {
       pointerContext.screenshot = encodeImage(
         fitWithin(frameImage(source.thumbnail, frame, displayBounds), MAX_OVERVIEW_SIZE)
       );

@@ -48,7 +48,7 @@ export class TalkTranscriber {
     }
 
     throw new Error(
-      "Push to talk needs speech recognition. Add an OpenAI API key in Settings to transcribe your voice."
+      "Dictation needs speech recognition. Add an OpenAI API key in Settings to transcribe your voice."
     );
   }
 }

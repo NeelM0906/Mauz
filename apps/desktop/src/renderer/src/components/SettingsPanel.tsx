@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  AiFallbackPreference,
   AiProviderId,
   AiProviderPreference,
   AiProvidersStatusResponse,
@@ -71,7 +70,6 @@ const AI_PROVIDER_OPTIONS: Array<{ value: AiProviderPreference; label: string }>
   ...AI_PROVIDER_CHOICES
 ];
 const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
-const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const UPCOMING_PROVIDER_OPTIONS = [
   {
     name: "z.ai",
@@ -96,11 +94,7 @@ const FALLBACK_TASK_AGENTS: TaskAgentStatus[] = [
   { id: "codex", label: "Codex", installed: true }
 ];
 
-type SettingsPanelProps = {
-  chrome?: "popover" | "desktop";
-};
-
-export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): React.JSX.Element {
+export function SettingsPanel(): React.JSX.Element {
   const { settings, setSettings, setStatus, backToMenu } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
   // Edited as free text so typing a new line is not normalized away; parsed on Save.
@@ -266,10 +260,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   };
 
   const handleBack = async (): Promise<void> => {
-    if (chrome === "desktop") {
-      return;
-    }
-
     await mauzClient.showMenu();
     backToMenu();
   };
@@ -367,17 +357,11 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         shakeSensitivity: draft.shakeSensitivity,
         openAiAuthDisconnected: draft.openAiAuthDisconnected,
         askModel: draft.askModel,
-        chatTitleModel: draft.chatTitleModel,
-        realtimeModel: draft.realtimeModel,
-        realtimeVoice: draft.realtimeVoice,
-        realtimeReasoningEffort: draft.realtimeReasoningEffort,
         captureBlockedApps: parseAppList(blockedAppsDraft),
         captureBlockedSites: parseAppList(blockedSitesDraft),
         taskAgent: draft.taskAgent,
         taskFolder: draft.taskFolder.trim(),
-        aiProvider: draft.aiProvider,
-        aiFallbackProvider: draft.aiFallbackProvider,
-        talkEngine: draft.talkEngine
+        aiProvider: draft.aiProvider
       };
       const trimmedApiKeyDraft = openAiApiKeyDraft.trim();
       const trimmedAnthropicApiKeyDraft = anthropicApiKeyDraft.trim();
@@ -418,20 +402,16 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
 
   if (draft === null) {
     return (
-      <section className="settings-panel" data-chrome={chrome} aria-label="Mauz settings">
-        <SettingsHeader chrome={chrome} onBack={handleBack} />
+      <section className="settings-panel" aria-label="Mauz settings">
+        <SettingsHeader onBack={handleBack} />
         <p className="settings-message">Loading settings...</p>
       </section>
     );
   }
 
-  // A fallback only makes sense once more than one provider is set up.
-  const readyProviderCount = providersStatus?.providers.filter((provider) => provider.available).length ?? 0;
-  const showFallbackChoice = readyProviderCount > 1 || draft.aiFallbackProvider !== "none";
-
   return (
-    <section className="settings-panel" data-chrome={chrome} aria-label="Mauz settings">
-      <SettingsHeader chrome={chrome} onBack={handleBack} />
+    <section className="settings-panel" aria-label="Mauz settings">
+      <SettingsHeader onBack={handleBack} />
 
       <div className="settings-content">
         <div className="settings-section">
@@ -444,14 +424,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             <span>Default provider</span>
             <select
               value={draft.aiProvider}
-              onChange={(event) => {
-                const aiProvider = event.target.value as AiProviderPreference;
-                updateDraft("aiProvider", aiProvider);
-
-                if (aiProvider === draft.aiFallbackProvider) {
-                  updateDraft("aiFallbackProvider", "none");
-                }
-              }}
+              onChange={(event) => updateDraft("aiProvider", event.target.value as AiProviderPreference)}
             >
               {AI_PROVIDER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -460,24 +433,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
               ))}
             </select>
           </label>
-          {showFallbackChoice ? (
-            <label className="settings-field">
-              <span>Fallback provider</span>
-              <select
-                value={draft.aiFallbackProvider}
-                onChange={(event) =>
-                  updateDraft("aiFallbackProvider", event.target.value as AiFallbackPreference)
-                }
-              >
-                <option value="none">None</option>
-                {AI_PROVIDER_CHOICES.filter((option) => option.value !== draft.aiProvider).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           <div className="auth-provider-list" aria-label="Detected AI providers" aria-busy={providersLoading}>
             {providersStatus === null ? (
               <p className="settings-helper">
@@ -511,8 +466,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
                             <Check aria-hidden="true" size={12} />
                             In use
                           </>
-                        ) : provider.id === providersStatus.fallbackProviderId ? (
-                          "Fallback"
                         ) : provider.available ? (
                           "Ready"
                         ) : isConnecting(connectState) ? (
@@ -559,8 +512,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
           </div>
           <p className="settings-helper">
             Connect a Claude Code or Codex subscription here, or add an API key below. With one provider set
-            up, Mauz uses it. With several, pick a default and a fallback that answers when the default is not
-            ready or fails.
+            up, Mauz uses it. With several, pick the default.
           </p>
           <label className="settings-field api-key-field">
             <span>Anthropic API key</span>
@@ -699,12 +651,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
             value={draft.askModel}
             options={ASK_MODEL_OPTIONS}
             onChange={(askModel) => updateDraft("askModel", askModel)}
-          />
-          <SettingsSelect
-            label="Titles"
-            value={draft.chatTitleModel}
-            options={TITLE_MODEL_OPTIONS}
-            onChange={(chatTitleModel) => updateDraft("chatTitleModel", chatTitleModel)}
           />
         </div>
 
@@ -930,25 +876,17 @@ function getOpenAiReconnectMessage(settings: MauzSettings): string {
   return "OpenAI reconnected.";
 }
 
-function SettingsHeader({
-  chrome,
-  onBack
-}: {
-  chrome: "popover" | "desktop";
-  onBack(): Promise<void>;
-}): React.JSX.Element {
+function SettingsHeader({ onBack }: { onBack(): Promise<void> }): React.JSX.Element {
   return (
     <header className="settings-header">
-      {chrome === "popover" ? (
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back to Mauz menu"
-          onClick={() => void onBack()}
-        >
-          <ArrowLeft aria-hidden="true" size={16} />
-        </button>
-      ) : null}
+      <button
+        className="icon-button"
+        type="button"
+        aria-label="Back to Mauz menu"
+        onClick={() => void onBack()}
+      >
+        <ArrowLeft aria-hidden="true" size={16} />
+      </button>
       <div className="panel-title">
         <BrandLogo className="panel-title-logo" />
         <div>

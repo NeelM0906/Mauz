@@ -1,5 +1,7 @@
 # Design: Precise context capture
 
+> **Update 2026-11-05:** Talk, OpenAI Realtime, and Select area (the user-drawn region) have been removed. Mauz now does Ask, Dictate, and Send to agent only, so the parts of this document about them are history.
+
 **Date:** 2026-11-04
 **Status:** Approved for Phase 1 (owner asked to start; removal of the full-screenshot option confirmed)
 

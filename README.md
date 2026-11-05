@@ -58,7 +58,7 @@ Mauz does not ship with, or require, its own AI account. It answers with the pro
 
 To use a subscription, click **Connect** next to it in **Settings → General AI**. Mauz installs the CLI if it is missing and opens the sign-in page in your browser. If the CLI is already signed in on your computer, Mauz picks it up automatically.
 
-If only one provider is set up, Mauz uses it. If several are, choose a **default** and an optional **fallback** in **Settings → General AI**. The fallback answers when the default is not ready or fails. Settings also shows which providers Mauz detected. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer.
+If only one provider is set up, Mauz uses it. If several are, choose the **default** in **Settings → General AI**. Settings also shows which providers Mauz detected. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer.
 
 See [setup.md](setup.md#ai-providers) for details and overrides.
 
@@ -79,8 +79,6 @@ Mauz is built around user-controlled context sharing.
 - Mouse shake only opens the menu. Nothing is captured until you pick an action.
 - Cursor crops, screenshots, selected text, and microphone audio are used only for the action you started.
 - Dictate records only until you press Stop.
-- Screen sharing sends explicit screenshot frames only while sharing is active.
-- Previous chats store the question, Mauz's text answer, a title, and timestamps.
 - Send to agent writes the brief, the screenshot, and the agent's start-up log to a temporary folder; Mauz deletes them after a day.
 - On Windows, Mauz's own windows are excluded from screenshots and screen shares. Set `MAUZ_EXCLUDE_FROM_CAPTURE=false` if you want to show Mauz in a demo or recording.
 
@@ -104,7 +102,6 @@ Mauz is built around user-controlled context sharing.
 - Offline transcription on macOS.
 - Lightweight local models for simpler, lower-latency, more private answers.
 - Signed builds and a smoother first-run onboarding flow.
-- Richer conversation history and context controls.
 
 Contributions are welcome. We hope people build integrations and customize Mauz to their own liking.
 

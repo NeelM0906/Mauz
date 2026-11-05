@@ -1,18 +1,10 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "node:path";
-import {
-  IPC_CHANNELS,
-  MAUZ_ASK_PANEL_SIZE,
-  MAUZ_HISTORY_PANEL_SIZE,
-  MAUZ_POPUP_SIZE,
-  MAUZ_REALTIME_PANEL_SIZE,
-  MAUZ_SETTINGS_PANEL_SIZE
-} from "@mauzai/shared";
+import { IPC_CHANNELS, MAUZ_ASK_PANEL_SIZE, MAUZ_POPUP_SIZE, MAUZ_SETTINGS_PANEL_SIZE } from "@mauzai/shared";
 import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosition";
 import { hardenRendererWindow } from "./WindowSecurity";
 
-/** "region": hidden while the user selects an area of the screen. */
-export type HideReason = "blur" | "explicit" | "region";
+export type HideReason = "blur" | "explicit";
 
 type PopoverWindowControllerOptions = {
   preloadPath: string;
@@ -105,13 +97,9 @@ export class PopoverWindowController {
     this.window = win;
 
     if (this.options.rendererUrl !== undefined) {
-      await win.loadURL(withRendererSurface(this.options.rendererUrl, "popover"));
+      await win.loadURL(this.options.rendererUrl);
     } else {
-      await win.loadFile(join(this.options.rendererFile), {
-        query: {
-          surface: "popover"
-        }
-      });
+      await win.loadFile(join(this.options.rendererFile));
     }
   }
 
@@ -143,10 +131,6 @@ export class PopoverWindowController {
     }
   }
 
-  async showAtLastAnchor(options: ShowOptions = {}): Promise<void> {
-    await this.showAt(this.lastAnchorPoint ?? screen.getCursorScreenPoint(), options);
-  }
-
   resizeForMenu(): void {
     this.setSize(MAUZ_POPUP_SIZE);
     this.repositionAtLastAnchor();
@@ -159,16 +143,6 @@ export class PopoverWindowController {
 
   resizeForSettings(): void {
     this.setSize(MAUZ_SETTINGS_PANEL_SIZE);
-    this.repositionAtLastAnchor();
-  }
-
-  resizeForHistory(): void {
-    this.setSize(MAUZ_HISTORY_PANEL_SIZE);
-    this.repositionAtLastAnchor();
-  }
-
-  resizeForRealtime(): void {
-    this.setSize(MAUZ_REALTIME_PANEL_SIZE);
     this.repositionAtLastAnchor();
   }
 
@@ -358,13 +332,6 @@ export class PopoverWindowController {
       this.targetCueTimer = null;
     }
   }
-}
-
-function withRendererSurface(rendererUrl: string, surface: "popover"): string {
-  const url = new URL(rendererUrl);
-  url.searchParams.set("surface", surface);
-
-  return url.toString();
 }
 
 function readNativeWindowHandle(win: BrowserWindow): bigint {

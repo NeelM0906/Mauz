@@ -1,5 +1,4 @@
 import { describeElement, type MauzDesktopContext, type ScreenshotPayload } from "@mauzai/shared";
-import type { LensAction, LensMemory } from "@renderer/state/useMauzStore";
 
 export type LensObjectType =
   | "selected-text"
@@ -9,8 +8,7 @@ export type LensObjectType =
   | "window"
   | "cursor"
   | "blocked"
-  | "page"
-  | "region";
+  | "page";
 
 /** One line of "What Mauz saw": exactly what is sent with a question. */
 export type CaptureDetail = {
@@ -26,7 +24,6 @@ export type LensObject = {
   summary: string;
   confidence: number;
   privacyMode: string;
-  suggestedActions: LensAction[];
 };
 
 export function detectLensObject(context: MauzDesktopContext | null): LensObject {
@@ -37,8 +34,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       label: "No cursor context",
       summary: "Open Mauz from the cursor to create a Lens snapshot.",
       confidence: 0,
-      privacyMode: "No context captured",
-      suggestedActions: ["ask"]
+      privacyMode: "No context captured"
     };
   }
 
@@ -50,8 +46,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       summary:
         "This app is on your never-capture list. Mauz sends no screenshot, text, or window title from it.",
       confidence: 0,
-      privacyMode: "Nothing captured",
-      suggestedActions: ["ask"]
+      privacyMode: "Nothing captured"
     };
   }
 
@@ -70,25 +65,11 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       label: `Selected text in ${appName}`,
       summary: truncateText(selectedText.trim(), 160),
       confidence: 96,
-      privacyMode: imageMode === undefined ? "Selected text" : `Selected text + ${imageMode}`,
-      suggestedActions: ["explain", "transform", "remember", "compare"]
+      privacyMode: imageMode === undefined ? "Selected text" : `Selected text + ${imageMode}`
     };
   }
 
   const ocrText = context.pointer?.ocrText;
-
-  if (context.pointer?.cursorCropFocus?.kind === "region") {
-    return {
-      id: createLensId(context, "region"),
-      type: "region",
-      label: `Selected area in ${appName}`,
-      summary:
-        ocrText === undefined ? "Mauz will answer about the area you selected." : truncateText(ocrText, 160),
-      confidence: 94,
-      privacyMode: ocrText === undefined ? "Selected area" : "Selected area + recognized text",
-      suggestedActions: ["ask", "explain", "transform", "remember", "compare"]
-    };
-  }
 
   const page = context.pointer?.page;
 
@@ -114,8 +95,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
         160
       ),
       confidence: 95,
-      privacyMode: imageMode === undefined ? "Page data" : `Page data + ${imageMode}`,
-      suggestedActions: ["ask", "explain", "remember", "compare"]
+      privacyMode: imageMode === undefined ? "Page data" : `Page data + ${imageMode}`
     };
   }
 
@@ -132,8 +112,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
           ? `Mauz read the ${element.role.toLowerCase()} under the pointer from ${appName}.`
           : truncateText(text, 160),
       confidence: 92,
-      privacyMode: imageMode === undefined ? "Element text" : `Element text + ${imageMode}`,
-      suggestedActions: ["ask", "explain", "remember", "compare"]
+      privacyMode: imageMode === undefined ? "Element text" : `Element text + ${imageMode}`
     };
   }
 
@@ -147,8 +126,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
           ? `A crop around the pointer at ${formatCursor(context)} is ready for object-aware help.`
           : truncateText(ocrText, 160),
       confidence: 84,
-      privacyMode: `${imageMode ?? "Cursor crop"}${ocrText === undefined ? "" : " + recognized text"}`,
-      suggestedActions: ["ask", "explain", "remember", "compare"]
+      privacyMode: `${imageMode ?? "Cursor crop"}${ocrText === undefined ? "" : " + recognized text"}`
     };
   }
 
@@ -159,8 +137,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       label: `Window near ${appName}`,
       summary: `Mauz has an image of the window under the pointer at ${formatCursor(context)}.`,
       confidence: 72,
-      privacyMode: imageMode ?? "Window image",
-      suggestedActions: ["ask", "remember"]
+      privacyMode: imageMode ?? "Window image"
     };
   }
 
@@ -171,8 +148,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
       label: windowTitle === undefined ? appName : windowTitle,
       summary: `Window metadata from ${appName} is available, without a screenshot.`,
       confidence: 58,
-      privacyMode: "Window metadata only",
-      suggestedActions: ["ask", "remember"]
+      privacyMode: "Window metadata only"
     };
   }
 
@@ -182,57 +158,8 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
     label: "Cursor point",
     summary: `Mauz knows the pointer location at ${formatCursor(context)}.`,
     confidence: 36,
-    privacyMode: "Cursor coordinates only",
-    suggestedActions: ["ask"]
+    privacyMode: "Cursor coordinates only"
   };
-}
-
-export function toLensMemory(lensObject: LensObject): LensMemory {
-  return {
-    id: `${lensObject.id}:${Date.now()}`,
-    label: lensObject.label,
-    type: lensObject.type,
-    summary: lensObject.summary,
-    createdAt: new Date().toISOString()
-  };
-}
-
-export function getLensActionQuestion(
-  action: LensAction,
-  lensObject: LensObject,
-  pinnedObject: LensMemory | null,
-  customQuestion: string
-): string {
-  const trimmedQuestion = customQuestion.trim();
-
-  if (trimmedQuestion.length > 0) {
-    // Only inject the pinned object context for the compare action
-    return action === "compare" ? appendPinnedObject(trimmedQuestion, pinnedObject) : trimmedQuestion;
-  }
-
-  if (action === "explain") {
-    return "Explain this clearly and tell me what matters.";
-  }
-
-  if (action === "transform") {
-    return "Transform this into the most useful next-step output.";
-  }
-
-  if (action === "compare") {
-    return pinnedObject === null
-      ? "Explain this and identify what I should compare it with next."
-      : `Compare this current object with the pinned object: ${pinnedObject.label}. Pinned summary: ${pinnedObject.summary}`;
-  }
-
-  return "What is this, and what should I know about it?";
-}
-
-function appendPinnedObject(question: string, pinnedObject: LensMemory | null): string {
-  if (pinnedObject === null) {
-    return question;
-  }
-
-  return `${question}\n\nPinned "this" for reference: ${pinnedObject.label}. ${pinnedObject.summary}`;
 }
 
 /** What a question about this context sends, item by item, for the "What Mauz saw" list. */
@@ -344,8 +271,6 @@ function describeImageMode(context: MauzDesktopContext): string | undefined {
         return "element crop";
       case "pointer-area":
         return "area around pointer";
-      case "region":
-        return "selected area";
       default:
         return "cursor crop";
     }

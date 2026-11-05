@@ -4,25 +4,19 @@ const ipcMainMock = vi.hoisted(() => ({
   handle: vi.fn(),
   removeHandler: vi.fn()
 }));
-const realtimeApiClientMock = vi.hoisted(() => ({
-  connectRealtimeToLocalApi: vi.fn()
-}));
 
 vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
-vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
 vi.mock("@mauzai/api/server", () => ({
   getAiProvidersStatus: vi.fn(async () => ({
     preference: "auto",
-    fallbackPreference: "none",
     activeProviderId: null,
-    fallbackProviderId: null,
     providers: []
   }))
 }));
 
-import { IPC_CHANNELS, type MauzDesktopContext, type RealtimeConnectRequest } from "@mauzai/shared";
+import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
@@ -32,19 +26,10 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuShowMenu,
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
-  IPC_CHANNELS.menuStartTalk,
-  IPC_CHANNELS.menuSelectRegion,
   IPC_CHANNELS.menuSetLensExpanded,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
-  IPC_CHANNELS.chatHistoryList,
-  IPC_CHANNELS.chatHistoryGet,
-  IPC_CHANNELS.chatHistoryContinue,
-  IPC_CHANNELS.chatHistoryDelete,
-  IPC_CHANNELS.chatHistoryClear,
-  IPC_CHANNELS.realtimeCreateSession,
-  IPC_CHANNELS.realtimeConnect,
   IPC_CHANNELS.taskAgents,
   IPC_CHANNELS.taskFolders,
   IPC_CHANNELS.taskPickFolder,
@@ -56,7 +41,6 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.providersConnectOpenPage,
   IPC_CHANNELS.providersDisconnect,
   IPC_CHANNELS.talkTranscribe,
-  IPC_CHANNELS.talkCaptureContext,
   IPC_CHANNELS.browserStatus,
   IPC_CHANNELS.browserOpenExtensionFolder
 ] as const;
@@ -65,7 +49,6 @@ describe("registerIpcHandlers", () => {
   beforeEach(() => {
     ipcMainMock.handle.mockClear();
     ipcMainMock.removeHandler.mockClear();
-    realtimeApiClientMock.connectRealtimeToLocalApi.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -113,7 +96,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuStartAsk);
 
-    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual(context);
+    await expect(handler(createInvokeEvent())).resolves.toEqual(context);
     expect(options.popover.resizeForAsk).not.toHaveBeenCalled();
     expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
   });
@@ -125,13 +108,13 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuSetLensExpanded);
 
-    await handler(createInvokeEvent("popover"), {
+    await handler(createInvokeEvent(), {
       expanded: true
     });
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
     expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
 
-    await handler(createInvokeEvent("popover"), {
+    await handler(createInvokeEvent(), {
       expanded: false
     });
     expect(options.popover.resizeForMenu).toHaveBeenCalledOnce();
@@ -144,63 +127,10 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.menuClose);
 
-    await handler(createInvokeEvent("popover"));
+    await handler(createInvokeEvent());
 
     expect(options.contextCollector.discardActivationSnapshot).toHaveBeenCalledOnce();
     expect(options.popover.hide).toHaveBeenCalledOnce();
-  });
-
-  it("opens Talk mode with Realtime context", async () => {
-    const options = createOptions();
-    const context = createRealtimeContext();
-
-    vi.mocked(options.contextCollector.collectForRealtime).mockResolvedValue(context);
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.menuStartTalk);
-
-    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual(context);
-    expect(options.contextCollector.collectForRealtime).toHaveBeenCalledOnce();
-    expect(options.popover.resizeForRealtime).toHaveBeenCalledOnce();
-  });
-
-  it("connects Realtime through the local API", async () => {
-    const options = createOptions();
-    const request: RealtimeConnectRequest = {
-      offerSdp: "v=0\r\nt=- 0 0\r\n",
-      mode: "talk",
-      context: createRealtimeContext()
-    };
-
-    realtimeApiClientMock.connectRealtimeToLocalApi.mockResolvedValue({
-      answerSdp: "answer-sdp",
-      model: "test-realtime-model"
-    });
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.realtimeConnect);
-
-    await expect(handler(createInvokeEvent("popover"), request)).resolves.toEqual({
-      answerSdp: "answer-sdp",
-      model: "test-realtime-model"
-    });
-    expect(realtimeApiClientMock.connectRealtimeToLocalApi).toHaveBeenCalledWith(
-      options.api,
-      "test-token",
-      request
-    );
-  });
-
-  it("does not resize the popover when desktop opens settings", async () => {
-    const options = createOptions();
-
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
-
-    await handler(createInvokeEvent("desktop"));
-
-    expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
   });
 
   it("can read settings from the popover without opening the settings panel", async () => {
@@ -210,55 +140,11 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await handler(createInvokeEvent("popover"), {
+    await handler(createInvokeEvent(), {
       resizePopover: false
     });
 
     expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
-  });
-
-  it("blocks continuing chats from the popover surface", async () => {
-    const options = createOptions();
-
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryContinue);
-
-    await expect(
-      handler(createInvokeEvent("popover"), {
-        id: "conversation-id",
-        question: "Can you expand on this?"
-      })
-    ).rejects.toThrow("Mauz rejected an IPC request from the wrong renderer surface.");
-    expect(options.chatHistory.get).not.toHaveBeenCalled();
-  });
-
-  it("deletes a saved conversation from a trusted renderer", async () => {
-    const options = createOptions();
-
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryDelete);
-
-    await expect(handler(createInvokeEvent("desktop"), { id: "conversation-id" })).resolves.toEqual({
-      groups: []
-    });
-    expect(options.chatHistory.delete).toHaveBeenCalledWith("conversation-id");
-    expect(options.chatHistory.list).toHaveBeenCalledOnce();
-  });
-
-  it("clears saved conversations from a trusted renderer", async () => {
-    const options = createOptions();
-
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryClear);
-
-    await expect(handler(createInvokeEvent("desktop"))).resolves.toEqual({
-      groups: []
-    });
-    expect(options.chatHistory.clear).toHaveBeenCalledOnce();
-    expect(options.chatHistory.list).toHaveBeenCalledOnce();
   });
 
   it("rejects privileged invoke calls without renderer metadata", async () => {
@@ -277,12 +163,14 @@ describe("registerIpcHandlers", () => {
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryList);
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await expect(handler(createInvokeEvent("popover", "http://[::1]:5173"))).resolves.toEqual({
-      groups: []
+    await expect(
+      handler(createInvokeEvent("http://[::1]:5173"), { resizePopover: false })
+    ).resolves.toMatchObject({
+      taskAgent: "auto"
     });
-    expect(options.popover.resizeForHistory).toHaveBeenCalledOnce();
+    expect(options.getSettings).toHaveBeenCalledOnce();
   });
 
   it("rejects renderer requests from non-local origins", async () => {
@@ -290,12 +178,12 @@ describe("registerIpcHandlers", () => {
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryList);
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await expect(handler(createInvokeEvent("popover", "https://example.test"))).rejects.toThrow(
+    await expect(handler(createInvokeEvent("https://example.test"))).rejects.toThrow(
       "Mauz rejected an IPC request from an untrusted renderer."
     );
-    expect(options.chatHistory.list).not.toHaveBeenCalled();
+    expect(options.getSettings).not.toHaveBeenCalled();
   });
 
   it("passes Task agent settings through to updateSettings without stripping them", async () => {
@@ -305,7 +193,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsUpdate);
 
-    await handler(createInvokeEvent("popover"), {
+    await handler(createInvokeEvent(), {
       taskAgent: "hermes",
       taskFolder: "C:/work"
     });
@@ -315,53 +203,10 @@ describe("registerIpcHandlers", () => {
     );
   });
 
-  it("forwards the conversation id as sessionId when continuing a chat", async () => {
-    let capturedAskBody: Record<string, unknown> = {};
-
-    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
-      capturedAskBody = JSON.parse(init.body as string) as Record<string, unknown>;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ answer: "mocked answer", model: "test-model" })
-      };
-    });
-
-    const options = createOptions();
-    const conversation: import("@mauzai/shared").ChatConversation = {
-      id: "conv-42",
-      title: "Test conversation",
-      createdAt: "2026-05-14T12:00:00.000Z",
-      updatedAt: "2026-05-14T12:00:00.000Z",
-      messages: []
-    };
-
-    vi.mocked(options.chatHistory.get).mockResolvedValueOnce(conversation);
-    vi.mocked(options.chatHistory.appendAskTurn).mockResolvedValueOnce(conversation);
-    vi.mocked(options.contextCollector.collectForAsk).mockResolvedValueOnce({
-      timestamp: "2026-05-14T12:00:00.000Z",
-      platform: "darwin",
-      cursor: { x: 0, y: 0 }
-    });
-
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.chatHistoryContinue);
-
-    await handler(createInvokeEvent("desktop"), {
-      id: "conv-42",
-      question: "What does this mean?"
-    });
-
-    expect(capturedAskBody.sessionId).toBe("conv-42");
-  });
-
   it("returns AI provider status and forwards refresh requests", async () => {
     const getProvidersStatus = vi.fn(async () => ({
       preference: "auto" as const,
-      fallbackPreference: "none" as const,
       activeProviderId: "claude-code" as const,
-      fallbackProviderId: null,
       providers: [
         {
           id: "claude-code" as const,
@@ -378,7 +223,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.providersStatus);
 
-    await expect(handler(createInvokeEvent("desktop"), { refresh: true })).resolves.toMatchObject({
+    await expect(handler(createInvokeEvent(), { refresh: true })).resolves.toMatchObject({
       activeProviderId: "claude-code"
     });
     expect(getProvidersStatus).toHaveBeenCalledWith({ refresh: true });
@@ -406,11 +251,11 @@ describe("registerIpcHandlers", () => {
     registerIpcHandlers({ ...createOptions(), subscriptionConnector, openExternal });
 
     await expect(
-      getRegisteredHandler(IPC_CHANNELS.providersConnect)(createInvokeEvent("desktop"), {
+      getRegisteredHandler(IPC_CHANNELS.providersConnect)(createInvokeEvent(), {
         providerId: "codex"
       })
     ).resolves.toEqual(state);
-    await getRegisteredHandler(IPC_CHANNELS.providersConnectOpenPage)(createInvokeEvent("desktop"), {
+    await getRegisteredHandler(IPC_CHANNELS.providersConnectOpenPage)(createInvokeEvent(), {
       connectId: "connect-1",
       url: "https://attacker.example"
     });
@@ -430,7 +275,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.taskAgents);
 
-    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual({
+    await expect(handler(createInvokeEvent())).resolves.toEqual({
       agents: [
         { id: "hermes", label: "Hermes", installed: true },
         { id: "claude-code", label: "Claude Code", installed: false },
@@ -452,7 +297,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.taskFolders);
 
-    await expect(handler(createInvokeEvent("popover"), { agentId: "claude-code" })).resolves.toEqual({
+    await expect(handler(createInvokeEvent(), { agentId: "claude-code" })).resolves.toEqual({
       folders: [
         { path: "C:/work/last", name: "last" },
         { path: "C:/work/mauz", name: "mauz" },
@@ -470,26 +315,9 @@ describe("registerIpcHandlers", () => {
     const handler = getRegisteredHandler(IPC_CHANNELS.taskSend);
     const request = { agentId: "hermes", folder: "C:/work/mauz", task: "Fix this", context: createContext() };
 
-    await expect(handler(createInvokeEvent("popover"), request)).resolves.toEqual({ agentLabel: "Hermes" });
+    await expect(handler(createInvokeEvent(), request)).resolves.toEqual({ agentLabel: "Hermes" });
     expect(options.taskAgents.launcher.launch).toHaveBeenCalledWith(request);
     expect(options.updateSettings).toHaveBeenCalledWith({ taskAgentFolders: { hermes: "C:/work/mauz" } });
-  });
-
-  it("rejects Send to agent requests from the desktop window", async () => {
-    const options = createOptions();
-
-    registerIpcHandlers(options);
-
-    const handler = getRegisteredHandler(IPC_CHANNELS.taskSend);
-
-    await expect(
-      handler(createInvokeEvent("desktop"), {
-        agentId: "hermes",
-        folder: "C:/work",
-        task: "Fix this",
-        context: createContext()
-      })
-    ).rejects.toThrow("wrong renderer surface");
   });
 });
 
@@ -511,8 +339,8 @@ function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<
   return call[1] as (...args: unknown[]) => Promise<unknown>;
 }
 
-function createInvokeEvent(surface: "desktop" | "popover", origin = "file:///renderer"): unknown {
-  const url = `${origin}/index.html?surface=${surface}`;
+function createInvokeEvent(origin = "file:///renderer"): unknown {
+  const url = `${origin}/index.html`;
 
   return {
     senderFrame: {
@@ -524,7 +352,7 @@ function createInvokeEvent(surface: "desktop" | "popover", origin = "file:///ren
   };
 }
 
-function createRealtimeContext(): MauzDesktopContext {
+function createAskContext(): MauzDesktopContext {
   return {
     timestamp: new Date("2026-05-14T12:00:00.000Z").toISOString(),
     platform: "darwin",
@@ -552,14 +380,11 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     hide: vi.fn(),
     resizeForAsk: vi.fn(),
     resizeForMenu: vi.fn(),
-    resizeForRealtime: vi.fn(),
-    resizeForHistory: vi.fn(),
     resizeForSettings: vi.fn()
   } as unknown as PopoverWindowController;
   const contextCollector = {
     collectBasicContext: vi.fn(),
     collectForAsk: vi.fn(),
-    collectForRealtime: vi.fn(),
     discardActivationSnapshot: vi.fn()
   } as unknown as ContextCollector;
   const api: LocalApiHandle = {
@@ -571,40 +396,6 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   return {
     popover,
     contextCollector,
-    chatHistory: {
-      saveAskConversation: vi.fn(async ({ question, answer, title }) => ({
-        id: "conversation-id",
-        title,
-        createdAt: "2026-05-14T12:00:00.000Z",
-        updatedAt: "2026-05-14T12:00:00.000Z",
-        messages: [
-          {
-            id: "question-id",
-            role: "user" as const,
-            content: question,
-            createdAt: "2026-05-14T12:00:00.000Z"
-          },
-          {
-            id: "answer-id",
-            role: "assistant" as const,
-            content: answer,
-            createdAt: "2026-05-14T12:00:00.000Z"
-          }
-        ]
-      })),
-      list: vi.fn(async () => ({
-        groups: []
-      })),
-      get: vi.fn(async () => {
-        throw new Error("not found");
-      }),
-      appendAskTurn: vi.fn(async () => {
-        throw new Error("not found");
-      }),
-      updateTitle: vi.fn(async () => {}),
-      delete: vi.fn(async () => {}),
-      clear: vi.fn(async () => {})
-    } as never,
     api,
     localApiToken: "test-token",
     taskAgents: {
@@ -630,14 +421,9 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
       shakeSensitivity: "normal" as const,
-      openAiAuthMode: "api-key" as const,
       openAiAuthDisconnected: false,
       openAiCredentialSource: "none" as const,
       askModel: "gpt-5.4-mini",
-      chatTitleModel: "gpt-5.4-nano",
-      realtimeModel: "gpt-realtime-2",
-      realtimeVoice: "marin",
-      realtimeReasoningEffort: "low" as const,
       captureBlockedApps: [],
       captureBlockedSites: [],
       apiKeyConfigured: false,
@@ -645,22 +431,15 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       taskFolder: "",
       taskAgentFolders: {},
       aiProvider: "auto" as const,
-      aiFallbackProvider: "none" as const,
-      anthropicKeyConfigured: false,
-      talkEngine: "pipeline" as const
+      anthropicKeyConfigured: false
     })),
     updateSettings: vi.fn(async (update) => ({
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
       devHotkeyEnabled: update.devHotkeyEnabled ?? true,
       shakeSensitivity: update.shakeSensitivity ?? ("normal" as const),
-      openAiAuthMode: update.openAiAuthMode ?? ("api-key" as const),
       openAiAuthDisconnected: update.openAiAuthDisconnected ?? false,
       openAiCredentialSource: "none" as const,
       askModel: update.askModel ?? "gpt-5.4-mini",
-      chatTitleModel: update.chatTitleModel ?? "gpt-5.4-nano",
-      realtimeModel: update.realtimeModel ?? "gpt-realtime-2",
-      realtimeVoice: update.realtimeVoice ?? "marin",
-      realtimeReasoningEffort: update.realtimeReasoningEffort ?? ("low" as const),
       captureBlockedApps: update.captureBlockedApps ?? [],
       captureBlockedSites: update.captureBlockedSites ?? [],
       apiKeyConfigured: false,
@@ -668,9 +447,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       taskFolder: update.taskFolder ?? "",
       taskAgentFolders: update.taskAgentFolders ?? {},
       aiProvider: update.aiProvider ?? ("auto" as const),
-      aiFallbackProvider: update.aiFallbackProvider ?? ("none" as const),
-      anthropicKeyConfigured: false,
-      talkEngine: update.talkEngine ?? ("pipeline" as const)
+      anthropicKeyConfigured: false
     }))
   };
 }
