@@ -64,7 +64,7 @@ See [setup.md](setup.md#ai-providers) for details and overrides.
 
 ## Send to agent
 
-Send to agent hands a task to a coding agent you already use: [Hermes](https://github.com/NousResearch/hermes-agent), Claude Code, or Codex. Mauz writes a short brief with your task and what you were pointing at, then opens the agent in its own terminal window, in the folder you pick. The agent works with its own permissions; Mauz does not watch or approve anything.
+Send to agent hands a task to a coding agent you already use: [Hermes](https://github.com/NousResearch/hermes-agent), Claude Code, or Codex. Mauz writes a short brief with your task and what you were pointing at, and the agent starts on it in the folder you pick. On Windows, when the agent's desktop app is installed, the task becomes a new thread in that app, running in the background: nothing pops up and focus stays where it was. Otherwise, and on macOS, the agent opens in its own terminal window. The agent works with its own permissions; Mauz does not watch or approve anything.
 
 Pick the agent under **Settings → Task agent**. The folder list shows the folders that agent has worked in, most recent first. When you point at VS Code or Cursor, Mauz picks the project open there. See [setup.md](setup.md#send-to-agent).
 
@@ -81,7 +81,7 @@ Mauz is built around user-controlled context sharing.
 - Dictate records only until you press Stop.
 - Screen sharing sends explicit screenshot frames only while sharing is active.
 - Previous chats store the question, Mauz's text answer, a title, and timestamps.
-- Send to agent writes the brief and screenshot to a temporary folder for the agent to read; Mauz deletes them after a day.
+- Send to agent writes the brief, the screenshot, and the agent's start-up log to a temporary folder; Mauz deletes them after a day.
 - On Windows, Mauz's own windows are excluded from screenshots and screen shares. Set `MAUZ_EXCLUDE_FROM_CAPTURE=false` if you want to show Mauz in a demo or recording.
 
 ## Platform notes
