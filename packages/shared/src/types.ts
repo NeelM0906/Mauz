@@ -538,7 +538,10 @@ export type MauzBridge = {
     folders(payload: TaskFoldersRequest): Promise<TaskFoldersResponse>;
     /** Opens a folder dialog; null when the user cancels. */
     pickFolder(): Promise<string | null>;
-    /** Opens the agent in its own terminal window with the task, then returns. */
+    /**
+     * Starts the task as a background thread in the agent's desktop app (Windows), or opens
+     * the agent in its own terminal window, then returns.
+     */
     send(payload: TaskSendRequest): Promise<TaskSendResponse>;
   };
 };
