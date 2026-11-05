@@ -41,6 +41,7 @@ export const TASK_AGENTS: readonly AgentDefinition[] = [
 const MAX_FOLDERS = 30;
 const MAX_CODEX_SESSIONS = 300;
 const HANDOFF_RETENTION_MS = 24 * 60 * 60 * 1000;
+const HANDOFF_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export type TaskAgentLauncherOptions = {
   platform?: NodeJS.Platform;
@@ -324,17 +325,33 @@ export class TaskAgentLauncher {
     }
   }
 
-  private createHandoffDirectory(): string {
+  /** Deletes hand-off folders (brief, screenshot) older than a day. */
+  removeExpiredHandoffs(now = Date.now()): void {
     const root = this.path.join(this.temp, "mauz-handoff");
-    mkdirSync(root, { recursive: true });
 
     for (const name of listNames(root)) {
       const entry = this.path.join(root, name);
 
-      if (Date.now() - modifiedAt(entry) > HANDOFF_RETENTION_MS) {
+      if (now - modifiedAt(entry) > HANDOFF_RETENTION_MS) {
         rmSync(entry, { recursive: true, force: true });
       }
     }
+  }
+
+  /** Cleans up now and every hour, so a single hand-off is not kept past a day. Returns a stop function. */
+  startHandoffCleanup(): () => void {
+    this.removeExpiredHandoffs();
+
+    const timer = setInterval(() => this.removeExpiredHandoffs(), HANDOFF_CLEANUP_INTERVAL_MS);
+    timer.unref();
+
+    return () => clearInterval(timer);
+  }
+
+  private createHandoffDirectory(): string {
+    const root = this.path.join(this.temp, "mauz-handoff");
+    mkdirSync(root, { recursive: true });
+    this.removeExpiredHandoffs();
 
     const directory = this.path.join(root, `${Date.now()}-${randomUUID().slice(0, 8)}`);
     mkdirSync(directory, { recursive: true });
@@ -439,12 +456,27 @@ export function buildShellLauncher(launch: { folder: string; executable: string;
   ].join("\n");
 }
 
+/** Variables Mauz sets from its own settings (applyRuntimeEnvironment); agents use their own. */
+const MAUZ_RUNTIME_VARIABLES = new Set([
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "OPENAI_ASK_MODEL",
+  "OPENAI_CHAT_TITLE_MODEL",
+  "OPENAI_REALTIME_MODEL",
+  "OPENAI_REALTIME_VOICE",
+  "OPENAI_REALTIME_REASONING_EFFORT"
+]);
+
 /** The agent must not inherit Mauz's own secrets or Electron's run-as-Node switch. */
 export function buildAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = { ...env };
 
   for (const key of Object.keys(result)) {
-    if (key.startsWith("MAUZ_") || key === "ELECTRON_RUN_AS_NODE") {
+    if (
+      key.startsWith("MAUZ_") ||
+      key === "ELECTRON_RUN_AS_NODE" ||
+      MAUZ_RUNTIME_VARIABLES.has(key.toUpperCase())
+    ) {
       delete result[key];
     }
   }

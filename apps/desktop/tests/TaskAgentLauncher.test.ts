@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -112,51 +112,60 @@ describe("TaskAgentLauncher", () => {
     expect(launcher.listFolders("hermes")).toEqual([]);
   });
 
-  it("writes the brief and screenshot, then opens the agent in a terminal", async () => {
-    const home = createHome();
-    const temp = createHome();
-    const folder = join(home, "work");
-    mkdirSync(folder);
-    const startProcess = vi.fn(async () => {});
-    const launcher = new TaskAgentLauncher({
-      platform: "win32",
-      env: { PATH: "", LOCALAPPDATA: join(home, "local"), ELECTRON_RUN_AS_NODE: "1", MAUZ_LOCAL_TOKEN: "x" },
-      homeDirectory: home,
-      tempDirectory: temp,
-      pathExists: (path) => path.endsWith("hermes.exe") || path === folder,
-      startProcess
-    });
+  // Uses real Windows paths on disk; the Windows CI job runs it.
+  it.runIf(process.platform === "win32")(
+    "writes the brief and screenshot, then opens the agent in a terminal",
+    async () => {
+      const home = createHome();
+      const temp = createHome();
+      const folder = join(home, "work");
+      mkdirSync(folder);
+      const startProcess = vi.fn(async () => {});
+      const launcher = new TaskAgentLauncher({
+        platform: "win32",
+        env: {
+          PATH: "",
+          LOCALAPPDATA: join(home, "local"),
+          ELECTRON_RUN_AS_NODE: "1",
+          MAUZ_LOCAL_TOKEN: "x"
+        },
+        homeDirectory: home,
+        tempDirectory: temp,
+        pathExists: (path) => path.endsWith("hermes.exe") || path === folder,
+        startProcess
+      });
 
-    await expect(
-      launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-    ).resolves.toEqual({ agentLabel: "Hermes" });
+      await expect(
+        launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
+      ).resolves.toEqual({ agentLabel: "Hermes" });
 
-    expect(startProcess).toHaveBeenCalledOnce();
-    const [command, args, options] = startProcess.mock.calls[0] as unknown as [
-      string,
-      string[],
-      { env: NodeJS.ProcessEnv }
-    ];
-    expect(command).toBe("cmd.exe");
-    expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
-    expect(options.env.MAUZ_LOCAL_TOKEN).toBeUndefined();
+      expect(startProcess).toHaveBeenCalledOnce();
+      const [command, args, options] = startProcess.mock.calls[0] as unknown as [
+        string,
+        string[],
+        { env: NodeJS.ProcessEnv }
+      ];
+      expect(command).toBe("cmd.exe");
+      expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+      expect(options.env.MAUZ_LOCAL_TOKEN).toBeUndefined();
 
-    const scriptPath = /-File "([^"]+)"/.exec(args[0] ?? "")?.[1] ?? "";
-    const handoff = join(scriptPath, "..");
-    const brief = readFileSync(join(handoff, "task.md"), "utf8");
-    const script = readFileSync(scriptPath, "utf8");
+      const scriptPath = /-File "([^"]+)"/.exec(args[0] ?? "")?.[1] ?? "";
+      const handoff = join(scriptPath, "..");
+      const brief = readFileSync(join(handoff, "task.md"), "utf8");
+      const script = readFileSync(scriptPath, "utf8");
 
-    // Windows PowerShell 5.1 needs the BOM to read the "→" in the title as UTF-8.
-    expect([...readFileSync(scriptPath).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
-    expect(script).toContain("$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'");
-    expect(brief).toContain("<task>\nFix this error\n</task>");
-    expect(brief).toContain("<selected_text>\nTypeError: x is undefined\n</selected_text>");
-    expect(brief).toContain(`<image>${join(handoff, "screen.png")} (crop framed on the pointed element`);
-    expect(readFileSync(join(handoff, "screen.png"), "utf8")).toBe("png-bytes");
-    expect(script).toContain(`Set-Location -LiteralPath '${folder}'`);
-    expect(script).toContain("'chat' '--query-file'");
-    expect(script).toContain("'--image'");
-  });
+      // Windows PowerShell 5.1 needs the BOM to read the "→" in the title as UTF-8.
+      expect([...readFileSync(scriptPath).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+      expect(script).toContain("$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'");
+      expect(brief).toContain("<task>\nFix this error\n</task>");
+      expect(brief).toContain("<selected_text>\nTypeError: x is undefined\n</selected_text>");
+      expect(brief).toContain(`<image>${join(handoff, "screen.png")} (crop framed on the pointed element`);
+      expect(readFileSync(join(handoff, "screen.png"), "utf8")).toBe("png-bytes");
+      expect(script).toContain(`Set-Location -LiteralPath '${folder}'`);
+      expect(script).toContain("'chat' '--query-file'");
+      expect(script).toContain("'--image'");
+    }
+  );
 
   it("refuses an agent that is not installed or a folder that is gone", async () => {
     const launcher = new TaskAgentLauncher({
@@ -224,9 +233,34 @@ describe("agent command lines", () => {
     );
   });
 
-  it("keeps the user's environment but drops Mauz and Electron variables", () => {
-    expect(buildAgentEnvironment({ PATH: "p", MAUZ_X: "1", ELECTRON_RUN_AS_NODE: "1" })).toEqual({
-      PATH: "p"
-    });
+  it("keeps the user's environment but drops Mauz, provider key, and Electron variables", () => {
+    expect(
+      buildAgentEnvironment({
+        PATH: "p",
+        OPENAI_BASE_URL: "u",
+        MAUZ_X: "1",
+        ELECTRON_RUN_AS_NODE: "1",
+        OPENAI_API_KEY: "sk-mauz",
+        ANTHROPIC_API_KEY: "sk-ant-mauz",
+        OPENAI_ASK_MODEL: "m"
+      })
+    ).toEqual({ PATH: "p", OPENAI_BASE_URL: "u" });
+  });
+
+  it("deletes hand-off folders older than a day, without waiting for another send", () => {
+    const temp = createHome();
+    const root = join(temp, "mauz-handoff");
+    const old = join(root, "old");
+    const recent = join(root, "recent");
+    mkdirSync(old, { recursive: true });
+    mkdirSync(recent, { recursive: true });
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    utimesSync(old, twoDaysAgo, twoDaysAgo);
+
+    const stop = new TaskAgentLauncher({ tempDirectory: temp }).startHandoffCleanup();
+    stop();
+
+    expect(existsSync(old)).toBe(false);
+    expect(existsSync(recent)).toBe(true);
   });
 });
