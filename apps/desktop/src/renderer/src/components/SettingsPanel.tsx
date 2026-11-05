@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Bot,
   Check,
   Cpu,
   FolderOpen,
@@ -9,7 +10,6 @@ import {
   MousePointerClick,
   RefreshCw,
   Save,
-  Server,
   Settings2,
   ShieldOff,
   Sparkles,
@@ -23,19 +23,15 @@ import type {
   AiProviderPreference,
   AiProvidersStatusResponse,
   BrowserExtensionStatus,
-  GatewayReadinessResult,
   MauzSettings,
   MauzSettingsUpdate,
   ShakeSensitivity,
   SubscriptionConnectState,
   SubscriptionProviderId,
-  TalkEngine
+  TaskAgentPreference,
+  TaskAgentStatus
 } from "@mauzai/shared";
-import {
-  DEFAULT_HERMES_BASE_URL,
-  MAX_CAPTURE_BLOCKED_APPS,
-  MAX_CAPTURE_BLOCKED_ENTRY_CHARS
-} from "@mauzai/shared";
+import { MAX_CAPTURE_BLOCKED_APPS, MAX_CAPTURE_BLOCKED_ENTRY_CHARS } from "@mauzai/shared";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
@@ -74,10 +70,6 @@ const AI_PROVIDER_OPTIONS: Array<{ value: AiProviderPreference; label: string }>
   { value: "auto", label: "Automatic (whichever is set up)" },
   ...AI_PROVIDER_CHOICES
 ];
-const TALK_ENGINE_OPTIONS: Array<{ value: TalkEngine; label: string }> = [
-  { value: "pipeline", label: "Push to talk (uses your AI provider)" },
-  { value: "realtime", label: "OpenAI Realtime voice (OpenAI key)" }
-];
 const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
 const TITLE_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-nano", "gpt-5.4-mini"];
 const UPCOMING_PROVIDER_OPTIONS = [
@@ -98,6 +90,12 @@ const UPCOMING_PROVIDER_OPTIONS = [
   }
 ] as const;
 
+const FALLBACK_TASK_AGENTS: TaskAgentStatus[] = [
+  { id: "hermes", label: "Hermes", installed: true },
+  { id: "claude-code", label: "Claude Code", installed: true },
+  { id: "codex", label: "Codex", installed: true }
+];
+
 type SettingsPanelProps = {
   chrome?: "popover" | "desktop";
 };
@@ -112,8 +110,7 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
   const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
-  const [gatewayReadiness, setGatewayReadiness] = useState<GatewayReadinessResult | null>(null);
-  const [gatewayReadinessLoading, setGatewayReadinessLoading] = useState(true);
+  const [taskAgents, setTaskAgents] = useState<TaskAgentStatus[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
   const [providersLoading, setProvidersLoading] = useState(false);
@@ -125,7 +122,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   const [providerActionBusy, setProviderActionBusy] = useState(false);
   const [providerActionError, setProviderActionError] = useState<string | null>(null);
   const openAiApiKeyInputRef = useRef<HTMLInputElement | null>(null);
-  const gatewayReadinessRequestRef = useRef(0);
 
   const loadProvidersStatus = useCallback(async (refresh: boolean): Promise<void> => {
     setProvidersLoading(true);
@@ -243,37 +239,31 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
   }, [setSettings, settings]);
 
   useEffect(() => {
-    const requestId = gatewayReadinessRequestRef.current + 1;
-    gatewayReadinessRequestRef.current = requestId;
-    setGatewayReadinessLoading(true);
+    let disposed = false;
 
-    void mauzClient
-      .getGatewayReadinessStatus()
-      .then((result) => {
-        if (gatewayReadinessRequestRef.current === requestId) {
-          setGatewayReadiness(result);
+    void mauzClient.getTaskAgents().then(
+      (response) => {
+        if (!disposed) {
+          setTaskAgents(response.agents);
         }
-      })
-      .catch(() => {
-        if (gatewayReadinessRequestRef.current === requestId) {
-          setGatewayReadiness({
-            status: "unavailable",
-            message: "Gateway readiness could not be checked."
-          });
-        }
-      })
-      .finally(() => {
-        if (gatewayReadinessRequestRef.current === requestId) {
-          setGatewayReadinessLoading(false);
-        }
-      });
+      },
+      () => {
+        // The picker still lists every agent, just without install status.
+      }
+    );
 
     return () => {
-      if (gatewayReadinessRequestRef.current === requestId) {
-        gatewayReadinessRequestRef.current += 1;
-      }
+      disposed = true;
     };
-  }, [settings?.assistantMode, settings?.backendBaseUrl]);
+  }, []);
+
+  const browseTaskFolder = async (): Promise<void> => {
+    const picked = await mauzClient.pickTaskFolder();
+
+    if (picked !== null) {
+      updateDraft("taskFolder", picked);
+    }
+  };
 
   const handleBack = async (): Promise<void> => {
     if (chrome === "desktop") {
@@ -383,9 +373,8 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         realtimeReasoningEffort: draft.realtimeReasoningEffort,
         captureBlockedApps: parseAppList(blockedAppsDraft),
         captureBlockedSites: parseAppList(blockedSitesDraft),
-        assistantMode: draft.assistantMode,
-        backendBaseUrl: draft.backendBaseUrl,
-        agentMode: draft.agentMode,
+        taskAgent: draft.taskAgent,
+        taskFolder: draft.taskFolder.trim(),
         aiProvider: draft.aiProvider,
         aiFallbackProvider: draft.aiFallbackProvider,
         talkEngine: draft.talkEngine
@@ -448,8 +437,9 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
         <div className="settings-section">
           <div className="settings-label">
             <Sparkles aria-hidden="true" size={15} />
-            <span>AI provider</span>
+            <span>General AI</span>
           </div>
+          <p className="settings-helper">Answers Ask, including questions you dictate.</p>
           <label className="settings-field">
             <span>Default provider</span>
             <select
@@ -605,19 +595,6 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
               </button>
             </div>
           ) : null}
-          <label className="settings-field">
-            <span>Talk uses</span>
-            <select
-              value={draft.talkEngine}
-              onChange={(event) => updateDraft("talkEngine", event.target.value as TalkEngine)}
-            >
-              {TALK_ENGINE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         <div className="settings-section">
@@ -733,58 +710,43 @@ export function SettingsPanel({ chrome = "popover" }: SettingsPanelProps = {}): 
 
         <div className="settings-section">
           <div className="settings-label">
-            <Server aria-hidden="true" size={15} />
-            <span>Mode</span>
+            <Bot aria-hidden="true" size={15} />
+            <span>Task agent</span>
           </div>
-          <div className="segmented-control" role="group" aria-label="Assistant mode">
-            <button
-              type="button"
-              aria-pressed={draft.assistantMode === "simple"}
-              onClick={() => updateDraft("assistantMode", "simple")}
+          <label className="settings-field">
+            <span>Send to agent uses</span>
+            <select
+              value={draft.taskAgent}
+              onChange={(event) => updateDraft("taskAgent", event.target.value as TaskAgentPreference)}
             >
-              Simple
-            </button>
-            <button
-              type="button"
-              aria-pressed={draft.assistantMode === "agentic"}
-              onClick={() => updateDraft("assistantMode", "agentic")}
-            >
-              Agentic
-            </button>
-          </div>
-          <p className="settings-helper">
-            {draft.assistantMode === "simple"
-              ? "Quick answers about what you're looking at."
-              : "Use Work on this for supervised tasks that can use tools."}
-          </p>
-          {draft.assistantMode === "agentic" ? (
-            <>
-              <label className="settings-field">
-                <span>Gateway URL</span>
-                <input
-                  type="text"
-                  value={draft.backendBaseUrl}
-                  placeholder={DEFAULT_HERMES_BASE_URL}
-                  onChange={(event) => updateDraft("backendBaseUrl", event.target.value)}
-                />
-              </label>
-              <p className="settings-helper" role="status" aria-live="polite">
-                <strong>Gateway readiness:</strong>{" "}
-                {settings?.assistantMode !== draft.assistantMode ||
-                settings.backendBaseUrl !== draft.backendBaseUrl
-                  ? "Save mode or Gateway URL changes to refresh readiness."
-                  : gatewayReadinessLoading
-                    ? "Checking gateway..."
-                    : (gatewayReadiness?.message ?? "Gateway readiness is not available.")}
-              </p>
-              <SettingsSelect
-                label="Agent mode"
-                value={draft.agentMode}
-                options={["approve", "yolo"]}
-                onChange={(agentMode) => updateDraft("agentMode", agentMode as MauzSettings["agentMode"])}
+              <option value="auto">Automatic (first one installed)</option>
+              {(taskAgents ?? FALLBACK_TASK_AGENTS).map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {taskAgents !== null && !agent.installed ? `${agent.label} (not installed)` : agent.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="settings-field">
+            <span>Default work folder</span>
+            <div className="task-folder-row">
+              <input
+                type="text"
+                value={draft.taskFolder}
+                placeholder="Your home folder"
+                spellCheck={false}
+                onChange={(event) => updateDraft("taskFolder", event.target.value)}
               />
-            </>
-          ) : null}
+              <button type="button" className="secondary-button" onClick={() => void browseTaskFolder()}>
+                <FolderOpen aria-hidden="true" size={13} />
+                <span>Browse</span>
+              </button>
+            </div>
+          </label>
+          <p className="settings-helper">
+            Send to agent opens the agent in its own window with your task and what you were pointing at. Pick
+            a folder each time; this one is used when the agent has no recent folders.
+          </p>
         </div>
 
         <div className="settings-section">

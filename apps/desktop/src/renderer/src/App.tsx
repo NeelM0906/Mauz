@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { ChatHistoryPanel } from "./components/ChatHistoryPanel";
 import { DesktopApp } from "./components/DesktopApp";
+import { DictatePanel } from "./components/DictatePanel";
 import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
 import { PushToTalkPanel } from "./components/PushToTalkPanel";
@@ -73,6 +74,10 @@ function App(): React.JSX.Element {
 
   if (mode === "task") {
     return <TaskPanel />;
+  }
+
+  if (mode === "dictate") {
+    return <DictatePanel />;
   }
 
   if (mode === "settings") {

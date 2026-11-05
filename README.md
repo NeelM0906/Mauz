@@ -38,13 +38,12 @@ Full instructions, environment variables, and development mode are in [setup.md]
 
 ## How it works
 
-1. Shake the mouse or press **Ctrl+Shift+M** (**Cmd+Shift+M** on macOS). A radial menu opens at your cursor.
+1. Shake the mouse or press **Ctrl+Shift+M** (**Cmd+Shift+M** on macOS). A dial opens at your cursor.
 2. Choose an action:
-   - **Ask** — type a question about what is under your cursor.
-   - **Explain**, **Transform**, **Remember**, **Compare** — one-click actions on the selected text or the area around the cursor.
-   - **Talk** — hold **Space**, speak, release. Mauz answers out loud.
-   - **Work on this** — hand a longer task to a supervised agent (optional, see below).
-3. Mauz captures only the context that action needs, answers, and you go back to work.
+   - **Ask** — ask about what is under your cursor or selected. Press Ask with nothing typed to learn what it is.
+   - **Send to agent** — hand a task, with what you are pointing at, to your coding agent (Hermes, Claude Code, or Codex).
+   - **Dictate** — speak instead of typing, then send the text to Ask or to your agent.
+3. Click the Mauz logo in the middle of the dial to open Settings.
 
 ## Bring your own AI
 
@@ -57,28 +56,21 @@ Mauz does not ship with, or require, its own AI account. It answers with the pro
 | Claude Code subscription     | The `claude` CLI | `sonnet`          |
 | Codex (ChatGPT) subscription | The `codex` CLI  | Codex default     |
 
-To use a subscription, click **Connect** next to it in **Settings → AI provider**. Mauz installs the CLI if it is missing and opens the sign-in page in your browser. If the CLI is already signed in on your computer, Mauz picks it up automatically.
+To use a subscription, click **Connect** next to it in **Settings → General AI**. Mauz installs the CLI if it is missing and opens the sign-in page in your browser. If the CLI is already signed in on your computer, Mauz picks it up automatically.
 
-If only one provider is set up, Mauz uses it. If several are, choose a **default** and an optional **fallback** in **Settings → AI provider**. The fallback answers when the default is not ready or fails. Settings also shows which providers Mauz detected. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer.
+If only one provider is set up, Mauz uses it. If several are, choose a **default** and an optional **fallback** in **Settings → General AI**. The fallback answers when the default is not ready or fails. Settings also shows which providers Mauz detected. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer.
 
 See [setup.md](setup.md#ai-providers) for details and overrides.
 
-## Talk
+## Send to agent
 
-Talk is push to talk: hold Space, speak, release. Mauz transcribes your clip, answers with a fresh screenshot of your screen, and reads the answer aloud sentence by sentence. Press Space while it is speaking to interrupt it.
+Send to agent hands a task to a coding agent you already use: [Hermes](https://github.com/NousResearch/hermes-agent), Claude Code, or Codex. Mauz writes a short brief with your task and what you were pointing at, then opens the agent in its own terminal window, in the folder you pick. The agent works with its own permissions; Mauz does not watch or approve anything.
 
-- Transcription uses OpenAI when you have an OpenAI key, otherwise Windows' built-in offline speech recognition.
-- Speech uses your system voices.
-- The older always-on OpenAI Realtime voice is still available under **Settings → Talk uses**.
+Pick the agent under **Settings → Task agent**. The folder list shows the folders that agent has worked in, most recent first. When you point at VS Code or Cursor, Mauz picks the project open there. See [setup.md](setup.md#send-to-agent).
 
-See [setup.md](setup.md#talk-push-to-talk).
+## Dictate
 
-## Answers and supervised work
-
-- **Simple** (default): direct answers about what you are looking at. No gateway is required.
-- **Work on this**: an explicit, supervised task flow for longer work. Mauz captures the context you approve, asks for the outcome you want, checks that the configured gateway supports supervised runs, and shows activity, approvals, and Stop while the task runs.
-
-To enable **Work on this**, select **Agentic** under Settings → Mode and configure a compatible [Hermes](https://github.com/NousResearch/hermes-agent) gateway. See [setup.md](setup.md#agent-gateway-and-work-on-this).
+Dictate starts listening as soon as you choose it. Press Stop or Space when you are done, edit the text if you like, then send it to **Ask** or **Send to agent**. Transcription uses OpenAI when you have an OpenAI key, otherwise Windows' built-in offline speech recognition. See [setup.md](setup.md#dictate).
 
 ## Context sharing
 
@@ -86,9 +78,10 @@ Mauz is built around user-controlled context sharing.
 
 - Mouse shake only opens the menu. Nothing is captured until you pick an action.
 - Cursor crops, screenshots, selected text, and microphone audio are used only for the action you started.
-- Talk records only while you hold Space.
+- Dictate records only until you press Stop.
 - Screen sharing sends explicit screenshot frames only while sharing is active.
-- Previous chats store the typed question, Mauz's text answer, a title, and timestamps. Voice turns are not saved.
+- Previous chats store the question, Mauz's text answer, a title, and timestamps.
+- Send to agent writes the brief and screenshot to a temporary folder for the agent to read; Mauz deletes them after a day.
 - On Windows, Mauz's own windows are excluded from screenshots and screen shares. Set `MAUZ_EXCLUDE_FROM_CAPTURE=false` if you want to show Mauz in a demo or recording.
 
 ## Platform notes
@@ -103,7 +96,7 @@ Mauz is built around user-controlled context sharing.
 **macOS**
 
 - Mouse shake and selected text need Accessibility and Input Monitoring permissions; screenshots need Screen Recording.
-- Talk without an OpenAI key is not supported yet (there is no offline transcription on macOS yet).
+- Dictate without an OpenAI key is not supported yet (there is no offline transcription on macOS yet).
 
 ## Roadmap
 

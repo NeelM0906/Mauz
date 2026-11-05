@@ -1,11 +1,10 @@
 import OpenAI, { APIConnectionError } from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import {
-  formatScreenContent,
+  formatScreenBlock,
+  getContextImage,
   type AskMauzRequest,
   type AskMauzResponse,
-  type CursorCropFocus,
-  type MauzDesktopContext,
   type ScreenshotPayload
 } from "@mauzai/shared";
 import { BackendUnreachableError, MissingOpenAIKeyError } from "../errors";
@@ -170,54 +169,6 @@ export function buildResponseContent(request: AskMauzRequest): ResponseInputMess
   return content;
 }
 
-type ContextImage = {
-  payload: ScreenshotPayload;
-  label: string;
-};
-
-/**
- * One image: the crop around what the pointer is on, or the pointed window when there is no
- * crop. Nothing is sent for an app on the never-capture list.
- */
-export function getContextImage(context: MauzDesktopContext): ContextImage | undefined {
-  if (context.captureBlocked !== undefined) {
-    return undefined;
-  }
-
-  const cursorCrop = context.pointer?.cursorCrop;
-
-  if (cursorCrop !== undefined) {
-    return { payload: cursorCrop, label: describeCursorCrop(cursorCrop, context.pointer?.cursorCropFocus) };
-  }
-
-  const screenshot = context.pointer?.screenshot ?? context.screenshot;
-
-  return screenshot === undefined
-    ? undefined
-    : {
-        payload: screenshot,
-        label: `screenshot of the window under the pointer (${screenshot.width}x${screenshot.height}), for broader context.`
-      };
-}
-
-function describeCursorCrop(crop: ScreenshotPayload, focus: CursorCropFocus | undefined): string {
-  const size = `${crop.width}x${crop.height}`;
-
-  if (focus === undefined) {
-    return `cursor-centered crop (${size}); the pointer is at its center and it shows the pointed target.`;
-  }
-
-  if (focus.kind === "region") {
-    return `the exact area of the screen the user selected (${size}); "this" means what is in this area.`;
-  }
-
-  const pointer = `the pointer is at (${focus.pointer.x}, ${focus.pointer.y}) in this image`;
-
-  return focus.kind === "element"
-    ? `crop framed on the pointed element and the group around it (${size}); ${pointer}.`
-    : `crop of the screen around the pointer (${size}); ${pointer}.`;
-}
-
 function getScreenshotDetail(): "auto" | "low" | "high" {
   const configured = process.env.OPENAI_SCREENSHOT_DETAIL;
 
@@ -238,34 +189,23 @@ function getAskMaxOutputTokens(): number {
 }
 
 export function buildContextText(request: AskMauzRequest): string {
-  const { question, context } = request;
-  const screenContent = formatScreenContent(context);
+  const image = getContextImage(request.context);
+  const sections = [
+    `<question>\n${request.question.trim()}\n</question>`,
+    formatScreenBlock(request.context, image === undefined ? undefined : `attached: ${image.label}`)
+  ];
+  const conversation = formatConversationMessages(request.conversationMessages);
 
-  return [
-    `User question: ${question}`,
-    "",
-    "Reference resolution priority: selected text > pointed element > pointer image > active window metadata > cursor position.",
-    "When the user says this, that, or here, they mean the pointed element (shown in the pointer image) unless selected text is available. If they selected an area of the screen, they mean that area.",
-    "",
-    "Desktop context:",
-    `- Timestamp: ${context.timestamp}`,
-    `- Platform: ${context.platform}`,
-    `- Cursor: (${Math.round(context.cursor.x)}, ${Math.round(context.cursor.y)})`,
-    `- Selected text: ${formatSelectedText(context)}`,
-    `- Pointer context: ${formatPointerContext(context)}`,
-    `- Active app: ${formatActiveApp(context)}`,
-    `- Active window: ${formatActiveWindow(context)}`,
-    `- Image: ${formatImage(context)}`,
-    ...(screenContent.length === 0 ? [] : ["", ...screenContent]),
-    "",
-    "Previous conversation:",
-    formatConversationMessages(request.conversationMessages)
-  ].join("\n");
+  if (conversation !== undefined) {
+    sections.push(`<previous_conversation>\n${conversation}\n</previous_conversation>`);
+  }
+
+  return sections.join("\n\n");
 }
 
-function formatConversationMessages(messages: AskMauzRequest["conversationMessages"]): string {
+function formatConversationMessages(messages: AskMauzRequest["conversationMessages"]): string | undefined {
   if (messages === undefined || messages.length === 0) {
-    return "none";
+    return undefined;
   }
 
   return messages
@@ -276,52 +216,6 @@ function formatConversationMessages(messages: AskMauzRequest["conversationMessag
 
 function toDataUrl(image: ScreenshotPayload): string {
   return `data:${image.mimeType};base64,${image.base64}`;
-}
-
-function formatActiveApp(context: MauzDesktopContext): string {
-  const activeApp = context.activeApp ?? context.pointer?.activeApp;
-
-  if (activeApp === undefined) {
-    return "unknown";
-  }
-
-  return [
-    activeApp.name,
-    activeApp.bundleId === undefined ? undefined : `bundle ${activeApp.bundleId}`,
-    activeApp.processId === undefined ? undefined : `pid ${activeApp.processId}`
-  ]
-    .filter(Boolean)
-    .join(", ");
-}
-
-function formatActiveWindow(context: MauzDesktopContext): string {
-  const activeWindow = context.activeWindow ?? context.pointer?.activeWindow;
-
-  if (activeWindow === undefined) {
-    return "unknown";
-  }
-
-  const bounds = activeWindow.bounds;
-  const boundsText =
-    bounds === undefined
-      ? undefined
-      : `${Math.round(bounds.width)}x${Math.round(bounds.height)} at ${Math.round(bounds.x)},${Math.round(bounds.y)}`;
-
-  return [activeWindow.title, boundsText].filter(Boolean).join(", ") || "unknown";
-}
-
-function formatSelectedText(context: MauzDesktopContext): string {
-  const selectedText = context.selectedText ?? context.pointer?.selectedText;
-
-  return selectedText?.trim() ? selectedText : "none provided";
-}
-
-function formatImage(context: MauzDesktopContext): string {
-  const image = getContextImage(context);
-
-  return image === undefined
-    ? "none attached"
-    : `${image.payload.mimeType}, attached as the only image input: ${image.label}`;
 }
 
 function normalizeBaseUrl(value: string | undefined): string | undefined {
@@ -354,22 +248,4 @@ function isConnectionError(error: unknown): boolean {
     return true;
   }
   return "cause" in error && isConnectionError((error as { cause: unknown }).cause);
-}
-
-function formatPointerContext(context: MauzDesktopContext): string {
-  const pointer = context.pointer;
-
-  if (pointer === undefined) {
-    return "cursor coordinates only";
-  }
-
-  const displayBounds = pointer.display?.bounds;
-  const displayText =
-    displayBounds === undefined
-      ? undefined
-      : `display ${Math.round(displayBounds.width)}x${Math.round(displayBounds.height)} at ${Math.round(displayBounds.x)},${Math.round(displayBounds.y)}`;
-
-  return [`cursor (${Math.round(pointer.cursor.x)}, ${Math.round(pointer.cursor.y)})`, displayText]
-    .filter(Boolean)
-    .join("; ");
 }

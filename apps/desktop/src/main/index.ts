@@ -5,7 +5,6 @@ import { userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  DEFAULT_HERMES_BASE_URL,
   IPC_CHANNELS,
   readBooleanEnv,
   type MauzSettings,
@@ -22,7 +21,7 @@ import {
   transcribeWithOpenAi,
   type SubscriptionConnector
 } from "@mauzai/api/server";
-import { AgentRunBridge } from "./agent/AgentRunBridge";
+import { TaskAgentLauncher } from "./agent/TaskAgentLauncher";
 import {
   BrowserBridge,
   getBrowserPipePath,
@@ -92,13 +91,6 @@ async function bootstrap(): Promise<void> {
     ...(rendererUrl === undefined ? {} : { rendererUrl })
   });
 
-  const agentRunBridge = new AgentRunBridge({
-    getPopoverWebContents: () => popover?.getWebContents() ?? null,
-    showPopover: () => {
-      void popover?.showAtLastAnchor({ notifyActivation: false, preserveSize: true });
-    }
-  });
-
   const excludeFromCapture = readBooleanEnv(
     process.env.MAUZ_EXCLUDE_FROM_CAPTURE,
     process.platform === "win32"
@@ -109,11 +101,7 @@ async function bootstrap(): Promise<void> {
     preloadPath,
     rendererFile,
     iconPath: appIconPath,
-    onHide: (reason) => {
-      if (reason === "explicit") {
-        void agentRunBridge.stopActiveRun();
-      }
-
+    onHide: () => {
       // Hidden panels stay mounted; let Talk stop speaking and release the microphone.
       const webContents = popover?.getWebContents();
 
@@ -155,7 +143,6 @@ async function bootstrap(): Promise<void> {
   const localApiToken = randomUUID();
   const launchedApi = await launchLocalApi({
     authToken: localApiToken,
-    runHooks: agentRunBridge.runHooks,
     answerHooks: {
       onAnswerText: (payload) => {
         const webContents = popover?.getWebContents();
@@ -185,6 +172,9 @@ async function bootstrap(): Promise<void> {
   });
   subscriptionConnector = createSubscriptionConnector(broadcastSubscriptionConnectState);
 
+  const taskAgentLauncher = new TaskAgentLauncher();
+  taskAgentLauncher.startHandoffCleanup();
+
   registerIpcHandlers({
     popover,
     contextCollector,
@@ -193,7 +183,24 @@ async function bootstrap(): Promise<void> {
     localApiToken,
     getSettings: () => settingsService!.get(),
     updateSettings: applySettingsUpdate,
-    agentRunBridge,
+    taskAgents: {
+      launcher: taskAgentLauncher,
+      pickFolder: async (surface) => {
+        const options: Electron.OpenDialogOptions = {
+          title: "Pick a folder for the agent",
+          properties: ["openDirectory"]
+        };
+        const desktopWindowHandle = desktopWindow?.getWindow() ?? null;
+        const result =
+          surface === "popover" && popover !== null
+            ? await popover.withDialog((parent) => dialog.showOpenDialog(parent, options))
+            : desktopWindowHandle !== null
+              ? await dialog.showOpenDialog(desktopWindowHandle, options)
+              : await dialog.showOpenDialog(options);
+
+        return result.canceled ? null : (result.filePaths[0] ?? null);
+      }
+    },
     talkTranscriber: new TalkTranscriber({
       getWindowsHelper: () => windowsContextHelper,
       hasOpenAiKey: hasOpenAiTranscription,
@@ -305,34 +312,7 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
   process.env.OPENAI_REALTIME_VOICE = settings.realtimeVoice;
   process.env.OPENAI_REALTIME_REASONING_EFFORT = settings.realtimeReasoningEffort;
 
-  const backendBaseUrl = resolveBackendBaseUrl(settings);
-
-  if (backendBaseUrl === undefined) {
-    delete process.env.MAUZ_BACKEND_BASE_URL;
-  } else {
-    process.env.MAUZ_BACKEND_BASE_URL = backendBaseUrl;
-  }
-
-  // The API package reads MAUZ_BACKEND_PRESET to derive the answer label.
-  // Keep the env var name stable; map "agentic" → "hermes" so the API side works unchanged.
-  if (settings.assistantMode === "agentic") {
-    process.env.MAUZ_BACKEND_PRESET = "hermes";
-  } else {
-    delete process.env.MAUZ_BACKEND_PRESET;
-  }
-
-  process.env.MAUZ_AGENT_MODE = settings.agentMode;
   process.env.MAUZ_INSTALL_ID = settings.installId;
-}
-
-function resolveBackendBaseUrl(settings: MauzRuntimeSettings): string | undefined {
-  if (settings.assistantMode !== "agentic") {
-    return undefined;
-  }
-
-  const configured = settings.backendBaseUrl.trim();
-
-  return configured.length > 0 ? configured : DEFAULT_HERMES_BASE_URL;
 }
 
 function configureAppIdentity(iconPath: string): void {
@@ -491,9 +471,7 @@ function restartInputProviders(settings: MauzSettings): void {
 
 async function handleActivation(cursor: { x: number; y: number }): Promise<void> {
   // A question is likely; start the answer provider (e.g. the Claude Code CLI) while the menu is open.
-  if (currentSettings?.assistantMode !== "agentic") {
-    prewarmAnswerProvider();
-  }
+  prewarmAnswerProvider();
 
   try {
     await contextCollector?.prepareForActivation(cursor);

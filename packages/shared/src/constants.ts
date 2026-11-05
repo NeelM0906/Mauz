@@ -48,12 +48,10 @@ export const IPC_CHANNELS = {
   talkCaptureContext: "mauz:talk:capture-context",
   browserStatus: "mauz:browser:status",
   browserOpenExtensionFolder: "mauz:browser:open-extension-folder",
-  agentApprovalRequest: "mauz:agent:approval-request",
-  agentApprovalRespond: "mauz:agent:approval-respond",
-  agentRunState: "mauz:agent:run-state",
-  agentRunActivity: "mauz:agent:run-activity",
-  agentStop: "mauz:agent:stop",
-  agentGatewayReadinessStatus: "mauz:agent:gateway-readiness-status",
+  taskAgents: "mauz:task:agents",
+  taskFolders: "mauz:task:folders",
+  taskPickFolder: "mauz:task:pick-folder",
+  taskSend: "mauz:task:send",
   chatHistoryList: "mauz:chat-history:list",
   chatHistoryGet: "mauz:chat-history:get",
   chatHistoryContinue: "mauz:chat-history:continue",
@@ -66,5 +64,3 @@ export const IPC_CHANNELS = {
 } as const;
 
 export const DEFAULT_MAUZ_API_PORT = 47891;
-
-export const DEFAULT_HERMES_BASE_URL = "http://localhost:8642/v1";

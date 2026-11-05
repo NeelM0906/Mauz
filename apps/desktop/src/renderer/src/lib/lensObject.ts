@@ -224,7 +224,7 @@ export function getLensActionQuestion(
       : `Compare this current object with the pinned object: ${pinnedObject.label}. Pinned summary: ${pinnedObject.summary}`;
   }
 
-  return `Help me with this ${lensObject.type.replace("-", " ")}.`;
+  return "What is this, and what should I know about it?";
 }
 
 function appendPinnedObject(question: string, pinnedObject: LensMemory | null): string {

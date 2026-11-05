@@ -7,14 +7,12 @@ const ipcMainMock = vi.hoisted(() => ({
 const realtimeApiClientMock = vi.hoisted(() => ({
   connectRealtimeToLocalApi: vi.fn()
 }));
-const getGatewayReadinessStatusMock = vi.hoisted(() => vi.fn());
 
 vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
 vi.mock("../src/main/ipc/realtimeApiClient", () => realtimeApiClientMock);
 vi.mock("@mauzai/api/server", () => ({
-  getGatewayReadinessStatus: getGatewayReadinessStatusMock,
   getAiProvidersStatus: vi.fn(async () => ({
     preference: "auto",
     fallbackPreference: "none",
@@ -24,13 +22,7 @@ vi.mock("@mauzai/api/server", () => ({
   }))
 }));
 
-import {
-  DEFAULT_HERMES_BASE_URL,
-  IPC_CHANNELS,
-  type MauzDesktopContext,
-  type RealtimeConnectRequest
-} from "@mauzai/shared";
-import type { AgentRunBridge } from "../src/main/agent/AgentRunBridge";
+import { IPC_CHANNELS, type MauzDesktopContext, type RealtimeConnectRequest } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
@@ -53,9 +45,10 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.chatHistoryClear,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
-  IPC_CHANNELS.agentApprovalRespond,
-  IPC_CHANNELS.agentStop,
-  IPC_CHANNELS.agentGatewayReadinessStatus,
+  IPC_CHANNELS.taskAgents,
+  IPC_CHANNELS.taskFolders,
+  IPC_CHANNELS.taskPickFolder,
+  IPC_CHANNELS.taskSend,
   IPC_CHANNELS.providersStatus,
   IPC_CHANNELS.providersConnect,
   IPC_CHANNELS.providersConnectCode,
@@ -73,7 +66,6 @@ describe("registerIpcHandlers", () => {
     ipcMainMock.handle.mockClear();
     ipcMainMock.removeHandler.mockClear();
     realtimeApiClientMock.connectRealtimeToLocalApi.mockReset();
-    getGatewayReadinessStatusMock.mockReset();
     vi.unstubAllGlobals();
   });
 
@@ -306,7 +298,7 @@ describe("registerIpcHandlers", () => {
     expect(options.chatHistory.list).not.toHaveBeenCalled();
   });
 
-  it("passes assistantMode and agentMode through to updateSettings without stripping them", async () => {
+  it("passes Task agent settings through to updateSettings without stripping them", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
@@ -314,12 +306,12 @@ describe("registerIpcHandlers", () => {
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsUpdate);
 
     await handler(createInvokeEvent("popover"), {
-      assistantMode: "agentic",
-      agentMode: "yolo"
+      taskAgent: "hermes",
+      taskFolder: "C:/work"
     });
 
     expect(options.updateSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ assistantMode: "agentic", agentMode: "yolo" })
+      expect.objectContaining({ taskAgent: "hermes", taskFolder: "C:/work" })
     );
   });
 
@@ -427,111 +419,87 @@ describe("registerIpcHandlers", () => {
     expect(openExternal).toHaveBeenCalledWith("https://auth.openai.com/codex/device");
   });
 
-  it("returns gateway readiness status for simple mode", async () => {
+  it("lists installed agents and picks the configured one", async () => {
     const options = createOptions();
-
-    getGatewayReadinessStatusMock.mockResolvedValueOnce({
-      status: "simple",
-      message: "Using the fast simple answer flow."
+    vi.mocked(options.getSettings).mockResolvedValueOnce({
+      ...(await options.getSettings()),
+      taskAgent: "codex"
     });
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.agentGatewayReadinessStatus);
+    const handler = getRegisteredHandler(IPC_CHANNELS.taskAgents);
 
     await expect(handler(createInvokeEvent("popover"))).resolves.toEqual({
-      status: "simple",
-      message: "Using the fast simple answer flow."
+      agents: [
+        { id: "hermes", label: "Hermes", installed: true },
+        { id: "claude-code", label: "Claude Code", installed: false },
+        { id: "codex", label: "Codex", installed: true }
+      ],
+      selectedAgentId: "codex"
     });
-    expect(getGatewayReadinessStatusMock).toHaveBeenCalledWith("simple", "");
   });
 
-  it("probes the configured gateway for agentic mode", async () => {
+  it("puts the last folder used with an agent first, then its own folders, then the default", async () => {
     const options = createOptions();
-
     vi.mocked(options.getSettings).mockResolvedValueOnce({
-      nativeShakeEnabled: false,
-      devHotkeyEnabled: true,
-      shakeSensitivity: "normal",
-      openAiAuthMode: "api-key",
-      openAiAuthDisconnected: false,
-      openAiCredentialSource: "none",
-      askModel: "gpt-5.4-mini",
-      chatTitleModel: "gpt-5.4-nano",
-      realtimeModel: "gpt-realtime-2",
-      realtimeVoice: "marin",
-      realtimeReasoningEffort: "low",
-      captureBlockedApps: [],
-      captureBlockedSites: [],
-      apiKeyConfigured: false,
-      assistantMode: "agentic",
-      backendBaseUrl: "http://gateway.test/v1",
-      agentMode: "approve",
-      aiProvider: "auto",
-      aiFallbackProvider: "none",
-      anthropicKeyConfigured: false,
-      talkEngine: "pipeline"
-    });
-
-    getGatewayReadinessStatusMock.mockResolvedValueOnce({
-      status: "ready",
-      message: "Gateway is ready for supervised Work tasks."
+      ...(await options.getSettings()),
+      taskFolder: "C:/work",
+      taskAgentFolders: { "claude-code": "C:/work/last" }
     });
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.agentGatewayReadinessStatus);
+    const handler = getRegisteredHandler(IPC_CHANNELS.taskFolders);
 
-    await expect(handler(createInvokeEvent("popover"))).resolves.toEqual({
-      status: "ready",
-      message: "Gateway is ready for supervised Work tasks."
+    await expect(handler(createInvokeEvent("popover"), { agentId: "claude-code" })).resolves.toEqual({
+      folders: [
+        { path: "C:/work/last", name: "last" },
+        { path: "C:/work/mauz", name: "mauz" },
+        { path: "C:/work", name: "work" }
+      ],
+      selectedPath: "C:/work/last"
     });
-    expect(getGatewayReadinessStatusMock).toHaveBeenCalledWith("agentic", "http://gateway.test/v1");
   });
 
-  it("falls back to the default Hermes base URL when agentic with no configured URL", async () => {
+  it("launches the agent and remembers the folder for next time", async () => {
     const options = createOptions();
-
-    vi.mocked(options.getSettings).mockResolvedValueOnce({
-      nativeShakeEnabled: false,
-      devHotkeyEnabled: true,
-      shakeSensitivity: "normal",
-      openAiAuthMode: "api-key",
-      openAiAuthDisconnected: false,
-      openAiCredentialSource: "none",
-      askModel: "gpt-5.4-mini",
-      chatTitleModel: "gpt-5.4-nano",
-      realtimeModel: "gpt-realtime-2",
-      realtimeVoice: "marin",
-      realtimeReasoningEffort: "low",
-      captureBlockedApps: [],
-      captureBlockedSites: [],
-      apiKeyConfigured: false,
-      assistantMode: "agentic",
-      backendBaseUrl: "",
-      agentMode: "approve",
-      aiProvider: "auto",
-      aiFallbackProvider: "none",
-      anthropicKeyConfigured: false,
-      talkEngine: "pipeline"
-    });
-
-    getGatewayReadinessStatusMock.mockResolvedValueOnce({
-      status: "unavailable",
-      message: "The configured gateway is not reachable."
-    });
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.agentGatewayReadinessStatus);
+    const handler = getRegisteredHandler(IPC_CHANNELS.taskSend);
+    const request = { agentId: "hermes", folder: "C:/work/mauz", task: "Fix this", context: createContext() };
 
-    await expect(handler(createInvokeEvent("desktop"))).resolves.toEqual({
-      status: "unavailable",
-      message: "The configured gateway is not reachable."
-    });
-    expect(getGatewayReadinessStatusMock).toHaveBeenCalledWith("agentic", DEFAULT_HERMES_BASE_URL);
+    await expect(handler(createInvokeEvent("popover"), request)).resolves.toEqual({ agentLabel: "Hermes" });
+    expect(options.taskAgents.launcher.launch).toHaveBeenCalledWith(request);
+    expect(options.updateSettings).toHaveBeenCalledWith({ taskAgentFolders: { hermes: "C:/work/mauz" } });
+  });
+
+  it("rejects Send to agent requests from the desktop window", async () => {
+    const options = createOptions();
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.taskSend);
+
+    await expect(
+      handler(createInvokeEvent("desktop"), {
+        agentId: "hermes",
+        folder: "C:/work",
+        task: "Fix this",
+        context: createContext()
+      })
+    ).rejects.toThrow("wrong renderer surface");
   });
 });
+
+function createContext(): MauzDesktopContext {
+  return {
+    timestamp: "2026-11-04T12:00:00.000Z",
+    platform: "win32",
+    cursor: { x: 10, y: 20 }
+  };
+}
 
 function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<unknown> {
   const call = ipcMainMock.handle.mock.calls.find(([registeredChannel]) => registeredChannel === channel);
@@ -639,10 +607,25 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     } as never,
     api,
     localApiToken: "test-token",
-    agentRunBridge: {
-      respondToApproval: vi.fn(),
-      stopActiveRun: vi.fn(async () => {})
-    } as unknown as AgentRunBridge,
+    taskAgents: {
+      launcher: {
+        listAgents: vi.fn(() => [
+          { id: "hermes" as const, label: "Hermes", installed: true },
+          { id: "claude-code" as const, label: "Claude Code", installed: false },
+          { id: "codex" as const, label: "Codex", installed: true }
+        ]),
+        resolveAgent: vi.fn((preference: string, agents: Array<{ id: string; installed: boolean }>) => {
+          const installed = agents.filter((agent) => agent.installed);
+          return (installed.find((agent) => agent.id === preference) ?? installed[0])?.id ?? null;
+        }) as never,
+        listFolders: vi.fn(() => [{ path: "C:/work/mauz", name: "mauz" }]),
+        toTaskFolder: vi.fn((path: string) => ({ path, name: path.split("/").pop() ?? path })),
+        folderKey: vi.fn((path: string) => path.toLowerCase()),
+        defaultFolder: vi.fn((configured: string) => configured || "C:/Users/test"),
+        launch: vi.fn(async () => ({ agentLabel: "Hermes" }))
+      },
+      pickFolder: vi.fn(async () => null)
+    },
     getSettings: vi.fn(async () => ({
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
@@ -658,9 +641,9 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       captureBlockedApps: [],
       captureBlockedSites: [],
       apiKeyConfigured: false,
-      assistantMode: "simple" as const,
-      backendBaseUrl: "",
-      agentMode: "approve" as const,
+      taskAgent: "auto" as const,
+      taskFolder: "",
+      taskAgentFolders: {},
       aiProvider: "auto" as const,
       aiFallbackProvider: "none" as const,
       anthropicKeyConfigured: false,
@@ -681,9 +664,9 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       captureBlockedApps: update.captureBlockedApps ?? [],
       captureBlockedSites: update.captureBlockedSites ?? [],
       apiKeyConfigured: false,
-      assistantMode: update.assistantMode ?? ("simple" as const),
-      backendBaseUrl: update.backendBaseUrl ?? "",
-      agentMode: update.agentMode ?? ("approve" as const),
+      taskAgent: update.taskAgent ?? ("auto" as const),
+      taskFolder: update.taskFolder ?? "",
+      taskAgentFolders: update.taskAgentFolders ?? {},
       aiProvider: update.aiProvider ?? ("auto" as const),
       aiFallbackProvider: update.aiFallbackProvider ?? ("none" as const),
       anthropicKeyConfigured: false,

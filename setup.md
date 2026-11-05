@@ -100,13 +100,11 @@ The extension reads nothing until you summon Mauz over that browser, and only fr
 active tab. Sites on Settings > Never capture (banking and payments by default) are not
 read or screenshotted.
 
-## Talk (push to talk)
+## Dictate
 
-Hold **Space** (or the **Hold to talk** button), speak, and release. Mauz transcribes the clip, answers with your AI provider using a fresh screenshot around your pointer, and reads the answer aloud with your system voice. Press Space while Mauz is speaking to interrupt it.
+Choose **Dictate** on the dial and speak. Press **Stop** (or Space) when you are done; the text appears in an editable box. Send it to **Ask** for an answer, or to **Send to agent** to hand it to your coding agent. Mauz uses what was under your pointer when the dial opened.
 
-Speech-to-text uses OpenAI when you have added an OpenAI API key, otherwise the built-in Windows speech recognizer (offline; install an English speech pack under **Settings → Time & language → Speech** if it is missing). On macOS without an OpenAI key, push to talk is not available yet.
-
-OpenAI's Realtime speech-to-speech voice is still available: choose **Talk uses → OpenAI Realtime voice** in Settings (requires an OpenAI API key).
+Speech-to-text uses OpenAI when you have added an OpenAI API key, otherwise the built-in Windows speech recognizer (offline; install an English speech pack under **Settings → Time & language → Speech** if it is missing). On macOS without an OpenAI key, Dictate is not available yet.
 
 ## OpenAI Login
 
@@ -126,42 +124,26 @@ export OPENAI_CHAT_TITLE_MODEL="gpt-5.4-nano"
 export OPENAI_REALTIME_MODEL="gpt-realtime-2"
 ```
 
-## Agent gateway and Work on this
+## Send to agent
 
-Mauz uses **Simple** mode by default for quick contextual answers. To use tools for a longer task, choose **Agentic** under **Settings → Mode**, configure the Gateway URL, save, and check the gateway readiness message shown there.
+Send to agent hands a task to a coding agent installed on your computer:
 
-Gateway readiness can report:
+| Agent       | How Mauz starts it                                                    |
+| ----------- | --------------------------------------------------------------------- |
+| Hermes      | `hermes chat --query-file <brief> --image <screenshot> --in <folder>` |
+| Claude Code | `claude --add-dir <brief folder> "Read the task brief in …"`          |
+| Codex       | `codex -C <folder> "Read the task brief in …" -i <screenshot>`        |
 
-- **Ready**: **Work on this** can start a supervised, tool-enabled task.
-- **Unavailable**: Mauz cannot reach or recognize the configured gateway. Check that the gateway is running and that its URL is correct.
-- **Unsupported**: the gateway is reachable but does not support supervised runs. Use a gateway with run support.
+Mauz writes the brief (your task plus the selected text, pointed element, page, and window it captured) and the screenshot to a temporary folder, then opens the agent in a new terminal window (Windows Terminal or PowerShell on Windows, Terminal on macOS). The agent runs with its own settings and permissions. Mauz does not monitor it, approve its actions, or show its results; follow along in the agent's window.
 
-The default Gateway URL is `http://localhost:8642/v1`. To run the supported [Hermes](https://github.com/NousResearch/hermes-agent) gateway locally, enable its API server platform and start the gateway:
+Choose the agent under **Settings → Task agent**. **Automatic** uses the first one installed, in the order Hermes, Claude Code, Codex. Mauz looks for each CLI on your PATH and in its usual install folders.
 
-```bash
-export API_SERVER_ENABLED=true    # serves http://127.0.0.1:8642/v1
-```
+The folder picker lists the folder you last used with that agent, then the folders the agent has worked in (Claude Code's project list, Codex's session history, Hermes projects), then the **Default work folder** from Settings (your home folder if empty). **Browse** picks any other folder. When you point at VS Code, Cursor, or Windsurf, Mauz preselects the folder whose name appears in the window title.
 
-Optional environment settings:
-
-```bash
-export MAUZ_BACKEND_BASE_URL="http://localhost:8642/v1"
-export MAUZ_BACKEND_API_KEY="..."   # only needed when the gateway requires API-key authentication
-```
-
-### Supervised tool use
-
-Choose **Work on this** when you want Mauz to investigate an outcome and use gateway tools. Work starts only when gateway readiness is **Ready**, shows activity while it runs, asks for approval before gated actions, and provides a Stop control.
-
-The advanced **Agent mode** setting remains available in Settings:
-
-- **Approve**: gated actions show a card with Allow once, Allow for session, Always allow, and Deny choices.
-- **YOLO**: automatically approves gated actions. Use it only when you trust the task and gateway.
-
-You can set the default advanced mode with:
+Set the default agent from the environment with:
 
 ```bash
-export MAUZ_AGENT_MODE="approve"   # or "yolo"
+export MAUZ_TASK_AGENT="hermes"   # auto, hermes, claude-code, or codex
 ```
 
 ## macOS Permissions
@@ -169,8 +151,8 @@ export MAUZ_AGENT_MODE="approve"   # or "yolo"
 MauzAI works best with these permissions:
 
 - Accessibility: required for native mouse-shake activation.
-- Screen Recording: required when Ask or Talk captures screen context.
-- Microphone: required for Talk mode.
+- Screen Recording: required when Ask, Send to agent, or Dictate captures screen context.
+- Microphone: required for Dictate.
 
 Open System Settings, then Privacy & Security, and grant permissions to MauzAI, Electron, or the built local app depending on how you launch it.
 

@@ -1,14 +1,11 @@
 import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
-  AgentApprovalResponseSchema,
   AiProvidersStatusRequestSchema,
   AiProvidersStatusResponseSchema,
   AskMauzRequestSchema,
   ChatHistoryContinueRequestSchema,
   ChatHistoryDeleteRequestSchema,
   ChatHistoryGetRequestSchema,
-  DEFAULT_HERMES_BASE_URL,
-  GatewayReadinessResultSchema,
   IPC_CHANNELS,
   MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
@@ -19,17 +16,18 @@ import {
   SubscriptionDisconnectRequestSchema,
   TalkTranscribeRequestSchema,
   TalkTranscribeResponseSchema,
+  TaskAgentsResponseSchema,
+  TaskFoldersRequestSchema,
+  TaskFoldersResponseSchema,
+  TaskSendRequestSchema,
+  TaskSendResponseSchema,
   type Bounds,
   type BrowserExtensionStatus,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
-import {
-  getAiProvidersStatus,
-  getGatewayReadinessStatus,
-  type SubscriptionConnector
-} from "@mauzai/api/server";
-import type { AgentRunBridge } from "../agent/AgentRunBridge";
+import { getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
+import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
 import type { ChatHistoryService } from "../chat/ChatHistoryService";
 import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
@@ -47,7 +45,20 @@ type RegisterIpcHandlersOptions = {
   localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
-  agentRunBridge: AgentRunBridge;
+  taskAgents: {
+    launcher: Pick<
+      TaskAgentLauncher,
+      | "listAgents"
+      | "resolveAgent"
+      | "listFolders"
+      | "toTaskFolder"
+      | "folderKey"
+      | "defaultFolder"
+      | "launch"
+    >;
+    /** Opens a folder dialog over the asking surface; null when cancelled. */
+    pickFolder(surface: "popover" | "desktop"): Promise<string | null>;
+  };
   getProvidersStatus?: typeof getAiProvidersStatus;
   talkTranscriber?: Pick<TalkTranscriber, "transcribe">;
   subscriptionConnector?: Pick<
@@ -83,9 +94,10 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.chatHistoryClear,
   IPC_CHANNELS.realtimeCreateSession,
   IPC_CHANNELS.realtimeConnect,
-  IPC_CHANNELS.agentApprovalRespond,
-  IPC_CHANNELS.agentStop,
-  IPC_CHANNELS.agentGatewayReadinessStatus,
+  IPC_CHANNELS.taskAgents,
+  IPC_CHANNELS.taskFolders,
+  IPC_CHANNELS.taskPickFolder,
+  IPC_CHANNELS.taskSend,
   IPC_CHANNELS.providersStatus,
   IPC_CHANNELS.providersConnect,
   IPC_CHANNELS.providersConnectCode,
@@ -106,7 +118,7 @@ export function registerIpcHandlers({
   localApiToken,
   getSettings,
   updateSettings,
-  agentRunBridge,
+  taskAgents,
   getProvidersStatus = getAiProvidersStatus,
   talkTranscriber,
   subscriptionConnector,
@@ -286,24 +298,64 @@ export function registerIpcHandlers({
     return connectRealtimeToLocalApi(api, localApiToken, payload);
   });
 
-  ipcMain.handle(IPC_CHANNELS.agentApprovalRespond, (event, payload: unknown) => {
-    assertTrustedSurface(event, ["popover"]);
-    const parsed = AgentApprovalResponseSchema.parse(payload);
-    agentRunBridge.respondToApproval(parsed.approvalId, parsed.choice);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.agentStop, async (event) => {
-    assertTrustedSurface(event, ["popover"]);
-    await agentRunBridge.stopActiveRun();
-  });
-
-  ipcMain.handle(IPC_CHANNELS.agentGatewayReadinessStatus, async (event) => {
+  ipcMain.handle(IPC_CHANNELS.taskAgents, async (event) => {
     assertTrustedSurface(event, ["popover", "desktop"]);
     const settings = await getSettings();
-    const baseUrl =
-      settings.assistantMode === "agentic" ? settings.backendBaseUrl.trim() || DEFAULT_HERMES_BASE_URL : "";
-    const result = await getGatewayReadinessStatus(settings.assistantMode, baseUrl);
-    return GatewayReadinessResultSchema.parse(result);
+    const agents = taskAgents.launcher.listAgents();
+
+    return TaskAgentsResponseSchema.parse({
+      agents,
+      selectedAgentId: taskAgents.launcher.resolveAgent(settings.taskAgent, agents)
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.taskFolders, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
+    const { agentId } = TaskFoldersRequestSchema.parse(payload);
+    const settings = await getSettings();
+    const launcher = taskAgents.launcher;
+    const defaultFolder = launcher.defaultFolder(settings.taskFolder);
+    const lastUsed = settings.taskAgentFolders[agentId];
+    // The last folder used with this agent first, then the agent's own recent folders, then the default.
+    const candidates = [
+      ...(lastUsed === undefined ? [] : [launcher.toTaskFolder(lastUsed)]),
+      ...launcher.listFolders(agentId),
+      launcher.toTaskFolder(defaultFolder)
+    ];
+    const seen = new Set<string>();
+    const folders = candidates.filter((folder) => {
+      const key = launcher.folderKey(folder.path);
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    });
+
+    return TaskFoldersResponseSchema.parse({
+      folders: folders.slice(0, 100),
+      selectedPath: lastUsed ?? defaultFolder
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.taskPickFolder, async (event) => {
+    assertTrustedSurface(event, ["popover", "desktop"]);
+    return taskAgents.pickFolder(getTrustedSurface(event));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.taskSend, async (event, payload: unknown) => {
+    assertTrustedSurface(event, ["popover"]);
+    const request = TaskSendRequestSchema.parse(payload);
+    const result = await taskAgents.launcher.launch(request);
+    const settings = await getSettings();
+
+    await updateSettings({
+      taskAgentFolders: { ...settings.taskAgentFolders, [request.agentId]: request.folder }
+    });
+
+    return TaskSendResponseSchema.parse(result);
   });
 
   ipcMain.handle(IPC_CHANNELS.providersStatus, async (event, payload: unknown) => {
