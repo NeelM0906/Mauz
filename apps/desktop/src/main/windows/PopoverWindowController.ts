@@ -47,6 +47,7 @@ export class PopoverWindowController {
   private targetCueRequestId = 0;
   private readonly options: PopoverWindowControllerOptions;
   private lastAnchorPoint: Point | null = null;
+  private dialogOpen = false;
   private currentSize: Size = { ...MAUZ_POPUP_SIZE };
   private readonly excludeFromCapture: boolean;
 
@@ -96,7 +97,9 @@ export class PopoverWindowController {
     }
 
     win.on("blur", () => {
-      this.hide("blur");
+      if (!this.dialogOpen) {
+        this.hide("blur");
+      }
     });
 
     this.window = win;
@@ -176,6 +179,22 @@ export class PopoverWindowController {
     }
 
     this.hideTargetCue();
+  }
+
+  /** Shows a dialog over the popover without the focus change closing it. */
+  async withDialog<T>(open: (parent: BrowserWindow) => Promise<T>): Promise<T> {
+    const win = this.requireWindow();
+    this.dialogOpen = true;
+
+    try {
+      return await open(win);
+    } finally {
+      this.dialogOpen = false;
+
+      if (!win.isDestroyed() && win.isVisible()) {
+        win.focus();
+      }
+    }
   }
 
   getWebContents(): Electron.WebContents | null {

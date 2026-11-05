@@ -16,7 +16,7 @@ export type LensMemory = {
   createdAt: string;
 };
 
-type MauzMode = "menu" | "lens" | "task" | "talk" | "settings" | "history";
+type MauzMode = "menu" | "lens" | "task" | "dictate" | "talk" | "settings" | "history";
 
 type MauzStore = {
   mode: MauzMode;
@@ -33,6 +33,8 @@ type MauzStore = {
   settings: MauzSettings | null;
   selectedLensAction: LensAction;
   pinnedLensObject: LensMemory | null;
+  /** Dictated text handed to Ask (sent right away) or Send to agent (prefilled). */
+  dictation: string | null;
   setMode(mode: MauzMode): void;
   setStatus(status: string | null): void;
   setCurrentContext(context: MauzDesktopContext | null): void;
@@ -47,6 +49,7 @@ type MauzStore = {
   setSettings(settings: MauzSettings | null): void;
   setSelectedLensAction(action: LensAction): void;
   setPinnedLensObject(memory: LensMemory | null): void;
+  setDictation(text: string | null): void;
   backToMenu(): void;
   reset(): void;
 };
@@ -66,6 +69,7 @@ export const useMauzStore = create<MauzStore>((set) => ({
   settings: null,
   selectedLensAction: "ask",
   pinnedLensObject: null,
+  dictation: null,
   setMode: (mode) => set({ mode }),
   setStatus: (status) => set({ status }),
   setCurrentContext: (currentContext) => set({ currentContext }),
@@ -80,6 +84,7 @@ export const useMauzStore = create<MauzStore>((set) => ({
   setSettings: (settings) => set({ settings }),
   setSelectedLensAction: (selectedLensAction) => set({ selectedLensAction }),
   setPinnedLensObject: (pinnedLensObject) => set({ pinnedLensObject }),
+  setDictation: (dictation) => set({ dictation }),
   backToMenu: () =>
     set({
       mode: "menu",
@@ -91,7 +96,8 @@ export const useMauzStore = create<MauzStore>((set) => ({
       selectedConversation: null,
       historyError: null,
       historyLoading: false,
-      selectedLensAction: "ask"
+      selectedLensAction: "ask",
+      dictation: null
     }),
   reset: () =>
     set({
@@ -105,6 +111,7 @@ export const useMauzStore = create<MauzStore>((set) => ({
       selectedConversation: null,
       historyError: null,
       historyLoading: false,
-      selectedLensAction: "ask"
+      selectedLensAction: "ask",
+      dictation: null
     })
 }));

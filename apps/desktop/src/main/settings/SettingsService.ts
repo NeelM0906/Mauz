@@ -9,10 +9,10 @@ import {
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
   TalkEngineSchema,
+  TaskAgentPreferenceSchema,
   readBooleanEnv,
-  type AgentMode,
-  type AssistantMode,
   type MauzSettings,
+  type TaskAgentPreference,
   type MauzSettingsUpdate,
   type OpenAiCredentialSource
 } from "@mauzai/shared";
@@ -173,9 +173,9 @@ export class SettingsService {
         "captureBlockedSites",
         normalizeAppList(parsedUpdate.captureBlockedSites)
       );
-      applyDefinedSetting(nextSettings, "assistantMode", parsedUpdate.assistantMode);
-      applyDefinedSetting(nextSettings, "backendBaseUrl", parsedUpdate.backendBaseUrl);
-      applyDefinedSetting(nextSettings, "agentMode", parsedUpdate.agentMode);
+      applyDefinedSetting(nextSettings, "taskAgent", parsedUpdate.taskAgent);
+      applyDefinedSetting(nextSettings, "taskFolder", parsedUpdate.taskFolder);
+      applyDefinedSetting(nextSettings, "taskAgentFolders", parsedUpdate.taskAgentFolders);
       applyDefinedSetting(nextSettings, "aiProvider", parsedUpdate.aiProvider);
       applyDefinedSetting(nextSettings, "aiFallbackProvider", parsedUpdate.aiFallbackProvider);
       applyDefinedSetting(nextSettings, "talkEngine", parsedUpdate.talkEngine);
@@ -364,12 +364,9 @@ function getDefaultSettings(): StoredMauzSettings {
         : DEFAULT_REALTIME_REASONING_EFFORT,
     captureBlockedApps: [...DEFAULT_CAPTURE_BLOCKED_APPS],
     captureBlockedSites: [...DEFAULT_CAPTURE_BLOCKED_SITES],
-    assistantMode:
-      process.env.MAUZ_BACKEND_PRESET === "hermes"
-        ? ("agentic" as AssistantMode)
-        : ("simple" as AssistantMode),
-    backendBaseUrl: process.env.MAUZ_BACKEND_BASE_URL?.trim() ?? "",
-    agentMode: process.env.MAUZ_AGENT_MODE === "yolo" ? ("yolo" as AgentMode) : "approve",
+    taskAgent: TaskAgentPreferenceSchema.catch("auto").parse(process.env.MAUZ_TASK_AGENT?.trim()),
+    taskFolder: "",
+    taskAgentFolders: {},
     aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim()),
     aiFallbackProvider: AiFallbackPreferenceSchema.catch("none").parse(
       process.env.MAUZ_AI_FALLBACK_PROVIDER?.trim()
@@ -387,28 +384,14 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
   const parsedRecord = parsed as Record<string, unknown>;
   const defaults = getDefaultSettings();
 
-  // Resolve assistantMode: new format first, then legacy backendPreset migration.
-  let assistantMode: AssistantMode;
-  if (
-    typeof parsedRecord.assistantMode === "string" &&
-    (parsedRecord.assistantMode === "simple" || parsedRecord.assistantMode === "agentic")
-  ) {
-    assistantMode = parsedRecord.assistantMode;
-  } else if (typeof parsedRecord.backendPreset === "string") {
-    // Legacy migration: "openai" → "simple"; "hermes"/"custom" → "agentic"; unknown → "simple".
-    assistantMode =
-      parsedRecord.backendPreset === "hermes" || parsedRecord.backendPreset === "custom"
-        ? "agentic"
-        : "simple";
-  } else {
-    // Invalid assistantMode value or missing entirely: use default.
-    assistantMode = defaults.assistantMode;
-  }
-
   const candidate = {
     ...defaults,
     ...parsedRecord,
-    assistantMode,
+    taskAgent: resolveStoredTaskAgent(parsedRecord, defaults.taskAgent),
+    taskFolder: MauzSettingsSchema.shape.taskFolder.catch(defaults.taskFolder).parse(parsedRecord.taskFolder),
+    taskAgentFolders: MauzSettingsSchema.shape.taskAgentFolders
+      .catch(defaults.taskAgentFolders)
+      .parse(parsedRecord.taskAgentFolders),
     apiKeyConfigured: false,
     openAiCredentialSource: "none",
     anthropicKeyConfigured: false
@@ -443,9 +426,9 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
     captureBlockedApps: publicSettings.data.captureBlockedApps,
     captureBlockedSites: publicSettings.data.captureBlockedSites,
-    assistantMode: publicSettings.data.assistantMode,
-    backendBaseUrl: publicSettings.data.backendBaseUrl,
-    agentMode: publicSettings.data.agentMode,
+    taskAgent: publicSettings.data.taskAgent,
+    taskFolder: publicSettings.data.taskFolder,
+    taskAgentFolders: publicSettings.data.taskAgentFolders,
     aiProvider: publicSettings.data.aiProvider,
     aiFallbackProvider: publicSettings.data.aiFallbackProvider,
     talkEngine: publicSettings.data.talkEngine,
@@ -469,12 +452,27 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
     "openAiApiKey" in parsed ||
     ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key") ||
     !("installId" in parsed) ||
-    // Legacy backendPreset field present: migration rewrites to new assistantMode format.
-    "backendPreset" in parsed ||
-    // Invalid assistantMode value stored: rewrite with normalized value.
-    (typeof parsedRecord.assistantMode === "string" &&
-      !["simple", "agentic"].includes(parsedRecord.assistantMode))
+    // Gateway-era fields: rewrite without them.
+    LEGACY_GATEWAY_KEYS.some((key) => key in parsedRecord)
   );
+}
+
+const LEGACY_GATEWAY_KEYS = ["backendPreset", "assistantMode", "backendBaseUrl", "agentMode"] as const;
+
+/** Someone who used Agentic mode (the Hermes gateway) keeps Hermes as their task agent. */
+function resolveStoredTaskAgent(
+  parsedRecord: Record<string, unknown>,
+  fallback: TaskAgentPreference
+): TaskAgentPreference {
+  const stored = TaskAgentPreferenceSchema.safeParse(parsedRecord.taskAgent);
+
+  if (stored.success) {
+    return stored.data;
+  }
+
+  return parsedRecord.assistantMode === "agentic" || parsedRecord.backendPreset === "hermes"
+    ? "hermes"
+    : fallback;
 }
 
 function toPublicSettings(
@@ -503,9 +501,9 @@ function toPublicSettings(
     captureBlockedApps: [...settings.captureBlockedApps],
     captureBlockedSites: [...settings.captureBlockedSites],
     apiKeyConfigured: openAiCredentialSource !== "none",
-    assistantMode: settings.assistantMode,
-    backendBaseUrl: settings.backendBaseUrl,
-    agentMode: settings.agentMode,
+    taskAgent: settings.taskAgent,
+    taskFolder: settings.taskFolder,
+    taskAgentFolders: { ...settings.taskAgentFolders },
     aiProvider: settings.aiProvider,
     aiFallbackProvider: settings.aiFallbackProvider,
     anthropicKeyConfigured,

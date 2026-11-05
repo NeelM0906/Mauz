@@ -5,21 +5,16 @@ import {
   Check,
   GitCompareArrows,
   LoaderCircle,
-  MousePointer2,
   Pin,
   ScanSearch,
   Send,
-  ShieldAlert,
   Sparkles,
-  Square,
   TextCursorInput,
   Wand2,
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AgentApprovalPayload, AgentRunActivityPayload } from "@mauzai/shared";
 import type { LensAction } from "@renderer/state/useMauzStore";
-import { classifyApprovalRisk } from "@renderer/lib/approvalRisk";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { detectLensObject, getLensActionQuestion, toLensMemory } from "@renderer/lib/lensObject";
 import { CaptureDetails } from "./CaptureDetails";
@@ -39,11 +34,12 @@ const ACTION_UI: Record<
   }
 > = {
   ask: {
-    title: "Ask Mauz",
-    subtitle: "Cursor prompt",
+    title: "Ask",
+    subtitle: "What's on screen",
     buttonLabel: "Ask",
-    placeholder: "Ask about this object",
-    emptyState: "Ask anything about what is under the cursor. The response stays in this popup.",
+    placeholder: "Ask about this (or just press Ask)",
+    emptyState:
+      "Ask anything about what is under the pointer or selected. Press Ask with nothing typed to learn what this is.",
     icon: ScanSearch
   },
   explain: {
@@ -81,8 +77,6 @@ const ACTION_UI: Record<
   }
 };
 
-type ActivityEntry = AgentRunActivityPayload & { seq: number };
-
 export function LensPanel(): React.JSX.Element {
   const {
     currentContext,
@@ -97,18 +91,14 @@ export function LensPanel(): React.JSX.Element {
     setAskConversationTitle,
     setAskError,
     setAskLoading,
-    setPinnedLensObject
+    setPinnedLensObject,
+    dictation,
+    setDictation
   } = useMauzStore();
 
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [question, setQuestion] = useState("");
-  const [approvalRequest, setApprovalRequest] = useState<AgentApprovalPayload | null>(null);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [runActivities, setRunActivities] = useState<ActivityEntry[]>([]);
-  const [activityExpanded, setActivityExpanded] = useState(false);
   const [streamingAnswer, setStreamingAnswer] = useState<string | null>(null);
-  const activeRunIdRef = useRef<string | null>(null);
-  const activitySeqRef = useRef(0);
   const askRequestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -122,57 +112,6 @@ export function LensPanel(): React.JSX.Element {
   const action = ACTION_UI[selectedLensAction];
   const ActionIcon = action.icon;
   const isRemembering = selectedLensAction === "remember";
-
-  // Agent event subscriptions
-  useEffect(() => {
-    const unsubApproval = mauzClient.onAgentApprovalRequest((payload) => {
-      // Only accept approvals that belong to the currently active run
-      if (payload.runId === activeRunIdRef.current) {
-        setApprovalRequest(payload);
-      }
-    });
-
-    const unsubRunState = mauzClient.onAgentRunState(({ runId }) => {
-      activeRunIdRef.current = runId;
-      setActiveRunId(runId);
-
-      if (runId === null) {
-        // Run ended: clear approval and activities
-        setApprovalRequest(null);
-        setRunActivities([]);
-        setActivityExpanded(false);
-      } else {
-        // New run started: reset activity list
-        setRunActivities([]);
-        setActivityExpanded(false);
-      }
-    });
-
-    const unsubActivity = mauzClient.onAgentRunActivity((payload) => {
-      const seq = activitySeqRef.current++;
-      setRunActivities((prev) => {
-        const entry: ActivityEntry = { ...payload, seq };
-        const next = [...prev, entry];
-        // Cap at last 50 entries
-        return next.length > 50 ? next.slice(-50) : next;
-      });
-    });
-
-    return () => {
-      unsubApproval();
-      unsubRunState();
-      unsubActivity();
-    };
-  }, []);
-
-  const handleApprovalChoice = (choice: "once" | "session" | "always" | "deny"): void => {
-    if (approvalRequest === null) {
-      return;
-    }
-
-    void mauzClient.respondAgentApproval({ approvalId: approvalRequest.approvalId, choice });
-    setApprovalRequest(null);
-  };
 
   const handleBack = async (): Promise<void> => {
     await mauzClient.showMenu();
@@ -188,7 +127,10 @@ export function LensPanel(): React.JSX.Element {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    await submitQuestion(question);
+  };
 
+  const submitQuestion = async (typedQuestion: string): Promise<void> => {
     if (currentContext === null) {
       setAskError("Mauz Lens does not have cursor context yet.");
       return;
@@ -199,7 +141,7 @@ export function LensPanel(): React.JSX.Element {
       return;
     }
 
-    const prompt = getLensActionQuestion(selectedLensAction, lensObject, pinnedLensObject, question);
+    const prompt = getLensActionQuestion(selectedLensAction, lensObject, pinnedLensObject, typedQuestion);
     const requestId = crypto.randomUUID();
 
     askRequestIdRef.current = requestId;
@@ -227,6 +169,20 @@ export function LensPanel(): React.JSX.Element {
       setAskLoading(false);
     }
   };
+
+  // Dictated text is asked right away.
+  const submitQuestionRef = useRef(submitQuestion);
+  submitQuestionRef.current = submitQuestion;
+
+  useEffect(() => {
+    if (dictation === null) {
+      return;
+    }
+
+    setDictation(null);
+    setQuestion(dictation);
+    void submitQuestionRef.current(dictation);
+  }, [dictation, setDictation]);
 
   return (
     <section className="lens-panel lens-task-panel" aria-label={action.title}>
@@ -285,10 +241,6 @@ export function LensPanel(): React.JSX.Element {
             ? "Window aware"
             : "No window"}
         </span>
-        <span>
-          <MousePointer2 aria-hidden="true" size={14} />
-          No autonomous actions
-        </span>
       </div>
 
       <CaptureDetails context={currentContext} />
@@ -338,46 +290,12 @@ export function LensPanel(): React.JSX.Element {
         </button>
       </form>
 
-      {activeRunId !== null ? (
-        <>
-          <button type="button" className="agent-stop-button" onClick={() => void mauzClient.stopAgentRun()}>
-            <Square aria-hidden="true" size={12} /> Stop
-          </button>
-          <div className="agent-activity">
-            <span className="agent-activity-dot" aria-hidden="true" />
-            <span className="agent-activity-label">
-              {runActivities[runActivities.length - 1]?.label ?? "Working…"}
-            </span>
-            {runActivities.length > 0 ? (
-              <button
-                type="button"
-                className="agent-activity-count"
-                aria-expanded={activityExpanded}
-                onClick={() => setActivityExpanded((v) => !v)}
-              >
-                {runActivities.length} {runActivities.length === 1 ? "step" : "steps"}
-              </button>
-            ) : null}
-            {activityExpanded ? (
-              <ul className="agent-activity-list" aria-label="Activity history">
-                {runActivities.map((activity) => (
-                  <li key={activity.seq}>{activity.label}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        </>
-      ) : null}
-
       <div
         className="answer-area lens-answer-area"
         data-empty={askError === null && askAnswer === null}
         aria-live="polite"
         aria-busy={askLoading}
       >
-        {approvalRequest !== null ? (
-          <ApprovalCard description={approvalRequest.description} onChoice={handleApprovalChoice} />
-        ) : null}
         {askError !== null ? <p className="ask-error">{askError}</p> : null}
         {askLoading && askAnswer === null && streamingAnswer !== null ? (
           <FormattedAnswer answer={streamingAnswer} />
@@ -395,37 +313,5 @@ export function LensPanel(): React.JSX.Element {
         ) : null}
       </div>
     </section>
-  );
-}
-
-type ApprovalCardProps = {
-  description: string;
-  onChoice: (choice: "once" | "session" | "always" | "deny") => void;
-};
-
-function ApprovalCard({ description, onChoice }: ApprovalCardProps): React.JSX.Element {
-  const risk = classifyApprovalRisk(description);
-
-  return (
-    <div className="agent-approval" role="alertdialog" aria-label="Agent approval request" data-risk={risk}>
-      <p className="agent-approval-description">
-        <ShieldAlert aria-hidden="true" size={14} />
-        {description}
-      </p>
-      <div className="agent-approval-primary">
-        <button type="button" className="agent-approval-allow" onClick={() => onChoice("once")}>
-          Allow once
-        </button>
-        <button type="button" className="agent-approval-deny" onClick={() => onChoice("deny")}>
-          Deny
-        </button>
-      </div>
-      <button type="button" className="agent-approval-secondary" onClick={() => onChoice("session")}>
-        Allow for session
-      </button>
-      <button type="button" className="agent-approval-tertiary" onClick={() => onChoice("always")}>
-        Always allow <small>won&apos;t ask again</small>
-      </button>
-    </div>
   );
 }

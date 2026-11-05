@@ -375,8 +375,6 @@ export type RealtimeReasoningEffort = "low" | "medium" | "high";
 export type OpenAiAuthMode = "api-key";
 export type OpenAiCredentialSource = "none" | "environment" | "saved";
 
-export type AssistantMode = "simple" | "agentic";
-export type AgentMode = "approve" | "yolo";
 export type TalkEngine = "pipeline" | "realtime";
 
 export type MauzSettings = {
@@ -396,9 +394,12 @@ export type MauzSettings = {
   /** Sites (example.com, *bank*) whose pages Mauz never reads or screenshots. */
   captureBlockedSites: string[];
   apiKeyConfigured: boolean;
-  assistantMode: AssistantMode;
-  backendBaseUrl: string;
-  agentMode: AgentMode;
+  /** The coding agent Send to agent hands tasks to; "auto" picks the first one installed. */
+  taskAgent: TaskAgentPreference;
+  /** Folder an agent starts in when none was picked; empty means the home folder. */
+  taskFolder: string;
+  /** The folder last used with each agent. */
+  taskAgentFolders: Partial<Record<TaskAgentId, string>>;
   aiProvider: AiProviderPreference;
   aiFallbackProvider: AiFallbackPreference;
   anthropicKeyConfigured: boolean;
@@ -429,28 +430,46 @@ export type MouseMoveSample = {
   buttons?: number | undefined;
 };
 
-export type AgentApprovalPayload = {
-  approvalId: string;
-  runId: string;
-  description: string;
-};
+export type TaskAgentId = "hermes" | "claude-code" | "codex";
+export type TaskAgentPreference = "auto" | TaskAgentId;
 
-export type AgentRunStatePayload = {
-  runId: string | null;
-};
-
-export type AgentRunActivityPayload = {
-  runId: string;
-  kind: "tool.started" | "tool.completed" | "reasoning";
-  tool?: string | undefined;
+export type TaskAgentStatus = {
+  id: TaskAgentId;
   label: string;
+  installed: boolean;
 };
 
-export type GatewayReadinessStatus = "simple" | "ready" | "unavailable" | "unsupported";
+export type TaskAgentsResponse = {
+  agents: TaskAgentStatus[];
+  /** The agent Send to agent uses: the setting, or the first installed one for "auto". */
+  selectedAgentId: TaskAgentId | null;
+};
 
-export type GatewayReadinessResult = {
-  status: GatewayReadinessStatus;
-  message: string;
+export type TaskFolder = {
+  path: string;
+  name: string;
+};
+
+export type TaskFoldersRequest = {
+  agentId: TaskAgentId;
+};
+
+export type TaskFoldersResponse = {
+  /** Folders the agent has worked in, most recent first. */
+  folders: TaskFolder[];
+  /** The folder to preselect: the last one used with this agent, or the default work folder. */
+  selectedPath: string;
+};
+
+export type TaskSendRequest = {
+  agentId: TaskAgentId;
+  folder: string;
+  task: string;
+  context: MauzDesktopContext;
+};
+
+export type TaskSendResponse = {
+  agentLabel: string;
 };
 
 export type BrowserExtensionStatus = {
@@ -514,12 +533,12 @@ export type MauzBridge = {
     onActivation(callback: () => void): () => void;
     onPermissionError(callback: (error: PermissionError) => void): () => void;
   };
-  agent: {
-    getGatewayReadinessStatus(): Promise<GatewayReadinessResult>;
-    respondApproval(payload: unknown): Promise<void>;
-    stop(): Promise<void>;
-    onApprovalRequest(callback: (payload: AgentApprovalPayload) => void): () => void;
-    onRunState(callback: (payload: AgentRunStatePayload) => void): () => void;
-    onRunActivity(callback: (payload: AgentRunActivityPayload) => void): () => void;
+  task: {
+    agents(): Promise<TaskAgentsResponse>;
+    folders(payload: TaskFoldersRequest): Promise<TaskFoldersResponse>;
+    /** Opens a folder dialog; null when the user cancels. */
+    pickFolder(): Promise<string | null>;
+    /** Opens the agent in its own terminal window with the task, then returns. */
+    send(payload: TaskSendRequest): Promise<TaskSendResponse>;
   };
 };

@@ -143,7 +143,7 @@ export function formatBrowserPage(page: BrowserPage): string[] {
   return lines;
 }
 
-function formatProduct(product: BrowserProduct): string {
+export function formatProduct(product: BrowserProduct): string {
   const price =
     product.price !== undefined
       ? [product.price, product.priceCurrency].filter(Boolean).join(" ")

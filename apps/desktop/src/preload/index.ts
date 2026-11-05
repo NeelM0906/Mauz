@@ -1,8 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
-  AgentApprovalPayload,
-  AgentRunActivityPayload,
-  AgentRunStatePayload,
   AiProvidersStatusRequest,
   AiProvidersStatusResponse,
   AskAnswerDelta,
@@ -15,7 +12,6 @@ import type {
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
-  GatewayReadinessResult,
   MauzLensResizeRequest,
   MauzBridge,
   MauzDesktopContext,
@@ -32,12 +28,14 @@ import type {
   SubscriptionConnectState,
   SubscriptionDisconnectRequest,
   TalkTranscribeRequest,
-  TalkTranscribeResponse
+  TalkTranscribeResponse,
+  TaskAgentsResponse,
+  TaskFoldersRequest,
+  TaskFoldersResponse,
+  TaskSendRequest,
+  TaskSendResponse
 } from "@mauzai/shared";
 import {
-  AgentApprovalPayloadSchema,
-  AgentRunActivityPayloadSchema,
-  AgentRunStatePayloadSchema,
   AskAnswerDeltaSchema,
   IPC_CHANNELS,
   SubscriptionConnectStateSchema,
@@ -157,36 +155,13 @@ const mauzApi: MauzBridge = {
       };
     }
   },
-  agent: {
-    getGatewayReadinessStatus: () =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentGatewayReadinessStatus) as Promise<GatewayReadinessResult>,
-    respondApproval: (payload: unknown) =>
-      ipcRenderer.invoke(IPC_CHANNELS.agentApprovalRespond, payload) as Promise<void>,
-    stop: () => ipcRenderer.invoke(IPC_CHANNELS.agentStop) as Promise<void>,
-    onApprovalRequest: (callback: (payload: AgentApprovalPayload) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
-        const parsed = AgentApprovalPayloadSchema.safeParse(payload);
-        if (parsed.success) callback(parsed.data);
-      };
-      ipcRenderer.on(IPC_CHANNELS.agentApprovalRequest, listener);
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentApprovalRequest, listener);
-    },
-    onRunState: (callback: (payload: AgentRunStatePayload) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
-        const parsed = AgentRunStatePayloadSchema.safeParse(payload);
-        if (parsed.success) callback(parsed.data);
-      };
-      ipcRenderer.on(IPC_CHANNELS.agentRunState, listener);
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentRunState, listener);
-    },
-    onRunActivity: (callback: (payload: AgentRunActivityPayload) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: unknown): void => {
-        const parsed = AgentRunActivityPayloadSchema.safeParse(payload);
-        if (parsed.success) callback(parsed.data);
-      };
-      ipcRenderer.on(IPC_CHANNELS.agentRunActivity, listener);
-      return () => ipcRenderer.removeListener(IPC_CHANNELS.agentRunActivity, listener);
-    }
+  task: {
+    agents: () => ipcRenderer.invoke(IPC_CHANNELS.taskAgents) as Promise<TaskAgentsResponse>,
+    folders: (payload: TaskFoldersRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.taskFolders, payload) as Promise<TaskFoldersResponse>,
+    pickFolder: () => ipcRenderer.invoke(IPC_CHANNELS.taskPickFolder) as Promise<string | null>,
+    send: (payload: TaskSendRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.taskSend, payload) as Promise<TaskSendResponse>
   }
 };
 

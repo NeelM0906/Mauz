@@ -4,7 +4,6 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { AiProvidersStatusResponse, SubscriptionConnectState } from "@mauzai/shared";
 import { registerAskRoute, type AnswerStreamHooks, type AskMauzHandler } from "./routes/ask";
-import type { RunLifecycleHooks } from "./backend/askViaRuns";
 import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
 import { getDefaultAnswerProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
 import { SubscriptionConnector } from "./providers/subscriptionConnect";
@@ -12,17 +11,8 @@ import { registerChatTitleRoute, type ChatTitleHandler } from "./routes/chatTitl
 import { registerHealthzRoute } from "./routes/healthz";
 import { registerRealtimeRoute, type RealtimeConnectHandler } from "./routes/realtime";
 
-export type {
-  RunLifecycleHooks,
-  AgentApprovalRequest,
-  AgentApprovalChoice,
-  RunActivityEvent
-} from "./backend/askViaRuns";
 export type { AnswerStreamHooks } from "./routes/ask";
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
-export { stopRun } from "./backend/runsClient";
-export type { RunsClientOptions } from "./backend/runsClient";
-export { getGatewayReadinessStatus } from "./backend/capabilities";
 
 /** Detects which AI providers (API keys, Claude Code, Codex) can answer right now. */
 export function getAiProvidersStatus(
@@ -63,7 +53,6 @@ export type CreateMauzApiServerOptions = {
   authToken?: string;
   logger?: boolean;
   loadEnv?: boolean;
-  runHooks?: RunLifecycleHooks;
   answerHooks?: AnswerStreamHooks;
 };
 
@@ -83,7 +72,6 @@ export async function createMauzApiServer(
   await registerAskRoute(app, {
     ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
     ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
-    ...(options.runHooks === undefined ? {} : { runHooks: options.runHooks }),
     ...(options.answerHooks === undefined ? {} : { answerHooks: options.answerHooks })
   });
   await registerChatTitleRoute(app, {

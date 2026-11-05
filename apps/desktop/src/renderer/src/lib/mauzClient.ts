@@ -1,7 +1,4 @@
 import type {
-  AgentApprovalPayload,
-  AgentRunActivityPayload,
-  AgentRunStatePayload,
   AiProvidersStatusResponse,
   AskAnswerDelta,
   BrowserExtensionStatus,
@@ -13,7 +10,6 @@ import type {
   ChatHistoryContinueResponse,
   ChatHistoryGetRequest,
   ChatHistoryListResponse,
-  GatewayReadinessResult,
   MauzLensResizeRequest,
   MauzDesktopContext,
   MauzBridge,
@@ -28,6 +24,11 @@ import type {
   SubscriptionConnectState,
   SubscriptionProviderId,
   TalkTranscribeRequest,
+  TaskAgentId,
+  TaskAgentsResponse,
+  TaskFoldersResponse,
+  TaskSendRequest,
+  TaskSendResponse,
   TalkTranscribeResponse
 } from "@mauzai/shared";
 
@@ -125,9 +126,9 @@ const browserPreviewBridge: MauzBridge = {
       captureBlockedApps: [],
       captureBlockedSites: [],
       apiKeyConfigured: false,
-      assistantMode: "simple",
-      backendBaseUrl: "",
-      agentMode: "approve",
+      taskAgent: "auto",
+      taskFolder: "",
+      taskAgentFolders: {},
       aiProvider: "auto",
       aiFallbackProvider: "none",
       anthropicKeyConfigured: false,
@@ -154,9 +155,9 @@ const browserPreviewBridge: MauzBridge = {
         captureBlockedApps: payload.captureBlockedApps ?? [],
         captureBlockedSites: payload.captureBlockedSites ?? [],
         apiKeyConfigured: openAiCredentialSource !== "none",
-        assistantMode: payload.assistantMode ?? "simple",
-        backendBaseUrl: payload.backendBaseUrl ?? "",
-        agentMode: payload.agentMode ?? "approve",
+        taskAgent: payload.taskAgent ?? "auto",
+        taskFolder: payload.taskFolder ?? "",
+        taskAgentFolders: payload.taskAgentFolders ?? {},
         aiProvider: payload.aiProvider ?? "auto",
         aiFallbackProvider: payload.aiFallbackProvider ?? "none",
         anthropicKeyConfigured: (payload.anthropicApiKey?.trim().length ?? 0) > 0,
@@ -168,17 +169,20 @@ const browserPreviewBridge: MauzBridge = {
     onActivation: () => () => {},
     onPermissionError: () => () => {}
   },
-  agent: {
-    getGatewayReadinessStatus: async () =>
-      ({
-        status: "simple",
-        message: "Browser preview is using the simple answer flow."
-      }) as GatewayReadinessResult,
-    respondApproval: async (_payload: unknown) => {},
-    stop: async () => {},
-    onApprovalRequest: (_callback: (payload: AgentApprovalPayload) => void) => () => {},
-    onRunState: (_callback: (payload: AgentRunStatePayload) => void) => () => {},
-    onRunActivity: (_callback: (payload: AgentRunActivityPayload) => void) => () => {}
+  task: {
+    agents: async () => ({
+      agents: [
+        { id: "hermes", label: "Hermes", installed: false },
+        { id: "claude-code", label: "Claude Code", installed: false },
+        { id: "codex", label: "Codex", installed: false }
+      ],
+      selectedAgentId: null
+    }),
+    folders: async () => ({ folders: [], selectedPath: "" }),
+    pickFolder: async () => null,
+    send: async () => {
+      throw new Error("Run the Electron app to send tasks to an agent.");
+    }
   }
 };
 
@@ -319,22 +323,16 @@ export const mauzClient = {
   onPermissionError(callback: (error: PermissionError) => void): () => void {
     return getBridge().events.onPermissionError(callback);
   },
-  onAgentApprovalRequest(callback: (payload: AgentApprovalPayload) => void): () => void {
-    return getBridge().agent.onApprovalRequest(callback);
+  getTaskAgents(): Promise<TaskAgentsResponse> {
+    return getBridge().task.agents();
   },
-  respondAgentApproval(payload: { approvalId: string; choice: string }): Promise<void> {
-    return getBridge().agent.respondApproval(payload);
+  getTaskFolders(agentId: TaskAgentId): Promise<TaskFoldersResponse> {
+    return getBridge().task.folders({ agentId });
   },
-  onAgentRunState(callback: (payload: AgentRunStatePayload) => void): () => void {
-    return getBridge().agent.onRunState(callback);
+  pickTaskFolder(): Promise<string | null> {
+    return getBridge().task.pickFolder();
   },
-  onAgentRunActivity(callback: (payload: AgentRunActivityPayload) => void): () => void {
-    return getBridge().agent.onRunActivity(callback);
-  },
-  stopAgentRun(): Promise<void> {
-    return getBridge().agent.stop();
-  },
-  getGatewayReadinessStatus(): Promise<GatewayReadinessResult> {
-    return getBridge().agent.getGatewayReadinessStatus();
+  sendTask(payload: TaskSendRequest): Promise<TaskSendResponse> {
+    return getBridge().task.send(payload);
   }
 };

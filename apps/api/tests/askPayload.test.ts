@@ -3,11 +3,10 @@ import {
   LOCAL_API_TOKEN_HEADER,
   AskMauzRequestSchema,
   MauzSettingsSchema,
-  DEFAULT_HERMES_BASE_URL,
   type AskMauzRequest,
   type RealtimeConnectRequest
 } from "@mauzai/shared";
-import { AgentRunStoppedError, MissingOpenAIKeyError } from "../src/errors";
+import { MissingOpenAIKeyError } from "../src/errors";
 import { createMauzApiServer } from "../src/server";
 
 const validRequest: AskMauzRequest = {
@@ -130,28 +129,6 @@ describe("Ask Mauz API", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({
       error: "Invalid Ask Mauz request."
-    });
-  });
-
-  it("maps AgentRunStoppedError to 499", async () => {
-    const app = await createMauzApiServer({
-      loadEnv: false,
-      askHandler: async () => {
-        throw new AgentRunStoppedError();
-      }
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/ask",
-      payload: validRequest
-    });
-
-    await app.close();
-
-    expect(response.statusCode).toBe(499);
-    expect(response.json()).toMatchObject({
-      error: "The agent run was stopped."
     });
   });
 
@@ -385,7 +362,10 @@ function buildSettingsFixture() {
     aiProvider: "auto" as const,
     aiFallbackProvider: "none" as const,
     anthropicKeyConfigured: false,
-    talkEngine: "pipeline" as const
+    talkEngine: "pipeline" as const,
+    taskAgent: "auto" as const,
+    taskFolder: "",
+    taskAgentFolders: {}
   };
 }
 
@@ -405,17 +385,15 @@ describe("backend schema additions", () => {
     ).toThrow();
   });
 
-  it("parses backend settings fields", () => {
+  it("parses Task agent settings", () => {
     const settings = MauzSettingsSchema.parse({
       ...buildSettingsFixture(),
-      assistantMode: "agentic",
-      backendBaseUrl: "http://localhost:8642/v1",
-      agentMode: "yolo"
+      taskAgent: "claude-code",
+      taskFolder: "C:/work",
+      taskAgentFolders: { "claude-code": "C:/work/mauz" }
     });
-    expect(settings.assistantMode).toBe("agentic");
-  });
 
-  it("exports the Hermes gateway default base URL", () => {
-    expect(DEFAULT_HERMES_BASE_URL).toBe("http://localhost:8642/v1");
+    expect(settings.taskAgent).toBe("claude-code");
+    expect(settings.taskAgentFolders).toEqual({ "claude-code": "C:/work/mauz" });
   });
 });

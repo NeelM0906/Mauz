@@ -74,6 +74,10 @@ export class DesktopWindowController {
     }
   }
 
+  getWindow(): BrowserWindow | null {
+    return this.window?.isDestroyed() === false ? this.window : null;
+  }
+
   async show(): Promise<void> {
     await this.create();
 

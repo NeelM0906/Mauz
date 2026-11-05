@@ -55,8 +55,9 @@ export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
 export const OpenAiAuthModeSchema = z.preprocess(() => "api-key", z.literal("api-key"));
 export const OpenAiCredentialSourceSchema = z.enum(["none", "environment", "saved"]);
 
-export const AssistantModeSchema = z.enum(["simple", "agentic"]);
-export const AgentModeSchema = z.enum(["approve", "yolo"]);
+export const TaskAgentIdSchema = z.enum(["hermes", "claude-code", "codex"]);
+export const TaskAgentPreferenceSchema = z.union([z.literal("auto"), TaskAgentIdSchema]);
+const FolderPathSchema = z.string().trim().max(1_000);
 export const TalkEngineSchema = z.enum(["pipeline", "realtime"]);
 
 export const AiProviderIdSchema = z.enum(["claude-code", "codex", "anthropic", "openai"]);
@@ -146,9 +147,9 @@ export const MauzSettingsSchema = z.object({
   captureBlockedApps: CaptureBlockedAppsSchema,
   captureBlockedSites: CaptureBlockedAppsSchema,
   apiKeyConfigured: z.boolean(),
-  assistantMode: AssistantModeSchema,
-  backendBaseUrl: z.string().trim().max(400),
-  agentMode: AgentModeSchema,
+  taskAgent: TaskAgentPreferenceSchema,
+  taskFolder: FolderPathSchema,
+  taskAgentFolders: z.partialRecord(TaskAgentIdSchema, FolderPathSchema),
   aiProvider: AiProviderPreferenceSchema,
   aiFallbackProvider: AiFallbackPreferenceSchema,
   anthropicKeyConfigured: z.boolean(),
@@ -429,31 +430,29 @@ export const RealtimeConnectResponseSchema = z.object({
   model: ModelNameSchema
 });
 
-export const AgentApprovalResponseSchema = z.object({
-  approvalId: z.string().min(1),
-  choice: z.enum(["once", "session", "always", "deny"])
+export const TaskAgentsResponseSchema = z.object({
+  agents: z.array(
+    z.object({
+      id: TaskAgentIdSchema,
+      label: z.string().min(1).max(80),
+      installed: z.boolean()
+    })
+  ),
+  selectedAgentId: TaskAgentIdSchema.nullable()
 });
 
-export const AgentApprovalPayloadSchema = z.object({
-  approvalId: z.string(),
-  runId: z.string(),
-  description: z.string()
+export const TaskFoldersRequestSchema = z.object({ agentId: TaskAgentIdSchema });
+
+export const TaskFoldersResponseSchema = z.object({
+  folders: z.array(z.object({ path: FolderPathSchema.min(1), name: z.string().max(260) })).max(100),
+  selectedPath: FolderPathSchema
 });
 
-export const AgentRunStatePayloadSchema = z.object({
-  runId: z.string().nullable()
+export const TaskSendRequestSchema = z.object({
+  agentId: TaskAgentIdSchema,
+  folder: FolderPathSchema.min(1),
+  task: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
+  context: MauzDesktopContextSchema
 });
 
-export const AgentRunActivityPayloadSchema = z.object({
-  runId: z.string(),
-  kind: z.enum(["tool.started", "tool.completed", "reasoning"]),
-  tool: z.string().optional(),
-  label: z.string()
-});
-
-export const GatewayReadinessStatusSchema = z.enum(["simple", "ready", "unavailable", "unsupported"]);
-
-export const GatewayReadinessResultSchema = z.object({
-  status: GatewayReadinessStatusSchema,
-  message: z.string().min(1).max(200)
-});
+export const TaskSendResponseSchema = z.object({ agentLabel: z.string().min(1).max(80) });

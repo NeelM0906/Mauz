@@ -43,22 +43,6 @@ function formatBackendHost(baseUrl: string): string {
   }
 }
 
-export class AgentRunStoppedError extends Error {
-  constructor() {
-    super("The agent run was stopped.");
-    this.name = "AgentRunStoppedError";
-  }
-}
-
-export class AgentRunUnwatchableError extends Error {
-  constructor() {
-    super(
-      "Mauz lost the live connection to the agent, but it is still working. Its results will land in the agent's session and memory."
-    );
-    this.name = "AgentRunUnwatchableError";
-  }
-}
-
 export class OpenAIRealtimeConnectionError extends Error {
   readonly status: number | undefined;
   readonly code: string | undefined;

@@ -474,8 +474,8 @@ describe("askMauz provider routing", () => {
     const prompt = buildAnswerPrompt(request);
 
     expect(prompt.images).toHaveLength(1);
-    expect(prompt.images[0]?.label).toMatch(/cursor-centered crop/);
-    expect(prompt.userText).toContain("User question: What is this?");
+    expect(prompt.images[0]?.label).toMatch(/crop centered on the pointer/);
+    expect(prompt.userText).toContain("<question>\nWhat is this?\n</question>");
   });
 
   it("uses the spoken-style system prompt for voice turns", () => {

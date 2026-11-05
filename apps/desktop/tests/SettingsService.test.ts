@@ -23,12 +23,12 @@ type TestSecretCodec = {
 };
 
 describe("SettingsService", () => {
-  it("defaults backend settings and generates a stable installId", async () => {
+  it("defaults Task agent settings and generates a stable installId", async () => {
     const service = createService();
     const runtime = await service.getRuntime();
-    expect(runtime.assistantMode).toBe("simple");
-    expect(runtime.backendBaseUrl).toBe("");
-    expect(runtime.agentMode).toBe("approve");
+    expect(runtime.taskAgent).toBe("auto");
+    expect(runtime.taskFolder).toBe("");
+    expect(runtime.taskAgentFolders).toEqual({});
     expect(runtime.installId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -69,110 +69,78 @@ describe("SettingsService", () => {
     expect((await service2.getRuntime()).installId).toBe(first);
   });
 
-  it("updates assistant mode to agentic", async () => {
+  it("updates the task agent, default folder, and last folder per agent", async () => {
     const service = createService();
     const settings = await service.update({
-      assistantMode: "agentic",
-      backendBaseUrl: "http://localhost:8642/v1",
-      agentMode: "yolo"
+      taskAgent: "claude-code",
+      taskFolder: "C:/work",
+      taskAgentFolders: { "claude-code": "C:/work/mauz" }
     });
-    expect(settings.assistantMode).toBe("agentic");
-    expect(settings.agentMode).toBe("yolo");
+    expect(settings.taskAgent).toBe("claude-code");
+    expect(settings.taskFolder).toBe("C:/work");
+    expect(settings.taskAgentFolders).toEqual({ "claude-code": "C:/work/mauz" });
   });
 
-  it("updates assistant mode to agentic with empty gateway URL", async () => {
-    const service = createService();
-    const settings = await service.update({
-      assistantMode: "agentic",
-      backendBaseUrl: "",
-      agentMode: "approve"
-    });
-    expect(settings.assistantMode).toBe("agentic");
-  });
-
-  it("migrates legacy backendPreset 'openai' to assistantMode 'simple'", async () => {
+  it("keeps Hermes as the task agent for someone who used Agentic mode", async () => {
     const { service } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        backendPreset: "openai",
-        backendBaseUrl: "",
+        assistantMode: "agentic",
+        backendBaseUrl: "http://localhost:8642/v1",
         agentMode: "approve"
       })
     });
     const settings = await service.get();
-    expect(settings.assistantMode).toBe("simple");
-    expect(settings.agentMode).toBe("approve");
+    expect(settings.taskAgent).toBe("hermes");
     expect(settings.nativeShakeEnabled).toBe(DEFAULT_SETTINGS.nativeShakeEnabled);
   });
 
-  it("migrates legacy backendPreset 'hermes' to assistantMode 'agentic'", async () => {
+  it("keeps Hermes as the task agent for a legacy hermes backendPreset", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({ ...DEFAULT_SETTINGS, backendPreset: "hermes" })
+    });
+    const settings = await service.get();
+    expect(settings.taskAgent).toBe("hermes");
+  });
+
+  it("uses the automatic task agent for someone who used Simple mode", async () => {
+    const { service } = createSettingsService({
+      settingsJson: JSON.stringify({ ...DEFAULT_SETTINGS, assistantMode: "simple" })
+    });
+    const settings = await service.get();
+    expect(settings.taskAgent).toBe("auto");
+  });
+
+  it("falls back to defaults for an invalid stored task agent without losing other settings", async () => {
     const { service } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        backendPreset: "hermes",
-        backendBaseUrl: "",
-        agentMode: "approve"
+        taskAgent: "not-an-agent",
+        taskAgentFolders: "not-a-record"
       })
     });
     const settings = await service.get();
-    expect(settings.assistantMode).toBe("agentic");
+    expect(settings.taskAgent).toBe("auto");
+    expect(settings.taskAgentFolders).toEqual({});
+    expect(settings.nativeShakeEnabled).toBe(DEFAULT_SETTINGS.nativeShakeEnabled);
   });
 
-  it("migrates legacy backendPreset 'custom' to assistantMode 'agentic' and preserves backendBaseUrl", async () => {
-    const { service } = createSettingsService({
-      settingsJson: JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        backendPreset: "custom",
-        backendBaseUrl: "https://my-gateway.example.com/v1",
-        agentMode: "approve"
-      })
-    });
-    const settings = await service.get();
-    expect(settings.assistantMode).toBe("agentic");
-    expect(settings.backendBaseUrl).toBe("https://my-gateway.example.com/v1");
-  });
-
-  it("migrates unknown legacy backendPreset value to assistantMode 'simple'", async () => {
-    const { service } = createSettingsService({
-      settingsJson: JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        backendPreset: "hermes-gateway",
-        backendBaseUrl: "",
-        agentMode: "approve"
-      })
-    });
-    const settings = await service.get();
-    expect(settings.assistantMode).toBe("simple");
-    expect(settings.agentMode).toBe("approve");
-  });
-
-  it("migrates invalid stored assistantMode to 'simple'", async () => {
-    const { service } = createSettingsService({
-      settingsJson: JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        assistantMode: "not-a-valid-mode",
-        backendBaseUrl: "",
-        agentMode: "approve"
-      })
-    });
-    const settings = await service.get();
-    expect(settings.assistantMode).toBe("simple");
-  });
-
-  it("legacy backendPreset migration rewrites the file in new assistantMode format", async () => {
+  it("rewrites the file without the gateway-era fields", async () => {
     const { service, writes } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
         backendPreset: "hermes",
+        assistantMode: "agentic",
         backendBaseUrl: "",
         agentMode: "approve"
       })
     });
     await service.get();
     expect(writes.length).toBeGreaterThan(0);
-    expect(writes.at(-1)).toContain('"assistantMode"');
-    expect(writes.at(-1)).toContain('"agentic"');
+    expect(writes.at(-1)).toContain('"taskAgent": "hermes"');
     expect(writes.at(-1)).not.toContain("backendPreset");
+    expect(writes.at(-1)).not.toContain("assistantMode");
+    expect(writes.at(-1)).not.toContain("agentMode");
   });
 
   it("removes legacy plaintext API keys from stored settings", async () => {
@@ -327,9 +295,6 @@ describe("SettingsService", () => {
       SHARED_SETTINGS_PATH,
       JSON.stringify({
         ...DEFAULT_SETTINGS,
-        assistantMode: "simple",
-        backendBaseUrl: "",
-        agentMode: "approve",
         installId: "aabbccdd-1122-3344-5566-778899aabbcc"
       })
     );
@@ -338,13 +303,13 @@ describe("SettingsService", () => {
 
     await Promise.all([
       service.update({ askModel: "gpt-concurrent-a" }),
-      service.update({ agentMode: "yolo" })
+      service.update({ taskAgent: "codex" })
     ]);
 
     const service2 = createServiceWithFiles(files);
     const runtime = await service2.getRuntime();
     expect(runtime.askModel).toBe("gpt-concurrent-a");
-    expect(runtime.agentMode).toBe("yolo");
+    expect(runtime.taskAgent).toBe("codex");
   });
 
   it("preserves installId from a settings file with malformed JSON", async () => {

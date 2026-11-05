@@ -37,56 +37,23 @@ vi.mock("electron", () => ({
 import { IPC_CHANNELS, type MauzBridge } from "@mauzai/shared";
 import "../src/preload/index";
 
-describe("preload agent event bridge", () => {
+describe("preload bridge", () => {
   beforeEach(() => {
     electron.reset();
     vi.resetModules();
   });
 
-  it("forwards only valid agent event payloads to renderer callbacks", async () => {
+  it("sends Send to agent requests over the task channels", async () => {
     await import("../src/preload/index");
     const mauzApi = electron.getMauzApi() as MauzBridge;
-    const onApprovalRequest = vi.fn();
-    const onRunState = vi.fn();
-    const onRunActivity = vi.fn();
 
-    mauzApi.agent.onApprovalRequest(onApprovalRequest);
-    mauzApi.agent.onRunState(onRunState);
-    mauzApi.agent.onRunActivity(onRunActivity);
+    void mauzApi.task.agents();
+    void mauzApi.task.folders({ agentId: "codex" });
+    void mauzApi.task.pickFolder();
 
-    electron.emit(IPC_CHANNELS.agentApprovalRequest, {
-      approvalId: "approval_1",
-      runId: "run_1",
-      description: "Write a file"
-    });
-    electron.emit(IPC_CHANNELS.agentRunState, { runId: null });
-    electron.emit(IPC_CHANNELS.agentRunActivity, {
-      runId: "run_1",
-      kind: "tool.started",
-      tool: "read_file",
-      label: "Reading file"
-    });
-
-    electron.emit(IPC_CHANNELS.agentApprovalRequest, {
-      approvalId: 1,
-      runId: "run_1",
-      description: "Write a file"
-    });
-    electron.emit(IPC_CHANNELS.agentRunState, { runId: 1 });
-    electron.emit(IPC_CHANNELS.agentRunActivity, { runId: "run_1", kind: "unexpected", label: "Unknown" });
-
-    expect(onApprovalRequest).toHaveBeenCalledExactlyOnceWith({
-      approvalId: "approval_1",
-      runId: "run_1",
-      description: "Write a file"
-    });
-    expect(onRunState).toHaveBeenCalledExactlyOnceWith({ runId: null });
-    expect(onRunActivity).toHaveBeenCalledExactlyOnceWith({
-      runId: "run_1",
-      kind: "tool.started",
-      tool: "read_file",
-      label: "Reading file"
-    });
+    expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(IPC_CHANNELS.taskAgents);
+    expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(IPC_CHANNELS.taskFolders, { agentId: "codex" });
+    expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(IPC_CHANNELS.taskPickFolder);
   });
 
   it("tells the renderer when the popover is hidden and can unsubscribe", async () => {

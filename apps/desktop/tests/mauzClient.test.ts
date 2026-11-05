@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { GatewayReadinessResult, MauzBridge } from "@mauzai/shared";
+import type { MauzBridge, TaskAgentsResponse } from "@mauzai/shared";
 import { mauzClient } from "../src/renderer/src/lib/mauzClient";
 
 describe("mauzClient", () => {
@@ -14,35 +14,28 @@ describe("mauzClient", () => {
     delete (globalThis as unknown as { window?: unknown }).window;
   });
 
-  describe("getGatewayReadinessStatus", () => {
+  describe("getTaskAgents", () => {
     it("returns the bridge result", async () => {
-      const result: GatewayReadinessResult = {
-        status: "ready",
-        message: "Gateway is ready for supervised Work tasks."
+      const result: TaskAgentsResponse = {
+        agents: [{ id: "claude-code", label: "Claude Code", installed: true }],
+        selectedAgentId: "claude-code"
       };
-      const getGatewayReadinessStatus = vi.fn().mockResolvedValue(result);
+      const agents = vi.fn().mockResolvedValue(result);
       const bridge: Partial<MauzBridge> = {
-        agent: {
-          getGatewayReadinessStatus,
-          respondApproval: vi.fn(),
-          stop: vi.fn(),
-          onApprovalRequest: vi.fn(),
-          onRunState: vi.fn(),
-          onRunActivity: vi.fn()
-        }
+        task: { agents, folders: vi.fn(), pickFolder: vi.fn(), send: vi.fn() }
       };
 
       (globalThis as unknown as { window: { mauz: Partial<MauzBridge> } }).window.mauz = bridge;
 
-      await expect(mauzClient.getGatewayReadinessStatus()).resolves.toEqual(result);
-      expect(getGatewayReadinessStatus).toHaveBeenCalledTimes(1);
+      await expect(mauzClient.getTaskAgents()).resolves.toEqual(result);
+      expect(agents).toHaveBeenCalledTimes(1);
     });
 
     it("falls back to the browser preview bridge when the desktop bridge is missing", async () => {
-      const result = await mauzClient.getGatewayReadinessStatus();
-      expect(result.status).toBe("simple");
-      expect(result.message.length).toBeGreaterThan(0);
-      expect(result.message.length).toBeLessThanOrEqual(200);
+      const result = await mauzClient.getTaskAgents();
+
+      expect(result.selectedAgentId).toBeNull();
+      expect(result.agents.map((agent) => agent.id)).toEqual(["hermes", "claude-code", "codex"]);
     });
   });
 });

@@ -1,78 +1,20 @@
-import {
-  BriefcaseBusiness,
-  GitCompareArrows,
-  History,
-  KeyRound,
-  Mic,
-  Pin,
-  ScanSearch,
-  Settings,
-  Sparkles,
-  SquareDashedMousePointer,
-  Wand2
-} from "lucide-react";
+import { BriefcaseBusiness, Mic, ScanSearch } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AiProvidersStatusResponse } from "@mauzai/shared";
 import type { LensAction } from "@renderer/state/useMauzStore";
-import { detectLensObject, toLensMemory } from "@renderer/lib/lensObject";
 import { mauzClient } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-type MenuAction = LensAction | "task" | "talk" | "region";
+type MenuAction = LensAction | "task" | "dictate";
 
-const LENS_ACTIONS: Array<{
-  action: LensAction;
-  label: string;
-  detail: string;
-  icon: typeof ScanSearch;
-}> = [
-  {
-    action: "ask",
-    label: "Ask",
-    detail: "Ask a question about this",
-    icon: ScanSearch
-  },
-  {
-    action: "explain",
-    label: "Explain",
-    detail: "Explain key points simply",
-    icon: Sparkles
-  },
-  {
-    action: "transform",
-    label: "Transform",
-    detail: "Rewrite, summarize, or adapt",
-    icon: Wand2
-  },
-  {
-    action: "remember",
-    label: "Remember",
-    detail: "Pin this as memory",
-    icon: Pin
-  },
-  {
-    action: "compare",
-    label: "Compare",
-    detail: "Compare this with another object",
-    icon: GitCompareArrows
-  }
-];
+type BubbleKey = "ask" | "task" | "dictate";
 
-type BubbleKey = LensAction | "task" | "talk" | "history" | "settings" | "region";
-
-// Bubble offsets from the cluster center (arc radius ~110px).
+// Bubble offsets from the cluster center.
 const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
   ask: { tx: -95, ty: -55 },
-  explain: { tx: 0, ty: -110 },
-  transform: { tx: 95, ty: -55 },
-  remember: { tx: 95, ty: 55 },
-  compare: { tx: 80, ty: 107 },
-  task: { tx: 0, ty: 118 },
-  talk: { tx: -80, ty: 107 },
-  history: { tx: -95, ty: 55 },
-  settings: { tx: -110, ty: 0 },
-  region: { tx: 110, ty: 0 }
+  task: { tx: 95, ty: -55 },
+  dictate: { tx: 0, ty: 110 }
 };
 
 const BUBBLE_STAGGER_MS = 30;
@@ -96,11 +38,8 @@ export function MauzMenu(): React.JSX.Element {
     setAskConversationTitle,
     setAskError,
     setAskLoading,
-    setChatHistory,
     setCurrentContext,
     setMode,
-    setPinnedLensObject,
-    setSelectedConversation,
     setSelectedLensAction,
     setSettings,
     setStatus
@@ -167,19 +106,6 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  const handleHistory = async (): Promise<void> => {
-    setStatus(null);
-
-    try {
-      const history = await mauzClient.listChatHistory();
-      setChatHistory(history);
-      setSelectedConversation(null);
-      setMode("history");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Mauz chat history failed.");
-    }
-  };
-
   const handleLensAction = async (action: LensAction): Promise<void> => {
     setPendingAction(action);
     setStatus(null);
@@ -190,14 +116,9 @@ export function MauzMenu(): React.JSX.Element {
 
     try {
       const context = await mauzClient.startAsk();
-      const lensObject = detectLensObject(context);
 
       setCurrentContext(context);
       setSelectedLensAction(action);
-
-      if (action === "remember") {
-        setPinnedLensObject(toLensMemory(lensObject));
-      }
 
       await mauzClient.setLensExpanded({
         expanded: true
@@ -230,8 +151,8 @@ export function MauzMenu(): React.JSX.Element {
     }
   };
 
-  const handleRegion = async (): Promise<void> => {
-    setPendingAction("region");
+  const handleDictate = async (): Promise<void> => {
+    setPendingAction("dictate");
     setStatus(null);
     setAskAnswer(null);
     setAskConversationTitle(null);
@@ -239,32 +160,11 @@ export function MauzMenu(): React.JSX.Element {
     setAskLoading(false);
 
     try {
-      const context = await mauzClient.selectRegion();
-
-      // Cancelled: the menu comes back as it was.
-      if (context === null) {
-        return;
-      }
-
+      // What is under the pointer now is what the dictated question or task is about.
+      const context = await mauzClient.startAsk();
       setCurrentContext(context);
-      setSelectedLensAction("ask");
       await mauzClient.setLensExpanded({ expanded: true });
-      setMode("lens");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Mauz could not capture that area.");
-    } finally {
-      setPendingAction(null);
-    }
-  };
-
-  const handleTalk = async (): Promise<void> => {
-    setPendingAction("talk");
-    setStatus(null);
-
-    try {
-      const context = await mauzClient.startTalk();
-      setCurrentContext(context);
-      setMode("talk");
+      setMode("dictate");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {
@@ -291,9 +191,9 @@ export function MauzMenu(): React.JSX.Element {
         <button
           type="button"
           className="bubble-hub"
-          aria-label="Open Mauz Ask"
+          aria-label="Open Mauz"
           disabled={pendingAction !== null}
-          onClick={() => void handleLensAction("ask")}
+          onClick={() => void handleSettings()}
         >
           <BrandLogo className="bubble-hub-logo" label="MauzAI" />
           {providerState !== "unknown" ? (
@@ -307,118 +207,53 @@ export function MauzMenu(): React.JSX.Element {
           ) : null}
         </button>
 
-        {LENS_ACTIONS.map((item, index) => {
-          const Icon = item.icon;
-
-          return (
-            <button
-              key={item.action}
-              type="button"
-              className="bubble"
-              data-accent="answer"
-              data-pending={pendingAction === item.action ? "true" : undefined}
-              aria-label={item.detail}
-              disabled={pendingAction !== null}
-              onClick={() => void handleLensAction(item.action)}
-              style={bubbleStyle(item.action, index)}
-            >
-              <Icon aria-hidden="true" size={18} />
-              <span className="bubble-label" aria-hidden="true">
-                {pendingAction === item.action ? "Capturing..." : item.label}
-              </span>
-            </button>
-          );
-        })}
+        <button
+          type="button"
+          className="bubble"
+          data-accent="answer"
+          data-pending={pendingAction === "ask" ? "true" : undefined}
+          aria-label="Ask about what's on screen"
+          disabled={pendingAction !== null}
+          onClick={() => void handleLensAction("ask")}
+          style={bubbleStyle("ask", 0)}
+        >
+          <ScanSearch aria-hidden="true" size={18} />
+          <span className="bubble-label" aria-hidden="true">
+            {pendingAction === "ask" ? "Capturing..." : "Ask"}
+          </span>
+        </button>
 
         <button
           type="button"
           className="bubble"
           data-accent="agent"
           data-pending={pendingAction === "task" ? "true" : undefined}
-          aria-label="Work on this"
+          aria-label="Send to agent"
           disabled={pendingAction !== null}
           onClick={() => void handleTask()}
-          style={bubbleStyle("task", 5)}
+          style={bubbleStyle("task", 1)}
         >
           <BriefcaseBusiness aria-hidden="true" size={18} />
           <span className="bubble-label" aria-hidden="true">
-            {pendingAction === "task" ? "Capturing..." : "Work on this"}
+            {pendingAction === "task" ? "Capturing..." : "Send to agent"}
           </span>
         </button>
 
         <button
           type="button"
           className="bubble"
-          data-pending={pendingAction === "talk" ? "true" : undefined}
-          aria-label="Talk to Mauz"
+          data-pending={pendingAction === "dictate" ? "true" : undefined}
+          aria-label="Dictate"
           disabled={pendingAction !== null}
-          onClick={() => void handleTalk()}
-          style={bubbleStyle("talk", 5)}
+          onClick={() => void handleDictate()}
+          style={bubbleStyle("dictate", 2)}
         >
           <Mic aria-hidden="true" size={18} />
           <span className="bubble-label" aria-hidden="true">
-            {pendingAction === "talk" ? "Opening voice..." : "Talk"}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          className="bubble"
-          data-size="sm"
-          data-pending={pendingAction === "region" ? "true" : undefined}
-          aria-label="Select an area of the screen"
-          disabled={pendingAction !== null}
-          onClick={() => void handleRegion()}
-          style={bubbleStyle("region", 8, 40)}
-        >
-          <SquareDashedMousePointer aria-hidden="true" size={15} />
-          <span className="bubble-label" aria-hidden="true">
-            {pendingAction === "region" ? "Selecting..." : "Select area"}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          className="bubble"
-          aria-label="Previous chats"
-          disabled={pendingAction !== null}
-          onClick={() => void handleHistory()}
-          style={bubbleStyle("history", 6)}
-        >
-          <History aria-hidden="true" size={18} />
-          <span className="bubble-label" aria-hidden="true">
-            History
-          </span>
-        </button>
-
-        <button
-          type="button"
-          className="bubble"
-          data-size="sm"
-          aria-label="Open Mauz settings"
-          disabled={pendingAction !== null}
-          onClick={() => void handleSettings()}
-          style={bubbleStyle("settings", 7, 40)}
-        >
-          <Settings aria-hidden="true" size={15} />
-          <span className="bubble-label" aria-hidden="true">
-            Settings
+            {pendingAction === "dictate" ? "Capturing..." : "Dictate"}
           </span>
         </button>
       </div>
-
-      {providerState === "missing" ? (
-        <button
-          type="button"
-          className="bubble-auth-pill"
-          aria-label="Set up an AI provider"
-          disabled={pendingAction !== null}
-          onClick={() => void handleSettings()}
-        >
-          <KeyRound aria-hidden="true" size={11} />
-          Set up AI
-        </button>
-      ) : null}
 
       {status !== null ? (
         <p className="bubble-status-toast" role="status" aria-live="polite">
