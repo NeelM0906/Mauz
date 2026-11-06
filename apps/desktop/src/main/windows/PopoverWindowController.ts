@@ -24,6 +24,8 @@ type PopoverWindowControllerOptions = {
 type ShowOptions = {
   notifyActivation?: boolean;
   preserveSize?: boolean;
+  /** Size the popover for the Settings panel instead of the menu. Ignored with preserveSize. */
+  forSettings?: boolean;
 };
 
 const SCREEN_MARGIN = 8;
@@ -110,7 +112,11 @@ export class PopoverWindowController {
     this.lastAnchorPoint = point;
 
     if (options.preserveSize !== true) {
-      this.resizeForMenu();
+      if (options.forSettings === true) {
+        this.resizeForSettings();
+      } else {
+        this.resizeForMenu();
+      }
     }
 
     const position = this.getClampedPosition(point);

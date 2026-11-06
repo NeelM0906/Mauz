@@ -226,7 +226,8 @@ async function openSettings(): Promise<void> {
     return;
   }
 
-  await popover.showAt(screen.getCursorScreenPoint(), { notifyActivation: false });
+  // Size for Settings up front: the renderer skips settings.open() (and its resize) once settings are loaded.
+  await popover.showAt(screen.getCursorScreenPoint(), { notifyActivation: false, forSettings: true });
   popover.getWebContents()?.send(IPC_CHANNELS.openSettings);
 }
 

@@ -121,6 +121,26 @@ describe("PopoverWindowController", () => {
     expect(onHide).toHaveBeenCalledWith("explicit");
   });
 
+  it("sizes the popover for Settings when shown with forSettings", async () => {
+    const existingCount = electronMock.FakeBrowserWindow.instances.length;
+    const controller = new PopoverWindowController({
+      preloadPath: "/tmp/preload.js",
+      iconPath: "/tmp/mauzai.icns",
+      rendererFile: "/tmp/index.html"
+    });
+
+    await controller.showAt({ x: 100, y: 100 });
+    const popoverWin = electronMock.FakeBrowserWindow.instances[existingCount]!;
+    const menuSize = popoverWin.setSize.mock.calls.at(-1)!;
+
+    popoverWin.setSize.mockClear();
+    await controller.showAt({ x: 100, y: 100 }, { notifyActivation: false, forSettings: true });
+
+    const settingsSize = popoverWin.setSize.mock.calls.at(-1)!;
+    expect(settingsSize[0]).toBeGreaterThan(menuSize[0] as number);
+    expect(settingsSize[1]).toBeGreaterThan(menuSize[1] as number);
+  });
+
   it("hides the target cue before screenshot capture", async () => {
     const controller = new PopoverWindowController({
       preloadPath: "/tmp/preload.js",
