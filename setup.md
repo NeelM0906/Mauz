@@ -56,7 +56,6 @@ Mauz answers with the provider you have set up. It supports:
 If only one is set up, Mauz uses it. If several are set up, choose them under **Settings → AI provider**:
 
 - **Default provider** answers every question. Left on **Automatic**, Mauz prefers an API key you added, then Claude Code, then Codex.
-- **Fallback provider** (optional) answers when the default is not ready or fails before it starts answering.
 
 ### Connect a subscription
 
@@ -76,7 +75,6 @@ Add API keys in Settings (stored encrypted with Electron safe storage: Keychain 
 
 ```bash
 MAUZ_AI_PROVIDER=auto            # default: auto, claude-code, codex, anthropic, or openai
-MAUZ_AI_FALLBACK_PROVIDER=none   # fallback: none, claude-code, codex, anthropic, or openai
 MAUZ_CLAUDE_CODE_MODEL=sonnet    # any model or alias the claude CLI accepts
 MAUZ_CODEX_MODEL=                # empty uses Codex's default
 ANTHROPIC_ASK_MODEL=claude-opus-5-5
@@ -111,7 +109,7 @@ Speech-to-text uses OpenAI when you have added an OpenAI API key, otherwise the 
 MauzAI can use OpenAI credentials in two ways:
 
 - Launch environment: start MauzAI with `OPENAI_API_KEY` set in the terminal.
-- In-app login: open the Mauz menu or Settings, then use the OpenAI login controls to connect, reconnect, or disconnect. Saved keys are stored through Electron safe storage.
+- In-app login: open Settings, then use the OpenAI controls to connect, reconnect, or disconnect. Saved keys are stored through Electron safe storage.
 
 Disconnect makes MauzAI ignore OpenAI credentials, including a launch-time `OPENAI_API_KEY`, until you reconnect. Reconnect re-enables a saved key or the launch key. To replace credentials, paste a new API key in Settings and save.
 
@@ -120,8 +118,6 @@ Optional model settings can be copied from `.env.example` into your shell or loc
 ```bash
 export OPENAI_API_KEY="sk-..."
 export OPENAI_ASK_MODEL="gpt-5.4-mini"
-export OPENAI_CHAT_TITLE_MODEL="gpt-5.4-nano"
-export OPENAI_REALTIME_MODEL="gpt-realtime-2"
 ```
 
 ## Send to agent
@@ -204,8 +200,8 @@ pnpm --filter @mauzai/api dev
 Useful controls:
 
 - Mouse shake opens the Mauz menu when native input is enabled.
-- Command Shift M opens the Mauz menu when the dev hotkey is enabled.
-- The Mauz menu includes OpenAI reconnect and disconnect controls.
+- Command Shift M (Ctrl+Shift+M on Windows) opens the Mauz menu when the dev hotkey is enabled.
+- The centre of the dial and the tray's Open settings open Settings.
 - Settings lets you save a replacement OpenAI key, clear the saved key, choose models, and tune activation.
 
 ## Verify

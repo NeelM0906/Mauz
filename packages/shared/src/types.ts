@@ -47,9 +47,9 @@ export type PointerTarget = {
 export type CursorCropFocus = {
   /**
    * "element": framed on the pointed element or its group; "pointer-area": a fixed area around
-   * the pointer; "region": exactly the area the user selected.
+   * the pointer.
    */
-  kind: "element" | "pointer-area" | "region";
+  kind: "element" | "pointer-area";
   /** Pointer position in the crop's pixels. */
   pointer: {
     x: number;
@@ -178,14 +178,8 @@ export type MauzDesktopContext = {
 export type AskMauzRequest = {
   question: string;
   context: MauzDesktopContext;
-  conversationMessages?: ChatMessage[] | undefined;
-  sessionId?: string | undefined;
   requestId?: string | undefined;
-  responseStyle?: AskResponseStyle | undefined;
 };
-
-/** "voice" answers are written to be spoken aloud (Talk); "text" answers may use Markdown. */
-export type AskResponseStyle = "text" | "voice";
 
 export type AskAnswerDelta = {
   requestId: string;
@@ -194,8 +188,6 @@ export type AskAnswerDelta = {
 
 export type AiProviderId = "claude-code" | "codex" | "anthropic" | "openai";
 export type AiProviderPreference = "auto" | AiProviderId;
-/** Provider to use when the default is not ready or fails before answering. */
-export type AiFallbackPreference = "none" | AiProviderId;
 export type AiProviderKind = "subscription" | "api-key";
 
 export type AiProviderStatus = {
@@ -209,10 +201,7 @@ export type AiProviderStatus = {
 
 export type AiProvidersStatusResponse = {
   preference: AiProviderPreference;
-  fallbackPreference: AiFallbackPreference;
   activeProviderId: AiProviderId | null;
-  /** Ready fallback that differs from the active provider, or null. */
-  fallbackProviderId: AiProviderId | null;
   providers: AiProviderStatus[];
 };
 
@@ -276,91 +265,7 @@ export type TalkTranscribeResponse = {
 export type AskMauzResponse = {
   answer: string;
   model: string;
-  conversationId?: string | undefined;
-  conversationTitle?: string | undefined;
   usage?: unknown | undefined;
-};
-
-export type ChatRole = "user" | "assistant";
-
-export type ChatMessage = {
-  id: string;
-  role: ChatRole;
-  content: string;
-  createdAt: string;
-};
-
-export type ChatConversation = {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messages: ChatMessage[];
-};
-
-export type ChatHistorySummary = {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  preview: string;
-};
-
-export type ChatHistoryGroup = {
-  dateLabel: string;
-  conversations: ChatHistorySummary[];
-};
-
-export type ChatHistoryListResponse = {
-  groups: ChatHistoryGroup[];
-};
-
-export type ChatHistoryGetRequest = {
-  id: string;
-};
-
-export type ChatHistoryDeleteRequest = {
-  id: string;
-};
-
-export type ChatHistoryContinueRequest = {
-  id: string;
-  question: string;
-};
-
-export type ChatHistoryContinueResponse = {
-  conversation: ChatConversation;
-  answer: string;
-  model: string;
-};
-
-export type ChatTitleRequest = {
-  question: string;
-  answer: string;
-};
-
-export type ChatTitleResponse = {
-  title: string;
-  model: string;
-};
-
-export type RealtimeSessionResponse = {
-  value: string;
-  expires_at?: number | undefined;
-  session?: unknown | undefined;
-};
-
-export type RealtimeMode = "talk";
-
-export type RealtimeConnectRequest = {
-  offerSdp: string;
-  mode: RealtimeMode;
-  context: MauzDesktopContext;
-};
-
-export type RealtimeConnectResponse = {
-  answerSdp: string;
-  model: string;
 };
 
 export type PermissionError = {
@@ -370,25 +275,15 @@ export type PermissionError = {
 
 export type ShakeSensitivity = "relaxed" | "normal" | "strict";
 
-export type RealtimeReasoningEffort = "low" | "medium" | "high";
-
-export type OpenAiAuthMode = "api-key";
 export type OpenAiCredentialSource = "none" | "environment" | "saved";
-
-export type TalkEngine = "pipeline" | "realtime";
 
 export type MauzSettings = {
   nativeShakeEnabled: boolean;
   devHotkeyEnabled: boolean;
   shakeSensitivity: ShakeSensitivity;
-  openAiAuthMode: OpenAiAuthMode;
   openAiAuthDisconnected: boolean;
   openAiCredentialSource: OpenAiCredentialSource;
   askModel: string;
-  chatTitleModel: string;
-  realtimeModel: string;
-  realtimeVoice: string;
-  realtimeReasoningEffort: RealtimeReasoningEffort;
   /** Executable names (Windows) or bundle ids (macOS) Mauz never captures. */
   captureBlockedApps: string[];
   /** Sites (example.com, *bank*) whose pages Mauz never reads or screenshots. */
@@ -401,9 +296,7 @@ export type MauzSettings = {
   /** The folder last used with each agent. */
   taskAgentFolders: Partial<Record<TaskAgentId, string>>;
   aiProvider: AiProviderPreference;
-  aiFallbackProvider: AiFallbackPreference;
   anthropicKeyConfigured: boolean;
-  talkEngine: TalkEngine;
 };
 
 export type MauzSettingsUpdate = Partial<
@@ -486,11 +379,8 @@ export type MauzBridge = {
     showMenu(): Promise<void>;
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
-    startTalk(): Promise<MauzDesktopContext>;
-    /** Lets the user drag a rectangle on screen; null when they cancel. */
-    selectRegion(): Promise<MauzDesktopContext | null>;
     setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
-    /** The popover was hidden (closed, Escape, or lost focus); stop audio and microphone use. */
+    /** The popover was hidden (closed, Escape, or lost focus); stop microphone use. */
     onHidden(callback: () => void): () => void;
   };
   ask: {
@@ -508,22 +398,10 @@ export type MauzBridge = {
   };
   talk: {
     transcribe(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse>;
-    captureContext(): Promise<MauzDesktopContext>;
   };
   browser: {
     status(): Promise<BrowserExtensionStatus>;
     openExtensionFolder(): Promise<void>;
-  };
-  history: {
-    list(): Promise<ChatHistoryListResponse>;
-    get(payload: ChatHistoryGetRequest): Promise<ChatConversation>;
-    continue(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse>;
-    delete(payload: ChatHistoryDeleteRequest): Promise<ChatHistoryListResponse>;
-    clear(): Promise<ChatHistoryListResponse>;
-  };
-  realtime: {
-    createSession(): Promise<RealtimeSessionResponse>;
-    connect(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse>;
   };
   settings: {
     open(options?: MauzSettingsOpenOptions): Promise<MauzSettings>;
@@ -532,6 +410,8 @@ export type MauzBridge = {
   events: {
     onActivation(callback: () => void): () => void;
     onPermissionError(callback: (error: PermissionError) => void): () => void;
+    /** The tray or a second launch asked to show Settings. */
+    onOpenSettings(callback: () => void): () => void;
   };
   task: {
     agents(): Promise<TaskAgentsResponse>;

@@ -1,9 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
-import { askMauz, buildAnswerPrompt, buildContextText, buildResponseContent } from "../src/openai/askMauz";
-import { MAUZ_SYSTEM_PROMPT, MAUZ_VOICE_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
-import { clearBackendCapabilitiesCache } from "../src/backend/capabilities";
-import { BackendUnreachableError, MissingOpenAIKeyError } from "../src/errors";
+import { buildAnswerPrompt, buildContextText } from "../src/openai/askMauz";
+import { MAUZ_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
 
 function buildRequest(): AskMauzRequest {
   return {
@@ -52,37 +50,27 @@ describe("Ask Mauz prompt payload", () => {
   });
 
   it("sends only the cursor crop by default for faster pointer asks", () => {
-    const content = buildResponseContent(requestWithPointerContext);
+    const { images } = buildAnswerPrompt(requestWithPointerContext);
 
-    expect(content).toHaveLength(2);
-    expect(content[0]).toMatchObject({
-      type: "input_text"
-    });
-    expect(content[1]).toMatchObject({
-      type: "input_image",
-      image_url: "data:image/jpeg;base64,cursor-crop-base64",
-      detail: "auto"
-    });
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ mimeType: "image/jpeg", base64: "cursor-crop-base64" });
   });
 
   it("sends the window screenshot only when there is no cursor crop", () => {
     const { cursorCrop: _cursorCrop, ...pointer } = requestWithPointerContext.context.pointer!;
-    const content = buildResponseContent({
+    const { images } = buildAnswerPrompt({
       ...requestWithPointerContext,
       context: { ...requestWithPointerContext.context, pointer }
     });
 
-    expect(content).toHaveLength(2);
-    expect(content[1]).toMatchObject({
-      type: "input_image",
-      image_url: "data:image/jpeg;base64,full-screenshot-base64"
-    });
+    expect(images).toHaveLength(1);
+    expect(images[0]).toMatchObject({ base64: "full-screenshot-base64" });
   });
 
   it("ignores the removed full-screenshot environment flag", () => {
     vi.stubEnv("OPENAI_INCLUDE_FULL_SCREENSHOT", "true");
 
-    expect(buildResponseContent(requestWithPointerContext)).toHaveLength(2);
+    expect(buildAnswerPrompt(requestWithPointerContext).images).toHaveLength(1);
   });
 
   it("describes pointer priority for vague this-or-that questions", () => {
@@ -165,7 +153,6 @@ describe("Ask Mauz prompt payload", () => {
     };
     const contextText = buildContextText(request);
 
-    expect(buildResponseContent(request)).toHaveLength(1);
     expect(buildAnswerPrompt(request).images).toEqual([]);
     expect(contextText).not.toContain("Vault item");
     expect(contextText).toContain(
@@ -175,160 +162,13 @@ describe("Ask Mauz prompt payload", () => {
     expect(contextText).not.toContain("Signal");
   });
 
-  it("includes previous messages when continuing a saved chat", () => {
-    const contextText = buildContextText({
-      ...requestWithPointerContext,
-      question: "What should I do next?",
-      conversationMessages: [
-        {
-          id: "message-1",
-          role: "user",
-          content: "What is this warning?",
-          createdAt: "2026-05-14T12:00:00.000Z"
-        },
-        {
-          id: "message-2",
-          role: "assistant",
-          content: "It is a permissions warning.",
-          createdAt: "2026-05-14T12:00:01.000Z"
-        }
-      ]
-    });
-
-    expect(contextText).toContain("<previous_conversation>");
-    expect(contextText).toContain("User: What is this warning?");
-    expect(contextText).toContain("Mauz: It is a permissions warning.");
-  });
-});
-
-describe("askMauz with configurable backend", () => {
-  beforeEach(() => {
-    vi.stubEnv("MAUZ_BACKEND_API_KEY", "");
-    vi.stubEnv("MAUZ_BACKEND_BASE_URL", "");
-    vi.stubEnv("MAUZ_INSTALL_ID", "");
-    vi.stubEnv("OPENAI_API_KEY", "");
-  });
-
-  afterEach(() => {
-    clearBackendCapabilitiesCache();
-    vi.unstubAllEnvs();
-  });
-
-  it("sends session headers when a gateway backend is detected", async () => {
-    const create = vi.fn().mockResolvedValue({ output_text: "ok", usage: undefined });
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          features: {
-            session_continuity_header: "X-Hermes-Session-Id",
-            session_key_header: "X-Hermes-Session-Key",
-            run_submission: true,
-            run_events_sse: true,
-            run_approval_response: true
-          }
-        }),
-        { status: 200 }
-      )
-    );
-    const response = await askMauz(
-      { ...buildRequest(), sessionId: "conv-1" },
-      {
-        client: { responses: { create } } as never,
-        baseUrl: "http://localhost:8642/v1",
-        backendApiKey: "gw-key",
-        installId: "install-uuid",
-        fetchImpl: fetchMock
-      }
-    );
-    expect(response.answer).toBe("ok");
-    const requestOptions = create.mock.calls[0]?.[1];
-    expect(requestOptions?.headers).toMatchObject({
-      "X-Hermes-Session-Id": "conv-1",
-      "X-Hermes-Session-Key": "install-uuid"
-    });
-  });
-
-  it("uses the spoken-style prompt for Talk turns sent to a gateway", async () => {
-    const create = vi.fn().mockResolvedValue({ output_text: "ok", usage: undefined });
-    const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
-
-    await askMauz(
-      { ...buildRequest(), responseStyle: "voice" },
-      {
-        client: { responses: { create } } as never,
-        baseUrl: "http://localhost:8642/v1",
-        fetchImpl: fetchMock
-      }
-    );
-    await askMauz(buildRequest(), {
-      client: { responses: { create } } as never,
-      baseUrl: "http://localhost:8642/v1",
-      fetchImpl: fetchMock
-    });
-
-    expect(create.mock.calls[0]?.[0].input[0]).toEqual({ role: "system", content: MAUZ_VOICE_SYSTEM_PROMPT });
-    expect(create.mock.calls[1]?.[0].input[0]).toEqual({ role: "system", content: MAUZ_SYSTEM_PROMPT });
-  });
-
-  it("omits the session key header without a backend api key", async () => {
-    const create = vi.fn().mockResolvedValue({ output_text: "ok" });
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          features: {
-            session_continuity_header: "X-Hermes-Session-Id",
-            session_key_header: "X-Hermes-Session-Key"
-          }
-        }),
-        { status: 200 }
-      )
-    );
-    await askMauz(
-      { ...buildRequest(), sessionId: "conv-1" },
-      {
-        client: { responses: { create } } as never,
-        baseUrl: "http://localhost:8642/v1",
-        installId: "install-uuid",
-        fetchImpl: fetchMock
-      }
-    );
-    const requestOptions = create.mock.calls[0]?.[1];
-    expect(requestOptions?.headers).not.toHaveProperty("X-Hermes-Session-Key");
-  });
-
-  it("does not require an OpenAI key when a custom backend is configured", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
-    // OPENAI_API_KEY is already cleared by beforeEach; no client or apiKey provided
-    const error = await askMauz(buildRequest(), {
-      baseUrl: "http://127.0.0.1:9/v1",
-      fetchImpl: fetchMock
-    }).catch((e: unknown) => e);
-    // Must have passed the MissingOpenAIKeyError guard and attempted the backend call
-    expect(error).toBeInstanceOf(BackendUnreachableError);
-    expect(error).not.toBeInstanceOf(MissingOpenAIKeyError);
-  });
-
-  it("raises BackendUnreachableError when the backend connection fails", async () => {
-    const create = vi
-      .fn()
-      .mockRejectedValue(Object.assign(new Error("fetch failed"), { name: "APIConnectionError" }));
-    const fetchMock = vi.fn().mockResolvedValue(new Response("no", { status: 404 }));
-    await expect(
-      askMauz(buildRequest(), {
-        client: { responses: { create } } as never,
-        baseUrl: "http://localhost:8642/v1",
-        fetchImpl: fetchMock
-      })
-    ).rejects.toThrow(/localhost:8642 is not responding/);
-  });
-  it("includes browser page data, OCR text, and the selected-area label", () => {
+  it("includes browser page data and OCR text", () => {
     const request: AskMauzRequest = {
       ...requestWithPointerContext,
       context: {
         ...requestWithPointerContext.context,
         pointer: {
           ...requestWithPointerContext.context.pointer!,
-          cursorCropFocus: { kind: "region", pointer: { x: 10, y: 10 } },
           ocrText: "Total due: $41.20",
           page: {
             browser: "Microsoft Edge",
@@ -347,6 +187,5 @@ describe("askMauz with configurable backend", () => {
     expect(contextText).toContain('Pointed: <span>, "$89.99"');
     expect(contextText).toContain("Product: name: Trail Shoe; brand: Acme; price: 89.99 EUR; size: 8, 9");
     expect(contextText).toContain("<ocr>\nTotal due: $41.20\n</ocr>");
-    expect(contextText).toContain("the area of the screen the user selected (768x576)");
   });
 });

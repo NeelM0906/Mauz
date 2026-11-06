@@ -4,23 +4,14 @@ const MAX_TEXT_FIELD_CHARS = 8_000;
 const MAX_QUESTION_CHARS = 4_000;
 const MAX_ANSWER_CHARS = 40_000;
 const MAX_IMAGE_BASE64_CHARS = 3_500_000;
-const MAX_SDP_CHARS = 240_000;
 const MAX_WINDOW_TEXT_CHARS = 500;
 const MAX_MODEL_NAME_CHARS = 128;
-const MAX_VOICE_NAME_CHARS = 64;
-const MAX_CONVERSATION_MESSAGES = 32;
 const ModelNameSchema = z
   .string()
   .trim()
   .min(1)
   .max(MAX_MODEL_NAME_CHARS)
   .regex(/^[A-Za-z0-9._:/-]+$/);
-const VoiceNameSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(MAX_VOICE_NAME_CHARS)
-  .regex(/^[A-Za-z0-9._-]+$/);
 const WindowTextSchema = z.string().max(MAX_WINDOW_TEXT_CHARS);
 const UserTextSchema = z.string().max(MAX_TEXT_FIELD_CHARS);
 
@@ -51,18 +42,14 @@ export const PermissionErrorSchema = z.object({
 });
 
 export const ShakeSensitivitySchema = z.enum(["relaxed", "normal", "strict"]);
-export const RealtimeReasoningEffortSchema = z.enum(["low", "medium", "high"]);
-export const OpenAiAuthModeSchema = z.preprocess(() => "api-key", z.literal("api-key"));
 export const OpenAiCredentialSourceSchema = z.enum(["none", "environment", "saved"]);
 
 export const TaskAgentIdSchema = z.enum(["hermes", "claude-code", "codex"]);
 export const TaskAgentPreferenceSchema = z.union([z.literal("auto"), TaskAgentIdSchema]);
 const FolderPathSchema = z.string().trim().max(1_000);
-export const TalkEngineSchema = z.enum(["pipeline", "realtime"]);
 
 export const AiProviderIdSchema = z.enum(["claude-code", "codex", "anthropic", "openai"]);
 export const AiProviderPreferenceSchema = z.union([z.literal("auto"), AiProviderIdSchema]);
-export const AiFallbackPreferenceSchema = z.union([z.literal("none"), AiProviderIdSchema]);
 export const AiProviderKindSchema = z.enum(["subscription", "api-key"]);
 
 export const AiProviderStatusSchema = z.object({
@@ -76,9 +63,7 @@ export const AiProviderStatusSchema = z.object({
 
 export const AiProvidersStatusResponseSchema = z.object({
   preference: AiProviderPreferenceSchema,
-  fallbackPreference: AiFallbackPreferenceSchema,
   activeProviderId: AiProviderIdSchema.nullable(),
-  fallbackProviderId: AiProviderIdSchema.nullable(),
   providers: z.array(AiProviderStatusSchema)
 });
 
@@ -136,14 +121,9 @@ export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
   shakeSensitivity: ShakeSensitivitySchema,
-  openAiAuthMode: OpenAiAuthModeSchema,
   openAiAuthDisconnected: z.boolean(),
   openAiCredentialSource: OpenAiCredentialSourceSchema,
   askModel: ModelNameSchema,
-  chatTitleModel: ModelNameSchema,
-  realtimeModel: ModelNameSchema,
-  realtimeVoice: VoiceNameSchema,
-  realtimeReasoningEffort: RealtimeReasoningEffortSchema,
   captureBlockedApps: CaptureBlockedAppsSchema,
   captureBlockedSites: CaptureBlockedAppsSchema,
   apiKeyConfigured: z.boolean(),
@@ -151,9 +131,7 @@ export const MauzSettingsSchema = z.object({
   taskFolder: FolderPathSchema,
   taskAgentFolders: z.partialRecord(TaskAgentIdSchema, FolderPathSchema),
   aiProvider: AiProviderPreferenceSchema,
-  aiFallbackProvider: AiFallbackPreferenceSchema,
-  anthropicKeyConfigured: z.boolean(),
-  talkEngine: TalkEngineSchema
+  anthropicKeyConfigured: z.boolean()
 });
 
 export const MauzSettingsUpdateSchema = MauzSettingsSchema.omit({
@@ -216,7 +194,7 @@ export const PointerTargetSchema = z.object({
 });
 
 export const CursorCropFocusSchema = z.object({
-  kind: z.enum(["element", "pointer-area", "region"]),
+  kind: z.enum(["element", "pointer-area"]),
   pointer: CursorPositionSchema
 });
 
@@ -327,107 +305,20 @@ export const MauzDesktopContextSchema = z.object({
   captureBlocked: CaptureBlockedSchema.optional()
 });
 
-export const ChatRoleSchema = z.enum(["user", "assistant"]);
-
-export const ChatMessageSchema = z.object({
-  id: z.string().min(1),
-  role: ChatRoleSchema,
-  content: z.string().max(MAX_ANSWER_CHARS),
-  createdAt: z.string().datetime()
-});
-
 export const AskMauzRequestSchema = z.object({
   question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   context: MauzDesktopContextSchema,
-  conversationMessages: z.array(ChatMessageSchema).max(MAX_CONVERSATION_MESSAGES).optional(),
-  sessionId: z.string().trim().min(1).max(128).optional(),
-  requestId: z.string().trim().min(1).max(128).optional(),
-  responseStyle: z.enum(["text", "voice"]).optional()
+  requestId: z.string().trim().min(1).max(128).optional()
 });
 
 export const AskMauzResponseSchema = z.object({
   answer: z.string(),
   model: ModelNameSchema,
-  conversationId: z.string().optional(),
-  conversationTitle: z.string().optional(),
   usage: z.unknown().optional()
-});
-
-export const ChatConversationSchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  messages: z.array(ChatMessageSchema)
-});
-
-export const ChatHistorySummarySchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  preview: z.string()
-});
-
-export const ChatHistoryGroupSchema = z.object({
-  dateLabel: z.string().min(1),
-  conversations: z.array(ChatHistorySummarySchema)
-});
-
-export const ChatHistoryListResponseSchema = z.object({
-  groups: z.array(ChatHistoryGroupSchema)
-});
-
-export const ChatHistoryGetRequestSchema = z.object({
-  id: z.string().min(1)
-});
-
-export const ChatHistoryDeleteRequestSchema = z.object({
-  id: z.string().min(1)
-});
-
-export const ChatHistoryContinueRequestSchema = z.object({
-  id: z.string().min(1),
-  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS)
 });
 
 export const MauzLensResizeRequestSchema = z.object({
   expanded: z.boolean()
-});
-
-export const ChatHistoryContinueResponseSchema = z.object({
-  conversation: ChatConversationSchema,
-  answer: z.string(),
-  model: z.string()
-});
-
-export const ChatTitleRequestSchema = z.object({
-  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
-  answer: z.string().trim().min(1).max(MAX_ANSWER_CHARS)
-});
-
-export const ChatTitleResponseSchema = z.object({
-  title: z.string().min(1),
-  model: ModelNameSchema
-});
-
-export const RealtimeSessionResponseSchema = z.object({
-  value: z.string().min(1),
-  expires_at: z.number().optional(),
-  session: z.unknown().optional()
-});
-
-export const RealtimeModeSchema = z.literal("talk");
-
-export const RealtimeConnectRequestSchema = z.object({
-  offerSdp: z.string().min(1).max(MAX_SDP_CHARS),
-  mode: RealtimeModeSchema,
-  context: MauzDesktopContextSchema
-});
-
-export const RealtimeConnectResponseSchema = z.object({
-  answerSdp: z.string().min(1),
-  model: ModelNameSchema
 });
 
 export const TaskAgentsResponseSchema = z.object({

@@ -16,7 +16,6 @@ const MIN_RECORDING_MS = 350;
 export function DictatePanel(): React.JSX.Element {
   const backToMenu = useMauzStore((state) => state.backToMenu);
   const setDictation = useMauzStore((state) => state.setDictation);
-  const setSelectedLensAction = useMauzStore((state) => state.setSelectedLensAction);
   const setMode = useMauzStore((state) => state.setMode);
   const [state, setState] = useState<DictateState>("starting");
   const [error, setError] = useState<string | null>(null);
@@ -166,12 +165,7 @@ export function DictatePanel(): React.JSX.Element {
     abandonRecording();
     setDictation(text.trim());
 
-    if (target === "ask") {
-      setSelectedLensAction("ask");
-      setMode("lens");
-    } else {
-      setMode("task");
-    }
+    setMode(target === "ask" ? "lens" : "task");
   };
 
   const handleBack = async (): Promise<void> => {

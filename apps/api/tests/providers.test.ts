@@ -8,12 +8,7 @@ import { ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
 import { buildCliEnvironment, resolveCliCommand } from "../src/providers/cliCommand";
 import { parseCodexOutput } from "../src/providers/codexProvider";
 import type { ChildProcessLike, SpawnLike } from "../src/providers/processRunner";
-import {
-  AnswerProviderRegistry,
-  answerWithFallback,
-  pickProvider,
-  pickProviders
-} from "../src/providers/registry";
+import { AnswerProviderRegistry, pickProvider } from "../src/providers/registry";
 import type { AnswerPrompt, AnswerProvider } from "../src/providers/types";
 
 type FakeRun = {
@@ -307,25 +302,6 @@ describe("pickProvider", () => {
     expect(pickProvider("codex", providers({ codex: true, anthropic: true }))?.id).toBe("codex");
     expect(pickProvider("codex", providers({ anthropic: true }))).toBeNull();
   });
-
-  it("uses the default and keeps a different ready provider as fallback", () => {
-    const picked = pickProviders("codex", "claude-code", providers({ codex: true, "claude-code": true }));
-
-    expect(picked.active?.id).toBe("codex");
-    expect(picked.fallback?.id).toBe("claude-code");
-  });
-
-  it("switches to the fallback when the default is not ready", () => {
-    const picked = pickProviders("anthropic", "codex", providers({ codex: true }));
-
-    expect(picked.active?.id).toBe("codex");
-    expect(picked.fallback).toBeNull();
-  });
-
-  it("drops a fallback that is not ready or matches the default", () => {
-    expect(pickProviders("codex", "anthropic", providers({ codex: true })).fallback).toBeNull();
-    expect(pickProviders("auto", "codex", providers({ codex: true })).fallback).toBeNull();
-  });
 });
 
 describe("AnswerProviderRegistry", () => {
@@ -402,72 +378,12 @@ describe("askMauz provider routing", () => {
     const onText = vi.fn();
 
     const response = await askMauz(request, {
-      registry: { resolve: async () => ({ primary: { id: "claude-code", answer }, fallback: null }) },
+      registry: { resolve: async () => ({ id: "claude-code", answer }) },
       onText
     });
 
     expect(response).toEqual({ answer: "Final answer", model: "claude-sonnet-5-5" });
     expect(onText).toHaveBeenCalledWith("Partial");
-  });
-
-  it("retries with the fallback when the default fails before answering", async () => {
-    const primary: AnswerProvider = {
-      id: "claude-code",
-      answer: vi.fn(async () => {
-        throw new AiProviderError("claude-code", "Claude Code is rate limited.");
-      })
-    };
-    const fallback: AnswerProvider = {
-      id: "codex",
-      answer: vi.fn(async () => ({ text: "From Codex", model: "gpt-5.5" }))
-    };
-
-    const response = await askMauz(request, {
-      registry: { resolve: async () => ({ primary, fallback }) }
-    });
-
-    expect(response.answer).toBe("From Codex");
-    expect(fallback.answer).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not retry once the default has streamed text", async () => {
-    const primary: AnswerProvider = {
-      id: "claude-code",
-      answer: vi.fn(async (_prompt, options) => {
-        options?.onText?.("Half an ans");
-        throw new AiProviderError("claude-code", "Connection dropped.");
-      })
-    };
-    const fallback: AnswerProvider = {
-      id: "codex",
-      answer: vi.fn(async () => ({ text: "From Codex", model: "gpt-5.5" }))
-    };
-    const prompt = buildAnswerPrompt(request);
-
-    await expect(answerWithFallback({ primary, fallback }, prompt, { onText: () => {} })).rejects.toThrow(
-      /Connection dropped/
-    );
-    expect(fallback.answer).not.toHaveBeenCalled();
-  });
-
-  it("does not retry a cancelled answer", async () => {
-    const controller = new AbortController();
-    const primary: AnswerProvider = {
-      id: "claude-code",
-      answer: vi.fn(async () => {
-        controller.abort();
-        throw new Error("The command was cancelled.");
-      })
-    };
-    const fallback: AnswerProvider = {
-      id: "codex",
-      answer: vi.fn(async () => ({ text: "From Codex", model: "gpt-5.5" }))
-    };
-
-    await expect(
-      answerWithFallback({ primary, fallback }, buildAnswerPrompt(request), { signal: controller.signal })
-    ).rejects.toThrow(/cancelled/);
-    expect(fallback.answer).not.toHaveBeenCalled();
   });
 
   it("sends the cursor crop and leaves the full screenshot out by default", () => {
@@ -476,13 +392,5 @@ describe("askMauz provider routing", () => {
     expect(prompt.images).toHaveLength(1);
     expect(prompt.images[0]?.label).toMatch(/crop centered on the pointer/);
     expect(prompt.userText).toContain("<question>\nWhat is this?\n</question>");
-  });
-
-  it("uses the spoken-style system prompt for voice turns", () => {
-    const textPrompt = buildAnswerPrompt(request);
-    const voicePrompt = buildAnswerPrompt({ ...request, responseStyle: "voice" });
-
-    expect(voicePrompt.systemPrompt).not.toBe(textPrompt.systemPrompt);
-    expect(voicePrompt.systemPrompt).toMatch(/read aloud/);
   });
 });

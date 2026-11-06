@@ -1,5 +1,7 @@
 # Precise Context Capture
 
+> **Update 2026-11-05:** Talk, OpenAI Realtime, and Select area (the user-drawn region) have been removed. Mauz now does Ask, Dictate, and Send to agent only, so the parts of this document about them are history.
+
 Spec: `docs/superpowers/specs/2026-11-04-precise-capture-design.md`
 
 ## Goal

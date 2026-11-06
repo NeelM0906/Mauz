@@ -13,24 +13,12 @@ export const MAUZ_SETTINGS_PANEL_SIZE = {
   height: 620
 } as const;
 
-export const MAUZ_HISTORY_PANEL_SIZE = {
-  width: 420,
-  height: 520
-} as const;
-
-export const MAUZ_REALTIME_PANEL_SIZE = {
-  width: 380,
-  height: 480
-} as const;
-
 export const LOCAL_API_TOKEN_HEADER = "x-mauz-local-token";
 
 export const IPC_CHANNELS = {
   menuShowMenu: "mauz:menu:show-menu",
   menuClose: "mauz:menu:close",
   menuStartAsk: "mauz:menu:start-ask",
-  menuStartTalk: "mauz:menu:start-talk",
-  menuSelectRegion: "mauz:menu:select-region",
   menuSetLensExpanded: "mauz:menu:set-lens-expanded",
   menuHidden: "mauz:menu:hidden",
   settingsOpen: "mauz:settings:open",
@@ -45,22 +33,15 @@ export const IPC_CHANNELS = {
   providersConnectState: "mauz:providers:connect-state",
   providersDisconnect: "mauz:providers:disconnect",
   talkTranscribe: "mauz:talk:transcribe",
-  talkCaptureContext: "mauz:talk:capture-context",
   browserStatus: "mauz:browser:status",
   browserOpenExtensionFolder: "mauz:browser:open-extension-folder",
   taskAgents: "mauz:task:agents",
   taskFolders: "mauz:task:folders",
   taskPickFolder: "mauz:task:pick-folder",
   taskSend: "mauz:task:send",
-  chatHistoryList: "mauz:chat-history:list",
-  chatHistoryGet: "mauz:chat-history:get",
-  chatHistoryContinue: "mauz:chat-history:continue",
-  chatHistoryDelete: "mauz:chat-history:delete",
-  chatHistoryClear: "mauz:chat-history:clear",
-  realtimeCreateSession: "mauz:realtime:create-session",
-  realtimeConnect: "mauz:realtime:connect",
   activation: "mauz:events:activation",
-  permissionError: "mauz:events:permission-error"
+  permissionError: "mauz:events:permission-error",
+  openSettings: "mauz:events:open-settings"
 } as const;
 
 export const DEFAULT_MAUZ_API_PORT = 47891;

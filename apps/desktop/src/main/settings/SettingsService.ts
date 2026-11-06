@@ -3,12 +3,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
 import {
-  AiFallbackPreferenceSchema,
   AiProviderPreferenceSchema,
   DEFAULT_CAPTURE_BLOCKED_SITES,
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
-  TalkEngineSchema,
   TaskAgentPreferenceSchema,
   readBooleanEnv,
   type MauzSettings,
@@ -31,10 +29,6 @@ type SettingsServiceOptions = {
 
 const SETTINGS_FILE_NAME = "mauz-settings.json";
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
-const DEFAULT_CHAT_TITLE_MODEL = "gpt-5.4-nano";
-const DEFAULT_REALTIME_MODEL = "gpt-realtime-2";
-const DEFAULT_REALTIME_VOICE = "marin";
-const DEFAULT_REALTIME_REASONING_EFFORT = "low";
 
 /** Password managers: never screenshot or read their windows. Executables (Windows) and bundle ids (macOS). */
 export const DEFAULT_CAPTURE_BLOCKED_APPS = [
@@ -156,13 +150,8 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
       applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
       applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
-      applyDefinedSetting(nextSettings, "openAiAuthMode", parsedUpdate.openAiAuthMode);
       applyDefinedSetting(nextSettings, "openAiAuthDisconnected", parsedUpdate.openAiAuthDisconnected);
       applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
-      applyDefinedSetting(nextSettings, "chatTitleModel", parsedUpdate.chatTitleModel);
-      applyDefinedSetting(nextSettings, "realtimeModel", parsedUpdate.realtimeModel);
-      applyDefinedSetting(nextSettings, "realtimeVoice", parsedUpdate.realtimeVoice);
-      applyDefinedSetting(nextSettings, "realtimeReasoningEffort", parsedUpdate.realtimeReasoningEffort);
       applyDefinedSetting(
         nextSettings,
         "captureBlockedApps",
@@ -177,8 +166,6 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "taskFolder", parsedUpdate.taskFolder);
       applyDefinedSetting(nextSettings, "taskAgentFolders", parsedUpdate.taskAgentFolders);
       applyDefinedSetting(nextSettings, "aiProvider", parsedUpdate.aiProvider);
-      applyDefinedSetting(nextSettings, "aiFallbackProvider", parsedUpdate.aiFallbackProvider);
-      applyDefinedSetting(nextSettings, "talkEngine", parsedUpdate.talkEngine);
       applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
       applyAnthropicKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
 
@@ -351,27 +338,14 @@ function getDefaultSettings(): StoredMauzSettings {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, true),
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
-    openAiAuthMode: "api-key",
     openAiAuthDisconnected: false,
     askModel: process.env.OPENAI_ASK_MODEL?.trim() || DEFAULT_ASK_MODEL,
-    chatTitleModel: process.env.OPENAI_CHAT_TITLE_MODEL?.trim() || DEFAULT_CHAT_TITLE_MODEL,
-    realtimeModel: process.env.OPENAI_REALTIME_MODEL?.trim() || DEFAULT_REALTIME_MODEL,
-    realtimeVoice: process.env.OPENAI_REALTIME_VOICE?.trim() || DEFAULT_REALTIME_VOICE,
-    realtimeReasoningEffort:
-      process.env.OPENAI_REALTIME_REASONING_EFFORT === "medium" ||
-      process.env.OPENAI_REALTIME_REASONING_EFFORT === "high"
-        ? process.env.OPENAI_REALTIME_REASONING_EFFORT
-        : DEFAULT_REALTIME_REASONING_EFFORT,
     captureBlockedApps: [...DEFAULT_CAPTURE_BLOCKED_APPS],
     captureBlockedSites: [...DEFAULT_CAPTURE_BLOCKED_SITES],
     taskAgent: TaskAgentPreferenceSchema.catch("auto").parse(process.env.MAUZ_TASK_AGENT?.trim()),
     taskFolder: "",
     taskAgentFolders: {},
     aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim()),
-    aiFallbackProvider: AiFallbackPreferenceSchema.catch("none").parse(
-      process.env.MAUZ_AI_FALLBACK_PROVIDER?.trim()
-    ),
-    talkEngine: TalkEngineSchema.catch("pipeline").parse(process.env.MAUZ_TALK_ENGINE?.trim()),
     installId: randomUUID()
   };
 }
@@ -417,21 +391,14 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     nativeShakeEnabled: publicSettings.data.nativeShakeEnabled,
     devHotkeyEnabled: publicSettings.data.devHotkeyEnabled,
     shakeSensitivity: publicSettings.data.shakeSensitivity,
-    openAiAuthMode: publicSettings.data.openAiAuthMode,
     openAiAuthDisconnected: publicSettings.data.openAiAuthDisconnected,
     askModel: publicSettings.data.askModel,
-    chatTitleModel: publicSettings.data.chatTitleModel,
-    realtimeModel: publicSettings.data.realtimeModel,
-    realtimeVoice: publicSettings.data.realtimeVoice,
-    realtimeReasoningEffort: publicSettings.data.realtimeReasoningEffort,
     captureBlockedApps: publicSettings.data.captureBlockedApps,
     captureBlockedSites: publicSettings.data.captureBlockedSites,
     taskAgent: publicSettings.data.taskAgent,
     taskFolder: publicSettings.data.taskFolder,
     taskAgentFolders: publicSettings.data.taskAgentFolders,
     aiProvider: publicSettings.data.aiProvider,
-    aiFallbackProvider: publicSettings.data.aiFallbackProvider,
-    talkEngine: publicSettings.data.talkEngine,
     installId:
       typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
         ? parsedRecord.installId.trim()
@@ -450,7 +417,6 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
 
   return (
     "openAiApiKey" in parsed ||
-    ("openAiAuthMode" in parsed && parsed.openAiAuthMode !== "api-key") ||
     !("installId" in parsed) ||
     // Gateway-era fields: rewrite without them.
     LEGACY_GATEWAY_KEYS.some((key) => key in parsedRecord)
@@ -490,14 +456,9 @@ function toPublicSettings(
     nativeShakeEnabled: settings.nativeShakeEnabled,
     devHotkeyEnabled: settings.devHotkeyEnabled,
     shakeSensitivity: settings.shakeSensitivity,
-    openAiAuthMode: settings.openAiAuthMode,
     openAiAuthDisconnected: settings.openAiAuthDisconnected,
     openAiCredentialSource,
     askModel: settings.askModel,
-    chatTitleModel: settings.chatTitleModel,
-    realtimeModel: settings.realtimeModel,
-    realtimeVoice: settings.realtimeVoice,
-    realtimeReasoningEffort: settings.realtimeReasoningEffort,
     captureBlockedApps: [...settings.captureBlockedApps],
     captureBlockedSites: [...settings.captureBlockedSites],
     apiKeyConfigured: openAiCredentialSource !== "none",
@@ -505,9 +466,7 @@ function toPublicSettings(
     taskFolder: settings.taskFolder,
     taskAgentFolders: { ...settings.taskAgentFolders },
     aiProvider: settings.aiProvider,
-    aiFallbackProvider: settings.aiFallbackProvider,
-    anthropicKeyConfigured,
-    talkEngine: settings.talkEngine
+    anthropicKeyConfigured
   };
 }
 

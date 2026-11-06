@@ -6,12 +6,6 @@ import type {
   BrowserExtensionStatus,
   AskMauzRequest,
   AskMauzResponse,
-  ChatConversation,
-  ChatHistoryDeleteRequest,
-  ChatHistoryContinueRequest,
-  ChatHistoryContinueResponse,
-  ChatHistoryGetRequest,
-  ChatHistoryListResponse,
   MauzLensResizeRequest,
   MauzBridge,
   MauzDesktopContext,
@@ -19,9 +13,6 @@ import type {
   MauzSettingsOpenOptions,
   MauzSettingsUpdate,
   PermissionError,
-  RealtimeConnectRequest,
-  RealtimeConnectResponse,
-  RealtimeSessionResponse,
   SubscriptionCancelRequest,
   SubscriptionCodeRequest,
   SubscriptionConnectRequest,
@@ -48,9 +39,6 @@ const mauzApi: MauzBridge = {
     showMenu: () => ipcRenderer.invoke(IPC_CHANNELS.menuShowMenu) as Promise<void>,
     close: () => ipcRenderer.invoke(IPC_CHANNELS.menuClose) as Promise<void>,
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
-    startTalk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartTalk) as Promise<MauzDesktopContext>,
-    selectRegion: () =>
-      ipcRenderer.invoke(IPC_CHANNELS.menuSelectRegion) as Promise<MauzDesktopContext | null>,
     setLensExpanded: (payload: MauzLensResizeRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>,
     onHidden: (callback: () => void) => {
@@ -95,28 +83,11 @@ const mauzApi: MauzBridge = {
   },
   talk: {
     transcribe: (payload: TalkTranscribeRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.talkTranscribe, payload) as Promise<TalkTranscribeResponse>,
-    captureContext: () => ipcRenderer.invoke(IPC_CHANNELS.talkCaptureContext) as Promise<MauzDesktopContext>
+      ipcRenderer.invoke(IPC_CHANNELS.talkTranscribe, payload) as Promise<TalkTranscribeResponse>
   },
   browser: {
     status: () => ipcRenderer.invoke(IPC_CHANNELS.browserStatus) as Promise<BrowserExtensionStatus>,
     openExtensionFolder: () => ipcRenderer.invoke(IPC_CHANNELS.browserOpenExtensionFolder) as Promise<void>
-  },
-  history: {
-    list: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryList) as Promise<ChatHistoryListResponse>,
-    get: (payload: ChatHistoryGetRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryGet, payload) as Promise<ChatConversation>,
-    continue: (payload: ChatHistoryContinueRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryContinue, payload) as Promise<ChatHistoryContinueResponse>,
-    delete: (payload: ChatHistoryDeleteRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatHistoryDelete, payload) as Promise<ChatHistoryListResponse>,
-    clear: () => ipcRenderer.invoke(IPC_CHANNELS.chatHistoryClear) as Promise<ChatHistoryListResponse>
-  },
-  realtime: {
-    createSession: () =>
-      ipcRenderer.invoke(IPC_CHANNELS.realtimeCreateSession) as Promise<RealtimeSessionResponse>,
-    connect: (payload: RealtimeConnectRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.realtimeConnect, payload) as Promise<RealtimeConnectResponse>
   },
   settings: {
     open: (options?: MauzSettingsOpenOptions) =>
@@ -153,6 +124,11 @@ const mauzApi: MauzBridge = {
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.permissionError, listener);
       };
+    },
+    onOpenSettings: (callback) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(IPC_CHANNELS.openSettings, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.openSettings, listener);
     }
   },
   task: {

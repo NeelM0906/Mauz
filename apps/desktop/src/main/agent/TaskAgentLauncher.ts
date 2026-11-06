@@ -684,15 +684,7 @@ export function buildShellLauncher(launch: { folder: string; executable: string;
 }
 
 /** Variables Mauz sets from its own settings (applyRuntimeEnvironment); agents use their own. */
-const MAUZ_RUNTIME_VARIABLES = new Set([
-  "OPENAI_API_KEY",
-  "ANTHROPIC_API_KEY",
-  "OPENAI_ASK_MODEL",
-  "OPENAI_CHAT_TITLE_MODEL",
-  "OPENAI_REALTIME_MODEL",
-  "OPENAI_REALTIME_VOICE",
-  "OPENAI_REALTIME_REASONING_EFFORT"
-]);
+const MAUZ_RUNTIME_VARIABLES = new Set(["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_ASK_MODEL"]);
 
 /** The agent must not inherit Mauz's own secrets or Electron's run-as-Node switch. */
 export function buildAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

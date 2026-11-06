@@ -7,9 +7,7 @@ import { registerAskRoute, type AnswerStreamHooks, type AskMauzHandler } from ".
 import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
 import { getDefaultAnswerProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
 import { SubscriptionConnector } from "./providers/subscriptionConnect";
-import { registerChatTitleRoute, type ChatTitleHandler } from "./routes/chatTitle";
 import { registerHealthzRoute } from "./routes/healthz";
-import { registerRealtimeRoute, type RealtimeConnectHandler } from "./routes/realtime";
 
 export type { AnswerStreamHooks } from "./routes/ask";
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
@@ -48,8 +46,6 @@ export function disposeAnswerProviders(): void {
 
 export type CreateMauzApiServerOptions = {
   askHandler?: AskMauzHandler;
-  chatTitleHandler?: ChatTitleHandler;
-  realtimeConnectHandler?: RealtimeConnectHandler;
   authToken?: string;
   logger?: boolean;
   loadEnv?: boolean;
@@ -73,16 +69,6 @@ export async function createMauzApiServer(
     ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
     ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
     ...(options.answerHooks === undefined ? {} : { answerHooks: options.answerHooks })
-  });
-  await registerChatTitleRoute(app, {
-    ...(options.chatTitleHandler === undefined ? {} : { chatTitleHandler: options.chatTitleHandler }),
-    ...(options.authToken === undefined ? {} : { authToken: options.authToken })
-  });
-  await registerRealtimeRoute(app, {
-    ...(options.realtimeConnectHandler === undefined
-      ? {}
-      : { realtimeConnectHandler: options.realtimeConnectHandler }),
-    ...(options.authToken === undefined ? {} : { authToken: options.authToken })
   });
 
   return app;

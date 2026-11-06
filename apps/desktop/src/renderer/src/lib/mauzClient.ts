@@ -4,12 +4,6 @@ import type {
   BrowserExtensionStatus,
   AskMauzRequest,
   AskMauzResponse,
-  ChatConversation,
-  ChatHistoryDeleteRequest,
-  ChatHistoryContinueRequest,
-  ChatHistoryContinueResponse,
-  ChatHistoryGetRequest,
-  ChatHistoryListResponse,
   MauzLensResizeRequest,
   MauzDesktopContext,
   MauzBridge,
@@ -18,9 +12,6 @@ import type {
   MauzSettings,
   MauzSettingsUpdate,
   PermissionError,
-  RealtimeConnectRequest,
-  RealtimeConnectResponse,
-  RealtimeSessionResponse,
   SubscriptionConnectState,
   SubscriptionProviderId,
   TalkTranscribeRequest,
@@ -41,8 +32,6 @@ const browserPreviewBridge: MauzBridge = {
     showMenu: async () => {},
     close: async () => {},
     startAsk: async () => collectPreviewContext(),
-    startTalk: async () => collectPreviewContext(),
-    selectRegion: async () => collectPreviewContext(),
     setLensExpanded: async (_payload: MauzLensResizeRequest) => {},
     onHidden: () => () => {}
   },
@@ -59,9 +48,7 @@ const browserPreviewBridge: MauzBridge = {
   providers: {
     status: async () => ({
       preference: "auto",
-      fallbackPreference: "none",
       activeProviderId: null,
-      fallbackProviderId: null,
       providers: []
     }),
     connect: async () => {
@@ -77,52 +64,21 @@ const browserPreviewBridge: MauzBridge = {
   },
   talk: {
     transcribe: async () => {
-      throw new Error("Run the Electron app to talk to Mauz.");
-    },
-    captureContext: async () => collectPreviewContext()
+      throw new Error("Run the Electron app to dictate.");
+    }
   },
   browser: {
     status: async () => ({ connectedBrowsers: [], extensionPath: null, hostRegistered: false }),
     openExtensionFolder: async () => {}
-  },
-  history: {
-    list: async () => ({
-      groups: []
-    }),
-    get: async (_payload: ChatHistoryGetRequest) => {
-      throw new Error("Run the Electron app to view Mauz chat history.");
-    },
-    continue: async (_payload: ChatHistoryContinueRequest) => {
-      throw new Error("Run the Electron app to continue Mauz chat history.");
-    },
-    delete: async (_payload: ChatHistoryDeleteRequest) => ({
-      groups: []
-    }),
-    clear: async () => ({
-      groups: []
-    })
-  },
-  realtime: {
-    createSession: async () => {
-      throw new Error("Realtime API is not implemented in this milestone.");
-    },
-    connect: async () => {
-      throw new Error("Run the Electron app to talk to Mauz with Realtime.");
-    }
   },
   settings: {
     open: async () => ({
       nativeShakeEnabled: true,
       devHotkeyEnabled: true,
       shakeSensitivity: "normal",
-      openAiAuthMode: "api-key",
       openAiAuthDisconnected: false,
       openAiCredentialSource: "none",
       askModel: "gpt-5.4-mini",
-      chatTitleModel: "gpt-5.4-nano",
-      realtimeModel: "gpt-realtime-2",
-      realtimeVoice: "marin",
-      realtimeReasoningEffort: "low",
       captureBlockedApps: [],
       captureBlockedSites: [],
       apiKeyConfigured: false,
@@ -130,9 +86,7 @@ const browserPreviewBridge: MauzBridge = {
       taskFolder: "",
       taskAgentFolders: {},
       aiProvider: "auto",
-      aiFallbackProvider: "none",
-      anthropicKeyConfigured: false,
-      talkEngine: "pipeline"
+      anthropicKeyConfigured: false
     }),
     update: async (payload: MauzSettingsUpdate) => {
       const openAiAuthDisconnected = payload.openAiAuthDisconnected ?? false;
@@ -144,14 +98,9 @@ const browserPreviewBridge: MauzBridge = {
         nativeShakeEnabled: payload.nativeShakeEnabled ?? true,
         devHotkeyEnabled: payload.devHotkeyEnabled ?? true,
         shakeSensitivity: payload.shakeSensitivity ?? "normal",
-        openAiAuthMode: payload.openAiAuthMode ?? "api-key",
         openAiAuthDisconnected,
         openAiCredentialSource,
         askModel: payload.askModel ?? "gpt-5.4-mini",
-        chatTitleModel: payload.chatTitleModel ?? "gpt-5.4-nano",
-        realtimeModel: payload.realtimeModel ?? "gpt-realtime-2",
-        realtimeVoice: payload.realtimeVoice ?? "marin",
-        realtimeReasoningEffort: payload.realtimeReasoningEffort ?? "low",
         captureBlockedApps: payload.captureBlockedApps ?? [],
         captureBlockedSites: payload.captureBlockedSites ?? [],
         apiKeyConfigured: openAiCredentialSource !== "none",
@@ -159,15 +108,14 @@ const browserPreviewBridge: MauzBridge = {
         taskFolder: payload.taskFolder ?? "",
         taskAgentFolders: payload.taskAgentFolders ?? {},
         aiProvider: payload.aiProvider ?? "auto",
-        aiFallbackProvider: payload.aiFallbackProvider ?? "none",
-        anthropicKeyConfigured: (payload.anthropicApiKey?.trim().length ?? 0) > 0,
-        talkEngine: payload.talkEngine ?? "pipeline"
+        anthropicKeyConfigured: (payload.anthropicApiKey?.trim().length ?? 0) > 0
       };
     }
   },
   events: {
     onActivation: () => () => {},
-    onPermissionError: () => () => {}
+    onPermissionError: () => () => {},
+    onOpenSettings: () => () => {}
   },
   task: {
     agents: async () => ({
@@ -239,12 +187,6 @@ export const mauzClient = {
   startAsk(): Promise<MauzDesktopContext> {
     return getBridge().menu.startAsk();
   },
-  startTalk(): Promise<MauzDesktopContext> {
-    return getBridge().menu.startTalk();
-  },
-  selectRegion(): Promise<MauzDesktopContext | null> {
-    return getBridge().menu.selectRegion();
-  },
   getBrowserExtensionStatus(): Promise<BrowserExtensionStatus> {
     return getBridge().browser.status();
   },
@@ -287,30 +229,6 @@ export const mauzClient = {
   transcribeTalk(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse> {
     return getBridge().talk.transcribe(payload);
   },
-  captureTalkContext(): Promise<MauzDesktopContext> {
-    return getBridge().talk.captureContext();
-  },
-  listChatHistory(): Promise<ChatHistoryListResponse> {
-    return getBridge().history.list();
-  },
-  getChatConversation(payload: ChatHistoryGetRequest): Promise<ChatConversation> {
-    return getBridge().history.get(payload);
-  },
-  continueChat(payload: ChatHistoryContinueRequest): Promise<ChatHistoryContinueResponse> {
-    return getBridge().history.continue(payload);
-  },
-  deleteChat(payload: ChatHistoryDeleteRequest): Promise<ChatHistoryListResponse> {
-    return getBridge().history.delete(payload);
-  },
-  clearChatHistory(): Promise<ChatHistoryListResponse> {
-    return getBridge().history.clear();
-  },
-  createRealtimeSession(): Promise<RealtimeSessionResponse> {
-    return getBridge().realtime.createSession();
-  },
-  connectRealtime(payload: RealtimeConnectRequest): Promise<RealtimeConnectResponse> {
-    return getBridge().realtime.connect(payload);
-  },
   openSettings(options?: MauzSettingsOpenOptions): Promise<MauzSettings> {
     return getBridge().settings.open(options);
   },
@@ -322,6 +240,9 @@ export const mauzClient = {
   },
   onPermissionError(callback: (error: PermissionError) => void): () => void {
     return getBridge().events.onPermissionError(callback);
+  },
+  onOpenSettings(callback: () => void): () => void {
+    return getBridge().events.onOpenSettings(callback);
   },
   getTaskAgents(): Promise<TaskAgentsResponse> {
     return getBridge().task.agents();

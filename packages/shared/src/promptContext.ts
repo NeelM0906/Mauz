@@ -45,10 +45,6 @@ function describeCursorCrop(crop: ScreenshotPayload, focus: CursorCropFocus | un
     return `crop centered on the pointer (${size})`;
   }
 
-  if (focus.kind === "region") {
-    return `the area of the screen the user selected (${size})`;
-  }
-
   const pointer = `pointer at (${focus.pointer.x}, ${focus.pointer.y}) in the image`;
 
   return focus.kind === "element"

@@ -1,6 +1,5 @@
 import { tmpdir } from "node:os";
 import type {
-  AiFallbackPreference,
   AiProviderId,
   AiProviderKind,
   AiProviderPreference,
@@ -14,7 +13,7 @@ import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from 
 import { CodexProvider } from "./codexProvider";
 import { DEFAULT_OPENAI_ASK_MODEL, OpenAiApiProvider } from "./openaiProvider";
 import { parseJsonLine, runAndCollect, spawnCliProcess, type SpawnLike } from "./processRunner";
-import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult, ProviderDetection } from "./types";
+import type { AnswerProvider, ProviderDetection } from "./types";
 
 /**
  * Auto order, used only when the default is "auto" and several providers are ready: a key
@@ -45,12 +44,6 @@ export type AnswerProviderRegistryOptions = {
   resolveCommand?: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
   providers?: Partial<Record<AiProviderId, AnswerProvider>>;
   now?: () => number;
-};
-
-export type ResolvedAnswerProviders = {
-  primary: AnswerProvider;
-  /** Used when the primary fails before streaming any text. */
-  fallback: AnswerProvider | null;
 };
 
 type CliDetectionCache = {
@@ -96,27 +89,20 @@ export class AnswerProviderRegistry {
       ...detections[id]
     }));
     const preference = readPreference(env.MAUZ_AI_PROVIDER);
-    const fallbackPreference = readFallbackPreference(env.MAUZ_AI_FALLBACK_PROVIDER);
-    const { active, fallback } = pickProviders(preference, fallbackPreference, providers);
 
     return {
       preference,
-      fallbackPreference,
-      activeProviderId: active?.id ?? null,
-      fallbackProviderId: fallback?.id ?? null,
+      activeProviderId: pickProvider(preference, providers)?.id ?? null,
       providers
     };
   }
 
-  /** Returns the providers that should answer now, or explains why none can. */
-  async resolve(): Promise<ResolvedAnswerProviders> {
+  /** Returns the provider that should answer now, or explains why none can. */
+  async resolve(): Promise<AnswerProvider> {
     const status = await this.getStatus();
 
     if (status.activeProviderId !== null) {
-      return {
-        primary: this.providers[status.activeProviderId],
-        fallback: status.fallbackProviderId === null ? null : this.providers[status.fallbackProviderId]
-      };
+      return this.providers[status.activeProviderId];
     }
 
     if (status.preference !== "auto") {
@@ -150,11 +136,7 @@ export class AnswerProviderRegistry {
         ? cli[id]
         : detectApiKey(id === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY, undefined, "unused"))
     }));
-    const { active } = pickProviders(
-      readPreference(env.MAUZ_AI_PROVIDER),
-      readFallbackPreference(env.MAUZ_AI_FALLBACK_PROVIDER),
-      providers
-    );
+    const active = pickProvider(readPreference(env.MAUZ_AI_PROVIDER), providers);
 
     if (active !== null) {
       this.providers[active.id].prewarm?.(systemPrompt);
@@ -261,10 +243,6 @@ export class AnswerProviderRegistry {
   }
 }
 
-/**
- * Picks the provider that answers and the one that backs it up. The default answers when it is
- * ready; otherwise a ready fallback takes over. With a single provisioned provider, "auto" uses it.
- */
 /** Resolves a CLI; inside Electron, npm JS shims can run on Electron itself when Node.js is missing. */
 export function resolveCliCommandForMauz(name: string, env: NodeJS.ProcessEnv): ResolvedCliCommand | null {
   return resolveCliCommand(name, {
@@ -273,53 +251,7 @@ export function resolveCliCommandForMauz(name: string, env: NodeJS.ProcessEnv): 
   });
 }
 
-export function pickProviders(
-  preference: AiProviderPreference,
-  fallbackPreference: AiFallbackPreference,
-  providers: readonly AiProviderStatus[]
-): { active: AiProviderStatus | null; fallback: AiProviderStatus | null } {
-  const primary = pickProvider(preference, providers);
-  const fallback =
-    fallbackPreference === "none"
-      ? null
-      : (providers.find((provider) => provider.id === fallbackPreference && provider.available) ?? null);
-
-  if (primary === null) {
-    return { active: fallback, fallback: null };
-  }
-
-  return { active: primary, fallback: fallback?.id === primary.id ? null : fallback };
-}
-
-/**
- * Answers with the primary provider and retries once with the fallback when the primary fails
- * before any text reached the user. Cancellation is never retried.
- */
-export async function answerWithFallback(
-  providers: ResolvedAnswerProviders,
-  prompt: AnswerPrompt,
-  options: AnswerOptions = {}
-): Promise<AnswerResult> {
-  let streamedText = false;
-  const onText =
-    options.onText === undefined
-      ? undefined
-      : (textSoFar: string): void => {
-          streamedText ||= textSoFar.length > 0;
-          options.onText?.(textSoFar);
-        };
-
-  try {
-    return await providers.primary.answer(prompt, { ...options, onText });
-  } catch (error) {
-    if (providers.fallback === null || streamedText || options.signal?.aborted === true) {
-      throw error;
-    }
-
-    return providers.fallback.answer(prompt, options);
-  }
-}
-
+/** The selected provider when it is ready; with "auto", the first ready one in AUTO_PROVIDER_ORDER. */
 export function pickProvider(
   preference: AiProviderPreference,
   providers: readonly AiProviderStatus[]
@@ -349,17 +281,6 @@ function readPreference(value: string | undefined): AiProviderPreference {
     normalized === "openai"
     ? normalized
     : "auto";
-}
-
-function readFallbackPreference(value: string | undefined): AiFallbackPreference {
-  const normalized = value?.trim();
-
-  return normalized === "claude-code" ||
-    normalized === "codex" ||
-    normalized === "anthropic" ||
-    normalized === "openai"
-    ? normalized
-    : "none";
 }
 
 function detectApiKey(

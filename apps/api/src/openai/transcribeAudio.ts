@@ -11,7 +11,7 @@ export type TranscribeWithOpenAiOptions = {
   client?: TranscriptionClient;
 };
 
-/** Speech-to-text for push-to-talk turns when the user has added an OpenAI API key. */
+/** Speech-to-text for Dictate when the user has added an OpenAI API key. */
 export async function transcribeWithOpenAi(
   wavAudio: Buffer,
   options: TranscribeWithOpenAiOptions = {}
