@@ -58,15 +58,11 @@ Mauz does not ship with, or require, its own AI account. It answers with the pro
 
 To use a subscription, click **Connect** next to it in **Settings → General AI**. Mauz installs the CLI if it is missing and opens the sign-in page in your browser. If the CLI is already signed in on your computer, Mauz picks it up automatically.
 
-If only one provider is set up, Mauz uses it. If several are, choose the **default** in **Settings → General AI**. Settings also shows which providers Mauz detected. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer.
-
-See [setup.md](setup.md#ai-providers) for details and overrides.
+If only one provider is set up, Mauz uses it. If several are, choose the **default** in **Settings → General AI**. Subscription CLIs run with tools, hooks, MCP servers, and session history turned off: Mauz only asks them for a text answer. See [setup.md](setup.md#ai-providers) for overrides.
 
 ## Send to agent
 
-Send to agent hands a task to a coding agent you already use: [Hermes](https://github.com/NousResearch/hermes-agent), Claude Code, or Codex. Mauz writes a short brief with your task and what you were pointing at, and the agent starts on it in the folder you pick. On Windows, when the agent's desktop app is installed, the task becomes a new thread in that app, running in the background: nothing pops up and focus stays where it was. Otherwise, and on macOS, the agent opens in its own terminal window. The agent works with its own permissions; Mauz does not watch or approve anything.
-
-Pick the agent under **Settings → Task agent**. The folder list shows the folders that agent has worked in, most recent first. When you point at VS Code or Cursor, Mauz picks the project open there. See [setup.md](setup.md#send-to-agent).
+Send to agent hands a task to a coding agent you already use: [Hermes](https://github.com/NousResearch/hermes-agent), Claude Code, or Codex. Mauz writes a short brief with your task and what you were pointing at, and the agent starts on it in the folder you pick. On Windows, when the agent's desktop app is installed, the task becomes a new thread in that app, running in the background: nothing pops up and focus stays where it was. Otherwise, and on macOS, the agent opens in its own terminal window. The agent works with its own permissions; Mauz does not watch or approve anything. Pick the agent under **Settings → Task agent**. See [setup.md](setup.md#send-to-agent).
 
 ## Dictate
 
@@ -84,17 +80,8 @@ Mauz is built around user-controlled context sharing.
 
 ## Platform notes
 
-**Windows**
-
-- Mouse shake works without any special permission.
-- Selected text is read through Windows UI Automation, so it works in most native apps and browsers but not every app.
-- Mauz runs from the tray: right-click the icon to open it, pause shake, or quit.
-- **Ctrl+Shift+M** is also Microsoft Teams' mute shortcut; turn off Mauz's shortcut in Settings if you rely on it in Teams.
-
-**macOS**
-
-- Mouse shake and selected text need Accessibility and Input Monitoring permissions; screenshots need Screen Recording.
-- Dictate without an OpenAI key is not supported yet (there is no offline transcription on macOS yet).
+- **Windows:** shake needs no permission. Mauz runs from the tray, where you can open it, pause shake, or quit. **Ctrl+Shift+M** is also Microsoft Teams' mute shortcut; turn off Mauz's shortcut in Settings if you rely on it there.
+- **macOS:** shake and selected text need Accessibility permission, screenshots need Screen Recording, and Dictate needs Microphone. Dictate without an OpenAI key is not available yet. See [setup.md](setup.md#macos-permissions).
 
 ## Roadmap
 

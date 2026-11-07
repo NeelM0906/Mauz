@@ -1,136 +1,81 @@
 # MauzAI Setup
 
-This guide covers running MauzAI from a clone on macOS and Windows.
+How to install, configure, and develop MauzAI from a clone. For what Mauz does, see the [README](README.md).
 
 ## Requirements
 
 - macOS 13 or newer, or Windows 10/11.
 - Node.js 22 or newer.
 - pnpm 10.27.0 or newer. Run `corepack enable` if pnpm is not available.
-- macOS only: Xcode Command Line Tools for the native mouse-shake helper. Install with `xcode-select --install`.
-- An AI provider: a Claude ([Claude Code](https://claude.com/claude-code)) or ChatGPT ([Codex](https://github.com/openai/codex)) subscription, or an Anthropic or OpenAI API key. You can connect any of them from Mauz's Settings. See [AI providers](#ai-providers).
+- macOS only: Xcode Command Line Tools for the native mouse-shake helper (`xcode-select --install`).
+- An AI provider. See [AI providers](#ai-providers).
 
-## Install from a clone
+## Install
 
-### macOS
+Run the installer from the repository root. It installs dependencies with the locked pnpm version, builds Mauz, installs it, and launches it. It needs no administrator rights. Re-run it after pulling updates.
 
-Clone Mauz, then run the installer from the repository root:
+**macOS** installs `~/Applications/MauzAI.app`:
 
 ```bash
-git clone https://github.com/NeelM0906/Mauz.git
-cd Mauz
 ./install-macos.sh
 ```
 
-The installer uses the locked pnpm version, builds Mauz, installs it at `~/Applications/MauzAI.app`, and launches it. It does not require an administrator password. Re-run `./install-macos.sh` after pulling updates.
+Then grant the [macOS permissions](#macos-permissions).
 
-### Windows
-
-Clone Mauz, then double-click `install-windows.cmd`, or run it from a terminal in the repository root:
+**Windows** adds a **MauzAI** Start menu shortcut. Double-click `install-windows.cmd`, or run:
 
 ```powershell
-git clone https://github.com/NeelM0906/Mauz.git
-cd Mauz
 .\install-windows.cmd
 ```
 
-The installer installs dependencies with the locked pnpm version, builds Mauz, adds a **MauzAI** Start menu shortcut, and launches it. It does not require administrator rights. Add `-StartAtLogin` to also start Mauz when you sign in. Re-run it after pulling updates.
+Add `-StartAtLogin` to also start Mauz when you sign in, or `-NoLaunch` to build without launching.
 
-On Windows:
+On Windows, Mauz lives in the notification area (system tray): open it, pause mouse shake, or quit from there. Shake needs no permission, and selected text is read through UI Automation, so select text before you shake to use it as context. Microsoft Teams also uses **Ctrl+Shift+M** (mute); turn off Mauz's shortcut in Settings if you rely on it there.
 
-- Shake the mouse or press **Ctrl+Shift+M** to open Mauz. Shake needs no permission.
-- Mauz lives in the notification area (system tray): open it, pause mouse shake, or quit from there.
-- Mauz reads the active window and selected text through Windows UI Automation. Select text before you shake to use it as context.
-- Mauz windows are hidden from screenshots and screen sharing so they never cover what Mauz captures. To show them (for example to demo Mauz in a meeting), set `MAUZ_EXCLUDE_FROM_CAPTURE=false` before launching.
-- Microsoft Teams also uses Ctrl+Shift+M (mute). Turn off the shortcut in Settings if you rely on it in Teams.
+Mauz's windows are hidden from screenshots and screen sharing so they never cover what Mauz captures. To show them (for example in a demo), set `MAUZ_EXCLUDE_FROM_CAPTURE=false` before launching.
 
 ## AI providers
 
-Mauz answers with the provider you have set up. It supports:
+Mauz answers with the provider you have set up:
 
 - An Anthropic API key (default model `claude-opus-5-5`).
 - An OpenAI API key (default model `gpt-5.4-mini`).
-- Your Claude subscription through Claude Code (default model `sonnet`). See [Connect a subscription](#connect-a-subscription).
+- Your Claude subscription through Claude Code (default model `sonnet`).
 - Your ChatGPT subscription through Codex (Codex's default model).
 
-If only one is set up, Mauz uses it. If several are set up, choose them under **Settings → AI provider**:
+If only one is set up, Mauz uses it. If several are, **Settings → General AI → Default provider** picks one. Left on **Automatic**, Mauz prefers an API key, then Claude Code, then Codex.
 
-- **Default provider** answers every question. Left on **Automatic**, Mauz prefers an API key you added, then Claude Code, then Codex.
+**API keys:** paste them in Settings (stored with Electron safe storage: Keychain on macOS, DPAPI on Windows), or start Mauz with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set. Disconnecting a provider in Settings makes Mauz ignore its key, including one from the environment, until you reconnect.
 
-### Connect a subscription
+**Subscriptions:** click **Connect** next to Claude Code or Codex in **Settings → General AI**.
 
-Open **Settings → AI provider** and click **Connect** next to Claude Code or Codex:
-
-- If the CLI is not installed, Mauz installs it with npm (`@anthropic-ai/claude-code` or `@openai/codex`). The button says **Install & connect**.
-- Mauz then runs the CLI's own sign-in and opens the sign-in page in your browser.
-  - **Codex** shows a one-time code in Mauz; enter it on the page.
-  - **Claude Code** usually finishes on its own after you approve in the browser. If the page shows a code instead, paste it into Mauz.
-- The sign-in is stored by the CLI itself, exactly as if you had signed in from a terminal, so the `claude` or `codex` CLI is signed in too.
-
-If the CLI is already signed in on your computer, Mauz picks it up automatically; there is nothing to connect. **Sign out** next to a connected subscription signs the CLI out. Use **Check again** if you signed in or out from a terminal.
+- If the CLI is missing, Mauz installs it with npm (the button says **Install & connect**).
+- Mauz runs the CLI's own sign-in and opens the sign-in page in your browser. Codex shows a one-time code in Mauz to enter on the page. Claude Code usually finishes on its own; if the page shows a code instead, paste it into Mauz.
+- The CLI stores the sign-in, exactly as if you had signed in from a terminal. If it is already signed in, Mauz picks it up and there is nothing to connect. **Sign out** signs the CLI out, and **Check again** re-reads its state.
 
 Mauz runs these CLIs with tools, hooks, MCP servers, and session history turned off, from an empty working directory, so they only answer the question.
 
-Add API keys in Settings (stored encrypted with Electron safe storage: Keychain on macOS, DPAPI on Windows) or through the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`). Optional overrides:
+Optional overrides (see `.env.example` for every variable):
 
 ```bash
-MAUZ_AI_PROVIDER=auto            # default: auto, claude-code, codex, anthropic, or openai
+MAUZ_AI_PROVIDER=auto            # auto, claude-code, codex, anthropic, or openai
 MAUZ_CLAUDE_CODE_MODEL=sonnet    # any model or alias the claude CLI accepts
 MAUZ_CODEX_MODEL=                # empty uses Codex's default
 ANTHROPIC_ASK_MODEL=claude-opus-5-5
+OPENAI_ASK_MODEL=gpt-5.4-mini
 MAUZ_CLAUDE_CODE_PATH=           # only if claude/codex are not on PATH
 MAUZ_CODEX_PATH=
 ```
 
-## Browser extension (optional)
-
-The Mauz extension for Chrome and Edge lets Mauz read the page under the pointer: its
-address, text, the element you point at, and product details shops publish (price, brand,
-sizes, stock). Without it, Mauz still reads pages through the screen and UI Automation.
-
-1. Open `chrome://extensions` or `edge://extensions` and turn on Developer mode.
-2. Choose Load unpacked and pick `browser-extension/extension` in your clone. Settings >
-   Browser extension has a button that opens this folder.
-3. Keep Mauz running. It registers its browser helper for Chrome and Edge each time it
-   starts, and Settings shows the browser as connected within a minute.
-
-The extension reads nothing until you summon Mauz over that browser, and only from the
-active tab. Sites on Settings > Never capture (banking and payments by default) are not
-read or screenshotted.
-
-## Dictate
-
-Choose **Dictate** on the dial and speak. Press **Stop** (or Space) when you are done; the text appears in an editable box. Send it to **Ask** for an answer, or to **Send to agent** to hand it to your coding agent. Mauz uses what was under your pointer when the dial opened.
-
-Speech-to-text uses OpenAI when you have added an OpenAI API key, otherwise the built-in Windows speech recognizer (offline; install an English speech pack under **Settings → Time & language → Speech** if it is missing). On macOS without an OpenAI key, Dictate is not available yet.
-
-## OpenAI Login
-
-MauzAI can use OpenAI credentials in two ways:
-
-- Launch environment: start MauzAI with `OPENAI_API_KEY` set in the terminal.
-- In-app login: open Settings, then use the OpenAI controls to connect, reconnect, or disconnect. Saved keys are stored through Electron safe storage.
-
-Disconnect makes MauzAI ignore OpenAI credentials, including a launch-time `OPENAI_API_KEY`, until you reconnect. Reconnect re-enables a saved key or the launch key. To replace credentials, paste a new API key in Settings and save.
-
-Optional model settings can be copied from `.env.example` into your shell or local environment:
-
-```bash
-export OPENAI_API_KEY="sk-..."
-export OPENAI_ASK_MODEL="gpt-5.4-mini"
-```
-
 ## Send to agent
 
-Send to agent hands a task to a coding agent installed on your computer. Mauz writes the brief (your task plus the selected text, pointed element, page, and window it captured) and the screenshot to a temporary folder, then starts the agent in the folder you pick.
+Send to agent hands a task to a coding agent installed on your computer. Mauz writes the brief (your task plus the selected text, pointed element, page, and window it captured) and the screenshot to a temporary folder (`%TEMP%\mauz-handoff` on Windows), then starts the agent in the folder you pick. Mauz deletes the folder after a day.
 
-On Windows, when the agent's desktop app is installed, the task starts as a new thread in that app, in the background. No terminal opens, no window appears, and focus stays where it was. Open the agent's app to follow the thread.
+Choose the agent in **Settings → Task agent**. **Automatic** uses the first one installed, in the order Hermes, Claude Code, Codex. Set the default from the environment with `MAUZ_TASK_AGENT` (`auto`, `hermes`, `claude-code`, or `codex`).
 
-- **Hermes:** Mauz runs the Hermes CLI hidden, as a one-off run. The Hermes app reads from the same local service, so the thread appears in its sidebar as a normal visible thread.
-- **Claude:** Mauz runs Claude Code headless in your folder, then hands the session to Claude desktop. Claude desktop gets a startup flag that keeps its window hidden, and the session appears in its Code list.
-- **Codex:** Mauz creates the thread with your task queued on it, then sends a "wake" link that makes the Codex app run it. That link never shows the Codex window.
+**Windows, agent's desktop app installed:** the task starts as a new thread in that app, in the background. No terminal opens, no window appears, and focus stays where it was. Open the app to follow the thread. If the app is closed, it starts hidden in the tray.
 
-If Claude or Codex is closed, it starts hidden in the tray and runs the task. If an agent's desktop app isn't installed, and on macOS, Mauz opens the agent in a new terminal window instead (Windows Terminal or PowerShell on Windows, Terminal on macOS):
+**Otherwise, and on macOS:** the agent opens in a new terminal window (Windows Terminal or PowerShell on Windows, Terminal on macOS):
 
 | Agent       | Terminal command                                                      |
 | ----------- | --------------------------------------------------------------------- |
@@ -140,98 +85,54 @@ If Claude or Codex is closed, it starts hidden in the tray and runs the task. If
 
 Mauz does not monitor the agent, approve its actions, or show its results. Each agent applies its own permissions:
 
-- **Claude:** a background run can't stop to ask you, so it may edit files in the chosen folder. Anything else that needs approval, such as shell commands not already allowed, is refused rather than asked.
-- **Codex:** the thread uses the Codex app's own defaults (for example "ask before acting" with a read-only sandbox). Any approval prompt waits in that thread in the app.
-- **Hermes:** dangerous commands are refused by default in one-off runs. Mauz does not pass Hermes' auto-approve flag.
+- **Claude:** a background run can't stop to ask you, so it may edit files in the chosen folder. Anything else that needs approval, such as shell commands not already allowed, is refused.
+- **Codex:** the thread uses the Codex app's own defaults (for example "ask before acting" with a read-only sandbox). Approval prompts wait in that thread.
+- **Hermes:** dangerous commands are refused in one-off runs. Mauz does not pass Hermes' auto-approve flag.
 
-Good to know:
+The folder picker lists the folder you last used with that agent, then the folders the agent has worked in, then the **Default work folder** from Settings (your home folder if empty). **Browse** picks any other folder. When you point at VS Code, Cursor, or Windsurf, Mauz preselects the folder whose name appears in the window title.
 
-- Claude desktop picks up the session as soon as Claude Code starts writing it. If you reply in Claude desktop while the background run is still going, both write to the same session. If the Claude window happens to be open, it may switch to the new session, but it won't come to the front.
-- The Codex wake link and Claude's hidden-startup flag are undocumented parts of those apps, so an app update could break them.
-- If an agent doesn't start, its output is in `agent.log` next to the brief in `%TEMP%\mauz-handoff`.
+If an agent doesn't start, its output is in `agent.log` next to the brief. The Codex wake link and Claude's hidden-startup flag are undocumented parts of those apps, so an app update could break them.
 
-How it works in detail: [docs/superpowers/specs/2026-11-05-send-to-agent-desktop-handoff-design.md](docs/superpowers/specs/2026-11-05-send-to-agent-desktop-handoff-design.md).
+## Dictate
 
-Choose the agent under **Settings → Task agent**. **Automatic** uses the first one installed, in the order Hermes, Claude Code, Codex. Mauz looks for each CLI on your PATH and in its usual install folders.
+Choose **Dictate** on the dial and speak. Press **Stop** (or Space) when you are done; the text appears in an editable box. Send it to **Ask** or **Send to agent**. Mauz uses what was under your pointer when the dial opened.
 
-The folder picker lists the folder you last used with that agent, then the folders the agent has worked in (Claude Code's project list, Codex's session history, Hermes projects), then the **Default work folder** from Settings (your home folder if empty). **Browse** picks any other folder. When you point at VS Code, Cursor, or Windsurf, Mauz preselects the folder whose name appears in the window title.
+Speech-to-text uses OpenAI when you have an OpenAI API key, otherwise the built-in Windows speech recognizer (offline; install an English speech pack under **Settings → Time & language → Speech** if it is missing). On macOS without an OpenAI key, Dictate is not available yet.
 
-Set the default agent from the environment with:
+## Browser extension (optional)
 
-```bash
-export MAUZ_TASK_AGENT="hermes"   # auto, hermes, claude-code, or codex
-```
+The Mauz extension for Chrome and Edge lets Mauz read the page under the pointer: its address, text, the element you point at, and product details shops publish (price, brand, sizes, stock). Without it, Mauz still reads pages through the screen and UI Automation.
 
-## macOS Permissions
+1. Open `chrome://extensions` or `edge://extensions` and turn on Developer mode.
+2. Choose **Load unpacked** and pick `browser-extension/extension` in your clone. **Settings → Browser extension** has a button that opens this folder.
+3. Keep Mauz running. It registers its browser helper each time it starts, and Settings shows the browser as connected within a minute.
 
-MauzAI works best with these permissions:
+The extension reads nothing until you summon Mauz over that browser, and only from the active tab. Sites on **Settings → Never capture** (banking and payments by default) are not read or screenshotted.
 
-- Accessibility: required for native mouse-shake activation.
-- Screen Recording: required when Ask, Send to agent, or Dictate captures screen context.
-- Microphone: required for Dictate.
+## macOS permissions
 
-Open System Settings, then Privacy & Security, and grant permissions to MauzAI, Electron, or the built local app depending on how you launch it.
+Open System Settings → Privacy & Security and grant:
 
-### After updating or reinstalling
+- **Accessibility:** enable MauzInputAgent (mouse shake and selected text).
+- **Screen Recording:** enable MauzAI (screenshots).
+- **Microphone:** enable MauzAI (Dictate).
 
-MauzAI is ad-hoc signed, so every rebuild changes the code hash and macOS silently drops previously granted permissions. After updating or reinstalling the app, re-grant the following in **System Settings → Privacy & Security**:
+MauzAI is ad-hoc signed, so every rebuild changes its code hash and macOS silently drops the permissions. Re-grant them after each update or reinstall. If you granted them to Electron during development, macOS asks again for the packaged app.
 
-- **Accessibility** — enable MauzInputAgent (required for mouse-shake).
-- **Screen Recording** — enable MauzAI (required for screen context).
-
-## Run Locally
-
-Start the desktop app:
+## Development
 
 ```bash
-pnpm dev
+pnpm dev          # run the desktop app
+pnpm check        # format, env, secrets, typecheck, test, build
 ```
 
-The desktop app launches its local API with an internal random token. If you run the API package directly
-for development, set a local token first:
+The desktop app starts its local API with a random internal token. To run the API package alone, set a token first:
 
 ```bash
 export MAUZ_LOCAL_API_TOKEN="$(uuidgen)"
 pnpm --filter @mauzai/api dev
 ```
 
-`MAUZ_API_ALLOW_UNAUTHENTICATED=true` is only for isolated local debugging without credentials.
+`MAUZ_API_ALLOW_UNAUTHENTICATED=true` is only for isolated debugging.
 
-Useful controls:
-
-- Mouse shake opens the Mauz menu when native input is enabled.
-- Command Shift M (Ctrl+Shift+M on Windows) opens the Mauz menu when the dev hotkey is enabled.
-- The centre of the dial and the tray's Open settings open Settings.
-- Settings lets you save a replacement OpenAI key, clear the saved key, choose models, and tune activation.
-
-## Verify
-
-Run the standard checks:
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-The full repo check is:
-
-```bash
-pnpm check
-```
-
-## Update or stop the macOS app
-
-After pulling updates, rerun the installer:
-
-```bash
-./install-macos.sh
-```
-
-Stop MauzAI without reinstalling:
-
-```bash
-pnpm stop:mac
-```
-
-If permissions were previously granted to Electron during development, macOS may ask again for the packaged MauzAI app.
+Stop the macOS app without reinstalling with `pnpm stop:mac`.
