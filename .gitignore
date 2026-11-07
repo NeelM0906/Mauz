@@ -8,3 +8,6 @@ coverage/
 .local-backups/
 native/macos/MauzInputAgent/MauzInputAgent
 native/macos/MauzInputAgent/MauzInputAgent.app/
+
+# Local design specs and plans
+docs/superpowers/
