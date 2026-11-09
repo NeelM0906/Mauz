@@ -49,6 +49,15 @@ const MAX_THREAD_TITLE = 60;
 // Windows Store package family names of the desktop apps.
 const CLAUDE_PACKAGE_FAMILY = "Claude_pzs8sxrjxfjjc";
 const CODEX_PACKAGE_FAMILY = "OpenAI.Codex_2p2nqsd0c76g0";
+// The values `claude --permission-mode` accepts.
+const CLAUDE_PERMISSION_MODES = new Set([
+  "acceptEdits",
+  "auto",
+  "bypassPermissions",
+  "dontAsk",
+  "manual",
+  "plan"
+]);
 
 type DesktopHandoff = {
   folder: string;
@@ -520,9 +529,8 @@ export class TaskAgentLauncher {
         "-p",
         "--session-id",
         sessionId,
-        // Headless runs cannot ask, so let it edit files in the folder; other tools stay denied.
         "--permission-mode",
-        "acceptEdits",
+        this.claudePermissionMode(handoff.folder),
         // The screenshot sits outside the project folder.
         "--add-dir",
         handoff.handoffDirectory,
@@ -540,6 +548,36 @@ export class TaskAgentLauncher {
 
     const followUp = this.importClaudeSession(sessionId).finally(() => this.followUps.delete(followUp));
     this.followUps.add(followUp);
+  }
+
+  /**
+   * The mode the user picked for this folder in Claude desktop, else Claude Code's default mode,
+   * else auto: a headless run cannot ask, so manual mode would deny every command.
+   */
+  claudePermissionMode(folder: string): string {
+    // shortcut: reads Claude desktop's undocumented preference key; update it if the app renames it.
+    const desktopConfig = readJson(
+      this.path.join(
+        this.env.LOCALAPPDATA ?? "",
+        "Claude-Data",
+        CLAUDE_PACKAGE_FAMILY.toLowerCase(),
+        "claude_desktop_config.json"
+      )
+    ) as { preferences?: { epitaxyPrefs?: Record<string, unknown> } } | null;
+    const key = this.folderKey(folder);
+    const desktopMode = Object.entries(desktopConfig?.preferences?.epitaxyPrefs ?? {})
+      .filter(([name]) => name.startsWith("epitaxy-folder-permission-mode-v2."))
+      .flatMap(([, folders]) => Object.entries((folders ?? {}) as Record<string, unknown>))
+      .find(([path]) => this.folderKey(path) === key)?.[1];
+    const cliSettings = readJson(this.path.join(this.home, ".claude", "settings.json")) as {
+      permissions?: { defaultMode?: unknown };
+    } | null;
+
+    return (
+      [desktopMode, cliSettings?.permissions?.defaultMode].find(
+        (mode): mode is string => typeof mode === "string" && CLAUDE_PERMISSION_MODES.has(mode)
+      ) ?? "auto"
+    );
   }
 
   /** The app can only import the session once Claude Code has written its transcript. */
@@ -797,6 +835,14 @@ function listNames(directory: string): string[] {
     return readdirSync(directory);
   } catch {
     return [];
+  }
+}
+
+function readJson(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch {
+    return null;
   }
 }
 

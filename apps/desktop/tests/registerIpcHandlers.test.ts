@@ -307,7 +307,7 @@ describe("registerIpcHandlers", () => {
     });
   });
 
-  it("launches the agent and remembers the folder for next time", async () => {
+  it("launches the agent and remembers the agent and folder for next time", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
@@ -317,7 +317,10 @@ describe("registerIpcHandlers", () => {
 
     await expect(handler(createInvokeEvent(), request)).resolves.toEqual({ agentLabel: "Hermes" });
     expect(options.taskAgents.launcher.launch).toHaveBeenCalledWith(request);
-    expect(options.updateSettings).toHaveBeenCalledWith({ taskAgentFolders: { hermes: "C:/work/mauz" } });
+    expect(options.updateSettings).toHaveBeenCalledWith({
+      taskAgent: "hermes",
+      taskAgentFolders: { hermes: "C:/work/mauz" }
+    });
   });
 });
 

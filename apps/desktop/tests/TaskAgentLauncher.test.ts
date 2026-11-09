@@ -268,7 +268,7 @@ describe("TaskAgentLauncher", () => {
         "--session-id",
         sessionId,
         "--permission-mode",
-        "acceptEdits",
+        "auto",
         "--add-dir",
         handoff,
         "--output-format",
@@ -281,6 +281,44 @@ describe("TaskAgentLauncher", () => {
         ["--startup", `claude://resume?session=${sessionId}`],
         expect.anything()
       );
+    }
+  );
+
+  it.runIf(process.platform === "win32")(
+    "runs Claude Code in the mode the user picked for the folder, else Claude Code's default, else auto",
+    () => {
+      const home = createHome();
+      const localAppData = join(home, "local");
+      const launcher = new TaskAgentLauncher({
+        platform: "win32",
+        env: { PATH: "", LOCALAPPDATA: localAppData },
+        homeDirectory: home
+      });
+
+      expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("auto");
+
+      mkdirSync(join(home, ".claude"));
+      writeFileSync(
+        join(home, ".claude", "settings.json"),
+        JSON.stringify({ permissions: { defaultMode: "acceptEdits" } })
+      );
+      expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("acceptEdits");
+
+      const desktopData = join(localAppData, "Claude-Data", "claude_pzs8sxrjxfjjc");
+      mkdirSync(desktopData, { recursive: true });
+      writeFileSync(
+        join(desktopData, "claude_desktop_config.json"),
+        JSON.stringify({
+          preferences: {
+            epitaxyPrefs: {
+              "epitaxy-folder-permission-mode-v2.account-1": { "C:\\Work\\Mauz": "bypassPermissions" },
+              "epitaxy-folder-permission-mode-v2.account-2": { "C:\\work\\other": "nonsense" }
+            }
+          }
+        })
+      );
+      expect(launcher.claudePermissionMode("C:/work/mauz/")).toBe("bypassPermissions");
+      expect(launcher.claudePermissionMode("C:\\work\\other")).toBe("acceptEdits");
     }
   );
 
