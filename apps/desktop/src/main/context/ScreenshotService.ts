@@ -340,7 +340,7 @@ function growAround(rect: Bounds, min: Size): Bounds {
 
   return {
     x: rect.x - (width - rect.width) / 2,
-    y: rect.y - (height - rect.height) / 2,
+    y: rect.y - (height - rect.height),
     width,
     height
   };
