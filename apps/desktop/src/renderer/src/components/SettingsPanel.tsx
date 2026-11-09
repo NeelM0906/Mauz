@@ -2,11 +2,8 @@ import {
   ArrowLeft,
   Bot,
   Check,
-  Cpu,
   FolderOpen,
   Globe,
-  KeyRound,
-  Lock,
   MousePointerClick,
   RefreshCw,
   Save,
@@ -16,7 +13,7 @@ import {
   Trash2,
   Zap
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   AiProviderId,
   AiProviderPreference,
@@ -69,24 +66,6 @@ const AI_PROVIDER_OPTIONS: Array<{ value: AiProviderPreference; label: string }>
   { value: "auto", label: "Automatic (whichever is set up)" },
   ...AI_PROVIDER_CHOICES
 ];
-const ASK_MODEL_OPTIONS = ["gpt-5.5", "gpt-5.4-mini", "gpt-5.4", "gpt-5.4-nano"];
-const UPCOMING_PROVIDER_OPTIONS = [
-  {
-    name: "z.ai",
-    status: "coming soon",
-    description: "Provider integration planned."
-  },
-  {
-    name: "MiniMax",
-    status: "coming soon",
-    description: "Provider integration planned."
-  },
-  {
-    name: "Kimi",
-    status: "coming soon",
-    description: "Provider integration planned."
-  }
-] as const;
 
 const FALLBACK_TASK_AGENTS: TaskAgentStatus[] = [
   { id: "hermes", label: "Hermes", installed: true },
@@ -115,7 +94,6 @@ export function SettingsPanel(): React.JSX.Element {
   >({});
   const [providerActionBusy, setProviderActionBusy] = useState(false);
   const [providerActionError, setProviderActionError] = useState<string | null>(null);
-  const openAiApiKeyInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadProvidersStatus = useCallback(async (refresh: boolean): Promise<void> => {
     setProvidersLoading(true);
@@ -268,80 +246,6 @@ export function SettingsPanel(): React.JSX.Element {
     setDraft((current) => (current === null ? current : { ...current, [key]: value }));
   };
 
-  const focusOpenAiApiKeyInput = (): void => {
-    requestAnimationFrame(() => {
-      openAiApiKeyInputRef.current?.focus();
-    });
-  };
-
-  const handleOpenAiReconnect = async (): Promise<void> => {
-    if (draft === null) {
-      return;
-    }
-
-    if (draft.apiKeyConfigured && !draft.openAiAuthDisconnected) {
-      setSettingsMessage("Paste a new OpenAI API key, then Save to reconnect.");
-      focusOpenAiApiKeyInput();
-      return;
-    }
-
-    setSaving(true);
-    setSettingsMessage(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({
-        openAiAuthDisconnected: false
-      });
-
-      setSettings(nextSettings);
-      setDraft(nextSettings);
-      setOpenAiApiKeyDraft("");
-      setClearSavedOpenAiApiKey(false);
-
-      if (nextSettings.apiKeyConfigured) {
-        setSettingsMessage(getOpenAiReconnectMessage(nextSettings));
-      } else {
-        setSettingsMessage("Enter an OpenAI API key, then Save.");
-        focusOpenAiApiKeyInput();
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not reconnect OpenAI.";
-
-      setSettingsMessage(message);
-      setStatus(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleOpenAiDisconnect = async (): Promise<void> => {
-    if (draft === null) {
-      return;
-    }
-
-    setSaving(true);
-    setSettingsMessage(null);
-
-    try {
-      const nextSettings = await mauzClient.updateSettings({
-        openAiAuthDisconnected: true
-      });
-
-      setSettings(nextSettings);
-      setDraft(nextSettings);
-      setOpenAiApiKeyDraft("");
-      setClearSavedOpenAiApiKey(false);
-      setSettingsMessage("OpenAI disconnected. Reconnect here or from the Mauz menu.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not disconnect OpenAI.";
-
-      setSettingsMessage(message);
-      setStatus(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleSave = async (): Promise<void> => {
     if (draft === null) {
       return;
@@ -441,59 +345,61 @@ export function SettingsPanel(): React.JSX.Element {
                   : "Provider status unavailable."}
               </p>
             ) : (
-              providersStatus.providers.map((provider) => {
-                const subscription = isSubscriptionProvider(provider.id) ? provider.id : null;
-                const connectState = subscription === null ? undefined : connectStates[subscription];
+              providersStatus.providers
+                .filter((provider) => isSubscriptionProvider(provider.id))
+                .map((provider) => {
+                  const subscription = isSubscriptionProvider(provider.id) ? provider.id : null;
+                  const connectState = subscription === null ? undefined : connectStates[subscription];
 
-                return (
-                  <div
-                    className="auth-provider-card"
-                    data-status={provider.available ? "active" : "missing"}
-                    key={provider.id}
-                  >
-                    <div>
-                      <strong>{provider.label}</strong>
-                      <span>
-                        {connectState?.phase === "failed" && connectState.message !== null
-                          ? connectState.message
-                          : `${provider.detail} Model: ${provider.model}.`}
-                      </span>
-                    </div>
-                    <div className="provider-side">
-                      <span className="provider-status">
-                        {provider.id === providersStatus.activeProviderId ? (
-                          <>
-                            <Check aria-hidden="true" size={12} />
-                            In use
-                          </>
-                        ) : provider.available ? (
-                          "Ready"
-                        ) : isConnecting(connectState) ? (
-                          "Connecting"
-                        ) : (
-                          "Not set up"
-                        )}
-                      </span>
-                      {subscription !== null ? (
-                        <SubscriptionButton
-                          provider={{ ...provider, id: subscription }}
+                  return (
+                    <div
+                      className="auth-provider-card"
+                      data-status={provider.available ? "active" : "missing"}
+                      key={provider.id}
+                    >
+                      <div>
+                        <strong>{provider.label}</strong>
+                        <span>
+                          {connectState?.phase === "failed" && connectState.message !== null
+                            ? connectState.message
+                            : `${provider.detail} Model: ${provider.model}.`}
+                        </span>
+                      </div>
+                      <div className="provider-side">
+                        <span className="provider-status">
+                          {provider.id === providersStatus.activeProviderId ? (
+                            <>
+                              <Check aria-hidden="true" size={12} />
+                              In use
+                            </>
+                          ) : provider.available ? (
+                            "Ready"
+                          ) : isConnecting(connectState) ? (
+                            "Connecting"
+                          ) : (
+                            "Not set up"
+                          )}
+                        </span>
+                        {subscription !== null ? (
+                          <SubscriptionButton
+                            provider={{ ...provider, id: subscription }}
+                            state={connectState}
+                            busy={providerActionBusy}
+                            onConnect={() => void connectSubscription(subscription)}
+                            onDisconnect={() => void disconnectSubscription(subscription)}
+                          />
+                        ) : null}
+                      </div>
+                      {connectState !== undefined && isConnecting(connectState) ? (
+                        <SubscriptionSignIn
+                          label={provider.id === "claude-code" ? "Claude Code" : "Codex"}
                           state={connectState}
-                          busy={providerActionBusy}
-                          onConnect={() => void connectSubscription(subscription)}
-                          onDisconnect={() => void disconnectSubscription(subscription)}
+                          onCancel={() => cancelSubscriptionConnect(connectState)}
                         />
                       ) : null}
                     </div>
-                    {connectState !== undefined && isConnecting(connectState) ? (
-                      <SubscriptionSignIn
-                        label={provider.id === "claude-code" ? "Claude Code" : "Codex"}
-                        state={connectState}
-                        onCancel={() => cancelSubscriptionConnect(connectState)}
-                      />
-                    ) : null}
-                  </div>
-                );
-              })
+                  );
+                })
             )}
             {providerActionError !== null ? (
               <p className="subscription-error">{providerActionError}</p>
@@ -547,74 +453,12 @@ export function SettingsPanel(): React.JSX.Element {
               </button>
             </div>
           ) : null}
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-label">
-            <KeyRound aria-hidden="true" size={15} />
-            <span>OpenAI API key</span>
-          </div>
-          <div className="auth-provider-list" aria-label="Model provider login options">
-            <div className="auth-provider-card" data-status={getOpenAiAuthState(draft)} key="OpenAI login">
-              <div>
-                <strong>OpenAI login</strong>
-                <span>{getOpenAiProviderDescription(draft)}</span>
-              </div>
-              <div className="provider-side">
-                <span className="provider-status">
-                  {draft.apiKeyConfigured ? (
-                    <>
-                      <Check aria-hidden="true" size={12} />
-                      Connected
-                    </>
-                  ) : (
-                    <>
-                      <Lock aria-hidden="true" size={12} />
-                      {draft.openAiAuthDisconnected ? "Disconnected" : "Missing key"}
-                    </>
-                  )}
-                </span>
-                <div className="provider-auth-actions">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={saving}
-                    onClick={() => void handleOpenAiReconnect()}
-                  >
-                    <KeyRound aria-hidden="true" size={11} />
-                    <span>{getOpenAiAuthActionLabel(draft)}</span>
-                  </button>
-                  {draft.apiKeyConfigured ? (
-                    <button
-                      type="button"
-                      className="danger-button"
-                      disabled={saving}
-                      onClick={() => void handleOpenAiDisconnect()}
-                    >
-                      <Lock aria-hidden="true" size={11} />
-                      <span>Disconnect</span>
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-            {UPCOMING_PROVIDER_OPTIONS.map((provider) => (
-              <div className="auth-provider-card" data-status={provider.status} key={provider.name}>
-                <div>
-                  <strong>{provider.name}</strong>
-                  <span>{provider.description}</span>
-                </div>
-                <span className="provider-status">{provider.status}</span>
-              </div>
-            ))}
-          </div>
           <label className="settings-field api-key-field">
-            <span>API key</span>
+            <span>OpenAI API key</span>
             <input
-              ref={openAiApiKeyInputRef}
               type="password"
               value={openAiApiKeyDraft}
-              placeholder={draft.apiKeyConfigured ? "Configured - enter new key to reconnect" : "sk-..."}
+              placeholder={draft.apiKeyConfigured ? "Configured - enter a new key to replace" : "sk-..."}
               autoComplete="off"
               spellCheck={false}
               onChange={(event) => {
@@ -624,34 +468,23 @@ export function SettingsPanel(): React.JSX.Element {
               }}
             />
           </label>
-          <div className="settings-inline-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={saving || clearSavedOpenAiApiKey}
-              onClick={() => {
-                setOpenAiApiKeyDraft("");
-                setClearSavedOpenAiApiKey(true);
-                setSettingsMessage("Saved OpenAI key will be cleared on Save.");
-              }}
-            >
-              <Trash2 aria-hidden="true" size={12} />
-              <span>{clearSavedOpenAiApiKey ? "Marked clear" : "Clear saved key"}</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-label">
-            <Cpu aria-hidden="true" size={15} />
-            <span>Models</span>
-          </div>
-          <SettingsSelect
-            label="Ask"
-            value={draft.askModel}
-            options={ASK_MODEL_OPTIONS}
-            onChange={(askModel) => updateDraft("askModel", askModel)}
-          />
+          {draft.apiKeyConfigured ? (
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={saving || clearSavedOpenAiApiKey}
+                onClick={() => {
+                  setOpenAiApiKeyDraft("");
+                  setClearSavedOpenAiApiKey(true);
+                  setSettingsMessage("Saved OpenAI key will be cleared on Save.");
+                }}
+              >
+                <Trash2 aria-hidden="true" size={12} />
+                <span>{clearSavedOpenAiApiKey ? "Marked clear" : "Clear saved key"}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
 
         <div className="settings-section">
@@ -832,50 +665,6 @@ function getBrowserExtensionMessage(status: BrowserExtensionStatus | null): stri
     : "Not available: Mauz could not register its browser helper.";
 }
 
-function getOpenAiAuthState(settings: MauzSettings): "active" | "disconnected" | "missing" {
-  if (settings.apiKeyConfigured) {
-    return "active";
-  }
-
-  return settings.openAiAuthDisconnected ? "disconnected" : "missing";
-}
-
-function getOpenAiProviderDescription(settings: MauzSettings): string {
-  if (settings.openAiAuthDisconnected) {
-    return "OpenAI is disconnected. Reconnect to use a saved or launch key.";
-  }
-
-  if (settings.openAiCredentialSource === "saved") {
-    return "Using the encrypted saved API key. Reconnect anytime with a new key.";
-  }
-
-  if (settings.openAiCredentialSource === "environment") {
-    return "Using the launch environment key. Save a key here to reconnect without restarting.";
-  }
-
-  return "Connect with an OpenAI API key without restarting Mauz.";
-}
-
-function getOpenAiAuthActionLabel(settings: MauzSettings): string {
-  if (settings.apiKeyConfigured || settings.openAiAuthDisconnected) {
-    return "Reconnect";
-  }
-
-  return "Connect";
-}
-
-function getOpenAiReconnectMessage(settings: MauzSettings): string {
-  if (settings.openAiCredentialSource === "saved") {
-    return "OpenAI reconnected with the saved key.";
-  }
-
-  if (settings.openAiCredentialSource === "environment") {
-    return "OpenAI reconnected with the launch key.";
-  }
-
-  return "OpenAI reconnected.";
-}
-
 function SettingsHeader({ onBack }: { onBack(): Promise<void> }): React.JSX.Element {
   return (
     <header className="settings-header">
@@ -895,33 +684,6 @@ function SettingsHeader({ onBack }: { onBack(): Promise<void> }): React.JSX.Elem
         </div>
       </div>
     </header>
-  );
-}
-
-function SettingsSelect({
-  label,
-  value,
-  options,
-  onChange
-}: {
-  label: string;
-  value: string;
-  options: readonly string[];
-  onChange(value: string): void;
-}): React.JSX.Element {
-  const selectOptions = options.includes(value) ? options : [value, ...options];
-
-  return (
-    <label className="settings-field">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {selectOptions.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }
 
