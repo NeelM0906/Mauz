@@ -3,10 +3,13 @@ import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
-/** Shrinks the popover to the menu size, then shows the menu. */
+/** Shrinks the popover to the menu size, then shows the menu, even if the resize failed. */
 export async function goBackToMenu(): Promise<void> {
-  await mauz().menu.showMenu();
-  useMauzStore.getState().backToMenu();
+  try {
+    await mauz().menu.showMenu();
+  } finally {
+    useMauzStore.getState().backToMenu();
+  }
 }
 
 /** Header of the Ask, Send to agent and Dictate panels. `onLeave` runs before Back and Close. */
