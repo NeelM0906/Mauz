@@ -527,6 +527,90 @@ branch in `toCliError` is gone (row 17); new tests for the Codex and Claude fail
 `onPayload` and `settings.update`; `CLAUDE.md` names the CLI failure helpers. Left for row 25: the wide
 exports `ProcessTimeoutError`, `CollectedOutput`, and the test-only `CLAUDE_CLI`, `describeCodexFailure`.
 
+### Phase 5 (2026-11-10, base `dc00913`)
+
+Rows 22, 25, 26, 27 and the three section 4 items are done, one commit each. Row 23 is skipped (below).
+The end-of-phase review has not run and the phase is not ticked. Gates after each commit: typecheck,
+tests, lint; `corepack pnpm -r build` passes at the end. After the phase: api 70 passed, desktop 188
+passed.
+
+**Row 22.** The finding is correct. A script listed every class, attribute selector and `--variable` in
+`styles.css` and searched the TSX, TS and `index.html` for each (class names built from template strings
+were checked by hand; there are none). Deleted: `.provider-auth-actions` (3 rules); `data-expanded` on
+`.lens-panel` (3 rules; no element sets it); `.settings-panel[data-chrome="desktop"]`;
+`.bubble[data-size="sm"]` (2 rules); `[data-status="disconnected"]` on `.auth-provider-card` (2 rules) and
+`.bubble-auth-dot` (the cards set only `active`/`missing`, the dot only `connected`/`missing`); and the
+variables `--accent-agent*` (4), `--accent-yolo`, `--ok-bg`, `--radius-card`, `--radius-control`,
+`--dur-slow`, light and dark. `--delay` has no definition on purpose: `MauzMenu` sets it inline.
+
+**Row 23: skipped.** The finding is correct (four hand-written splitters remain: `processRunner.ts`
+`onLines`, `WindowsContextHelper`, `MacInputAgentProvider`, `BrowserBridge`), but `node:readline` is not
+identical for any of them, checked on Node 24:
+
+- `readline` also ends a line at a lone `\r`; the splitters split only on `\n` and trim the `\r`.
+- `readline` re-emits an `error` of its input stream on the interface; with no listener, that is an
+  uncaught exception. The splitters ignore stream errors.
+- `WindowsContextHelper` never flushes a partial last line and passes empty lines on; `MacInputAgentProvider`
+  flushes on the child's `exit` (not stream `end`) and not while stopping, and accepts string chunks;
+  `BrowserBridge` limits the buffered length (`MAX_LINE_CHARS`) before a line ends.
+
+**Row 25.** Part confirmed; each item was checked.
+
+- `captureDisplayNear`: test-only. Deleted. Its tests now call `capturePointerContext` (same permission,
+  empty-source, empty-image and capture-size paths; the PNG and downscale tests use a thumbnail with no
+  `crop`, so the full-screen fallback runs). The JPEG test is gone: other tests already check the JPEG payload.
+- `ShakeDetectorResult.reason`: read by nothing, tests included. Deleted; `primaryAmplitude` stays.
+- `ActivationEvent.source` and `ActivationSource`: read only by two test lines. Deleted; the tests still
+  check the activation (and, for the macOS helper, its cursor).
+- Swift `--socket` transport: the app starts the helper with no arguments (`MacInputAgentProvider`), and no
+  script or document passes `--socket`. Deleted `EventOutput`, `getSocketPath`, `connectUnixSocket`; `emit`
+  writes to stdout and flushes as before. **Not compiled here** (no macOS): run `build.sh` on a Mac.
+- `export` dropped from 38 items that no other file imports: 36 found by a script over `apps/*/src` and
+  `apps/*/tests` (options types, constants, `signNonce`, `BROWSER_HOST_NAME`, `TASK_AGENTS`, ...), plus
+  `ProcessTimeoutError` and `CollectedOutput`. `packages/shared` was left as it is: its unused exports are
+  the contract (one type per schema).
+- Kept, test-only exports whose tests have no other way in: `CLAUDE_CLI`, `describeCodexFailure` and
+  `parseCodexOutput` (Codex has no injection point), and the pure functions `buildAgentArguments`,
+  `buildAgentEnvironment`, `buildHiddenStartCommand`, `buildPowerShellLauncher`, `buildShellLauncher`,
+  `threadTitle`, `buildHostManifest`, `buildWindowsLauncher`, `chooseSnapshot`, `parseSnapshotResult`,
+  `BROWSER_EXTENSION_ID`, `pickProvider`, `buildAnswerPrompt`, `buildContextText`, `encodeWav`,
+  `escapeBlockTags`, and the injection types `ScreenshotServiceDeps`, `WindowsContextSpawn`,
+  `WindowsCoordinateConverter`.
+
+**Row 26.** The finding is correct. `assertTrustedSender` now calls `isTrustedRendererUrl` from
+`WindowSecurity.ts`, the rule that navigation uses: a `file:` page, or the exact protocol, host and port
+of `ELECTRON_RENDERER_URL`. `registerIpcHandlers` takes `rendererUrl` (from `index.ts`). Navigation is
+unchanged. **Change in behaviour:** IPC no longer trusts other loopback ports or hosts (`localhost:9999`,
+`127.0.0.1` when the dev server is `localhost`), or any loopback page in a packaged build. New tests check
+these four cases against both IPC and `isTrustedRendererUrl`.
+
+**Row 27.** Done as moves. `agent/agentProcess.ts` now holds the agent start code (arguments, launcher
+scripts, `buildAgentEnvironment`, `startDetached`, `buildHiddenStartCommand`, `startHiddenProcess`,
+`findCodexAppExecutable`, the two option types); `TaskAgentLauncher.ts` is 736 lines. `context/
+windowsHelperScript.ts` holds `BOOTSTRAP_SCRIPT` and `HELPER_SCRIPT`; `WindowsContextHelper.ts` is 499
+lines. The text was moved by a script as exact slices, and a line-by-line comparison found only the new
+imports, `export` keywords and one Prettier rewrap. Test imports and `CLAUDE.md` are updated. The class
+itself was not split: its methods share state, and a split would need new interfaces.
+
+**Section 4.**
+
+- The launcher BOM is now `﻿`. It was the only U+FEFF in the source. The existing test checks the
+  three BOM bytes in `launch.ps1`.
+- The "Fix N:" labels are gone from `MacInputAgentProvider.ts` (Fix 2, Fix 3) and `main.swift` (Fix 1, 3,
+  4; same kind of label). The comment text stays.
+- `promisify(execFile)` in `AppleScriptRunner.ts`, `BrowserBridge.ts` `runRegCommand` and
+  `findCodexAppExecutable`. Same results: errors still reject (the `reg.exe` and `osascript` errors now
+  also carry `stdout`/`stderr` properties), and `findCodexAppExecutable` still returns `null` on any failure.
+
+**Problems found in other rows (not fixed):**
+
+- Row 22 leftovers in TSX: `LensPanel` still sets `data-empty` and `MauzMenu` sets `data-accent="agent"`;
+  no CSS reads either now.
+- `codexAppServer.ts` uses `createInterface({ input: child.stdout })` with no `error` listener on the
+  interface, so an error on Codex's stdout would be an uncaught exception in the main process.
+
+**Skipped in Phase 5:** row 23 (reasons above). Not checked: the Swift change compiles.
+
 ---
 
 # Audit
