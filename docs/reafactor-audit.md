@@ -446,6 +446,80 @@ uses `MAUZ_BROWSER_TOKEN` as its sample `MAUZ_` variable, as Phase 2 did.
 
 **Skipped in this session:** nothing from rows 8 to 13.
 
+#### Rows 14 to 20 (second session, base `7bf815f`)
+
+One commit each. The end-of-phase review has not run and the phase is not ticked. Gates after each
+commit: typecheck, tests, lint; `corepack pnpm -r build` before the row 20 commit. After row 20: api 51
+passed, desktop 182 passed.
+
+**Row 14.** The finding is correct. `openAiAuthDisconnected` is gone from `MauzSettingsSchema` (so from the
+type and the update schema), `SettingsService` (default, parse, update, `getRuntime`, the credential
+source, the "re-enable on a new key" line), the Settings OpenAI key field (the line Phase 3 marked),
+`buildSettingsUpdate`, and the test fixtures. Two tests that set the field are gone; a new test loads an old
+file with `openAiAuthDisconnected: true` (the zod object drops the unknown key) and checks that the
+environment key is used, as decision 3 accepts. `setup.md` lost the sentence "Disconnecting a provider in
+Settings makes Mauz ignore its key, including one from the environment", which described this field. An old
+file keeps the key until the next save, as with `installId`.
+
+**Row 15.** The finding is correct. `index.ts` and every test pass `helperPath`, so it is now required and
+`findDefaultHelperPath` (with its `dirname`, `resolve`, `fileURLToPath` imports) is gone.
+
+**Row 16.** Status was Reported. The finding is correct: the renderer reads only `answer` (LensPanel) and
+`text` (DictatePanel), ignores the `task.send` result, and reads `label`, `detail` and `model` of a provider
+status, never `kind`. `browser-extension` and `native` read none of them. Removed:
+
+- `AskMauzResponse.model` and `usage`, `toModelLabel`, and `AnswerResult.model` and `usage` with what filled
+  them: the Claude `init` model and `result` usage, the Codex `turn.completed` usage, the SDK `usage`.
+- `AiProviderStatus.kind`, `AiProviderKindSchema`, `AiProviderKind`, `PROVIDER_KINDS`.
+- `TalkTranscribeResponse.engine` and `TalkTranscriptionEngine`.
+- `TaskSendResponseSchema` and its type. `task.send` and `TaskAgentLauncher.launch` now return `void`.
+
+Tests changed in the same commit. One test title no longer says "reports the model".
+
+**Row 17.** Status was Reported. The finding is correct. `runAndCollect` takes an `onStdoutLine` callback
+(it uses `onLines`, which is no longer exported), and `ClaudeCodeProvider.runTurn` calls it. `processRunner.ts`
+has `describeCliFailure(cli, detail, exitCode)` and `toCliError(providerId, label, error)`; each provider has
+an `AnswerCli` constant (label, sign-in keywords, sign-in message). Codex strips "Reading prompt from
+stdin..." before it calls `describeCliFailure`.
+
+How it was checked:
+
+- Two new Claude tests (timeout kills the child and gives "Claude Code did not answer in time. Try again.";
+  start error, stderr usage limit, empty exit) passed on the old code first, then on the new code.
+- Codex has no injection point, so a temporary test (not committed) compared copies of the old
+  `describeCodexFailure`, `toCodexError` and `describeClaudeFailure` with the new functions: 13 error texts
+  times 4 exit codes, and 4 error kinds (message, `providerId`, `cause`). All were equal.
+- Codex keeps its timeout, kill and stdin path: only its two error functions changed.
+
+Small differences for Claude Code: the timeout error now has the `ProcessTimeoutError` as `cause` (not shown
+to the user); stderr is decoded with a `StringDecoder`, so a character split across two chunks is no longer
+broken; stdout is also kept as one string until the answer ends.
+
+**Row 18.** The finding is correct. `applySecretUpdate` as proposed; OpenAI is still applied before Anthropic,
+and the messages are the same. There was no test of the Anthropic key or of unavailable secure storage; two
+new tests cover them.
+
+**Row 19.** Precondition checked: `getStatus` and `prewarm` both built the list with
+`AUTO_PROVIDER_ORDER.map`, and the `pickProvider` test helper uses the same order. Now `listProviders` builds
+the list for both, `pickProvider` is the short form (its comment says the list must be in that order), and
+`readPreference` uses `AiProviderPreferenceSchema.catch("auto")`. Only change: `prewarm` now also reads
+`ANTHROPIC_ASK_MODEL` and `OPENAI_ASK_MODEL` for a `model` field it ignores.
+
+**Row 20.** The finding is correct. Three helpers: `invoke(channel)` (passes the arguments on as given, so
+a call with no payload still sends only the channel), `onSignal(channel)` and `onPayload(channel, schema)`.
+The 20 `as Promise<...>` casts are gone; `MauzBridge` types each member (`ipcRenderer.invoke` returns
+`Promise<any>`, so the casts were never checked). `settings.update` still parses with `MauzSettingsSchema`.
+`contextBridge.exposeInMainWorld("mauz", ...)` and the channel names are unchanged. A new preload test
+checks that an Ask delta that fails the schema is dropped.
+
+**Problems found in other rows (not fixed):**
+
+- Row 12 note: `ClaudeCodeProviderOptions.answerTimeoutMs` now has a test caller (the new timeout test).
+  `model` and `effort` still have none.
+- Row 25: `parseCodexOutput` is exported for its test only, as before.
+
+**Skipped in this session:** nothing from rows 14 to 20.
+
 ---
 
 # Audit
