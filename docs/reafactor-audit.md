@@ -1,26 +1,94 @@
-# Refactor audit
+# Mauz refactoring plan
 
-Date: 2026-11-10. Scope: the files at HEAD of `t3/architecture-code-audit`. Git history was not read.
+This file drives a multi-session refactor. Each Claude Code session does one phase, then stops.
+The full audit is below the plan. Row numbers refer to the table in section 2 of the audit.
+
+## Decisions
+
+The owner made these decisions on 2026-11-10.
+
+1. **Standalone API mode** (`pnpm --filter @mauzai/api dev`): **REMOVE.** There is no plan to run the API
+   in a different process. Do row 1 as written. Delete the loopback HTTP server, its routes, the token
+   and the port search. Remove the command from `setup.md`.
+2. **Browser preview of the renderer** (fake bridge in `mauzClient.ts`): **REMOVE.** Do not keep a
+   dev-only copy. The renderer runs only in Electron.
+3. **`openAiAuthDisconnected` and `installId`** (rows 13 and 14): **REMOVE.** Delete both fields from the
+   settings service, the shared types and schemas, the renderer and the tests. An old settings file
+   with `openAiAuthDisconnected: true` hides the environment key today. After removal, Mauz uses that
+   key again. This is accepted.
+
+Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
+
+## Rules for every session
+
+- Do only the phase that the owner gives you. If you find a problem in a different row, add it to
+  "Notes" below. Do not fix it.
+- The "After (proposed)" code blocks are untested. They show the intent; they are not patches. Line
+  numbers can be out of date, so find code by symbol name.
+- Before you change code for a row with the status **Reported** or **Part confirmed**, check the
+  finding yourself. If it is wrong, stop, write it in "Notes" and tell the owner.
+- Make one commit for each row: `refactor(row N): <summary>`. Defect fixes use `fix: <summary>`.
+- Do not add `Co-Authored-By` lines or tool attribution to commits.
+- After each row, typecheck, tests and lint must pass. Do not commit while they fail.
+- If a row changes a contract that tests check, update those tests in the same commit.
+- Do not change behaviour, except to fix the defects in the audit. Do not add features or dependencies.
+- If a row removes an item from "Known drift" in `CLAUDE.md`, or changes its layout tables, update
+  `CLAUDE.md` in the same commit.
+- At the end of the phase:
+  1. Start a new subagent that has not seen this work. Tell it to review `git diff <phase-start>..HEAD`
+     against the rows of this phase. It must report each change in behaviour, missing part and
+     leftover dead code.
+  2. Fix the items that you confirm.
+  3. Tick the phase below and add notes.
+  4. Commit this file and stop. Give a short summary that lists each item you skipped.
+
+## Phases
+
+- [ ] **Phase 0: baseline and defect tests**
+  - Install dependencies. Run typecheck, tests and lint. Record the commands that work in "Notes".
+    Fix only the items that prevent a green baseline.
+  - For each of the 5 defects in the "Probable defects" table, write a test that shows the defect.
+    Mark it skipped or todo if it fails now. If a test is not practical (Electron or UI), write exact
+    manual steps in "Notes". Record if each defect is confirmed.
+  - Do not refactor in this phase.
+- [ ] **Phase 1: shared foundations.** Row 2 (`z.infer`), then row 3 (one CLI search and one
+      environment cleaner). Row 3 fixes the CLI-path defect and the credential-list defect.
+- [ ] **Phase 2: Ask without HTTP.** Row 1. Use plan mode: show the plan and wait for approval before
+      you edit. This phase fixes the `.env` defect.
+- [ ] **Phase 3: renderer.** Rows 5 (fixes the late-answer defect), 4, 7, 24, 21, then 6. For row 6,
+      plan first and get approval. Check the stale-task-agent defect during rows 21 and 6.
+- [ ] **Phase 4: main process and API cleanup.** Rows 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.
+      Before you simplify `pickProvider` in row 19, check that both callers build the list in the auto
+      order.
+- [ ] **Phase 5 (optional): low impact.** Rows 22, 23, 25, 26, 27, and the items in section 4 of the
+      audit: write the byte-order mark as `﻿`, remove the "Fix 2" and "Fix 3" comments, use
+      `promisify(execFile)`.
+
+## Manual smoke test (owner, after each phase)
+
+- Ask: ask a question. The answer streams and completes.
+- Ask two times quickly: close the panel during a slow answer, open it again, ask again. No old answer
+  appears.
+- Ask with the key only in `.env`: Settings shows the key. A settings save keeps it.
+- Dictate: record, transcribe, send to a target.
+- Send to agent with Claude Code and with Codex: Mauz detects both and starts both.
+- Settings from the tray: it shows the current task agent. Save does not change it.
+
+## Notes
+
+_(Sessions add text here: baseline commands, defect confirmations, skipped items, wrong audit findings.)_
+
+---
+
+# Audit
+
+Date: 2026-11-10. Scope: the files at commit `c7fd5b9`. Git history was not read.
 
 This audit changed no source code. Nothing was compiled or run, because the dependencies were not
 installed. Each "After (proposed)" block is untested.
 
 In the tables, **Confirmed** means a second read or search confirmed the finding. **Reported** means the
 finding comes from one review pass with its search evidence.
-
-## Decisions
-
-These decisions are made. They apply to the rows below.
-
-1. **Remove the standalone API mode (row 1).** There is no plan to run the API in a different process.
-   Ask calls the answer providers as a function. Delete the loopback HTTP server, its routes, the token
-   and the port search. Remove `pnpm --filter @mauzai/api dev` from `setup.md`.
-2. **Remove the browser preview of the renderer (row 4).** Delete the fake bridge in `mauzClient.ts`.
-   The renderer runs only in Electron.
-3. **Remove `installId` and `openAiAuthDisconnected` (rows 13 and 14).** Delete both fields from the
-   settings service, the shared types and schemas, the renderer and the tests. An old settings file
-   with `openAiAuthDisconnected: true` hides the environment key today. After removal, Mauz uses that
-   key again.
 
 ## 1. Architecture fit
 
