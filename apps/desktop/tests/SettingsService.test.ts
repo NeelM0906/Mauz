@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -348,15 +348,17 @@ describe("SettingsService", () => {
 describe("known defects", () => {
   const originalCwd = process.cwd();
   const originalKey = process.env.OPENAI_API_KEY;
+  const folder = join(tmpdir(), `mauz-dotenv-test-${randomUUID()}`);
 
   afterEach(() => {
     process.chdir(originalCwd);
+    rmSync(folder, { recursive: true, force: true });
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
   });
 
   it.skip("sees a key that is only in .env, in the order bootstrap() starts services", async () => {
-    const folder = mkdtempSync(join(tmpdir(), "mauz-dotenv-test-"));
+    mkdirSync(folder);
     writeFileSync(join(folder, ".env"), "OPENAI_API_KEY=sk-dotenv\n");
     process.chdir(folder);
     delete process.env.OPENAI_API_KEY;

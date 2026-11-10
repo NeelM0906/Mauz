@@ -520,6 +520,17 @@ describe("known defects", () => {
     expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
   });
 
+  it.skip("finds Codex at MAUZ_CODEX_PATH, as Ask does", () => {
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/usr/bin", MAUZ_CODEX_PATH: "/opt/tools/codex" },
+      homeDirectory: "/Users/me",
+      pathExists: (path) => path === "/opt/tools/codex"
+    });
+
+    expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
+  });
+
   it.skip("finds Claude Code in ~/.claude/local, as Ask does", () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
