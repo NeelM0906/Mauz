@@ -52,7 +52,8 @@ to their source files. The desktop build bundles both packages from source.
 
 `registry.ts` selects one of four `AnswerProvider` implementations: `anthropicProvider`,
 `openaiProvider`, `claudeCodeProvider`, `codexProvider`. The two CLI providers use
-`cliCommand.ts` (find the binary, clean the environment) and `processRunner.ts` (spawn, collect output).
+`cliCommand.ts` (find the binary, clean the environment) and `processRunner.ts` (spawn, collect output,
+and turn a CLI failure into a user message with `describeCliFailure` and `toCliError`).
 
 ## Runtime flow
 
