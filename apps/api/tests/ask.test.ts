@@ -49,10 +49,20 @@ describe("answerAsk", () => {
     new NoAiProviderError(),
     new MissingOpenAIKeyError(),
     new AiProviderError("claude-code", "Claude Code is not signed in.")
-  ])("keeps the message of $name", async (error) => {
+  ])("keeps the message of $name as a plain Error", async (error) => {
     vi.mocked(askMauz).mockRejectedValue(error);
 
-    await expect(answerAsk(buildRequest())).rejects.toBe(error);
+    const thrown = await answerAsk(buildRequest()).catch((caught: unknown) => caught);
+
+    expect(String(thrown)).toBe(`Error: ${error.message}`);
+  });
+
+  it("hides a response that fails the response schema", async () => {
+    vi.mocked(askMauz).mockResolvedValue({ answer: 42 } as never);
+
+    await expect(answerAsk(buildRequest())).rejects.toThrow(
+      new Error("Ask Mauz failed while contacting the model.")
+    );
   });
 
   it("hides the message of any other error", async () => {

@@ -65,7 +65,8 @@ export async function answerAsk(
       error instanceof MissingOpenAIKeyError ||
       error instanceof AiProviderError
     ) {
-      throw error;
+      // A plain Error: Electron shows err.toString() in the renderer, so a class name would show too.
+      throw new Error(error.message);
     }
 
     throw new Error("Ask Mauz failed while contacting the model.");

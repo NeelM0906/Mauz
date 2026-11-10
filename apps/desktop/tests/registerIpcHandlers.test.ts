@@ -226,6 +226,18 @@ describe("registerIpcHandlers", () => {
     expect(event.sender.send).not.toHaveBeenCalled();
   });
 
+  it("passes no text callback for an Ask request without a requestId", async () => {
+    vi.mocked(answerAsk).mockResolvedValue({ answer: "done", model: "test" });
+    registerIpcHandlers(createOptions());
+    const event = createInvokeEvent();
+    const request = { question: "What is this?", context: createAskContext() };
+
+    await getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request);
+
+    expect(answerAsk).toHaveBeenLastCalledWith(request, undefined);
+    expect(event.sender.send).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid Ask payload without calling the provider", async () => {
     vi.mocked(answerAsk).mockClear();
     registerIpcHandlers(createOptions());
