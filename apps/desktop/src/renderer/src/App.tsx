@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { DictatePanel } from "./components/DictatePanel";
 import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
+import { goBackToMenu } from "./components/PanelHeader";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TaskPanel } from "./components/TaskPanel";
 import { mauz } from "./lib/mauzClient";
@@ -50,8 +51,7 @@ function App(): React.JSX.Element {
       if (state.mode === "menu") {
         void mauz().menu.close();
       } else {
-        void mauz().menu.showMenu();
-        state.backToMenu();
+        void goBackToMenu();
       }
     };
 

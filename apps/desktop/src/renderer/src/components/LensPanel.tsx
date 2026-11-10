@@ -1,20 +1,11 @@
-import {
-  AppWindow,
-  ArrowLeft,
-  Camera,
-  LoaderCircle,
-  ScanSearch,
-  Send,
-  TextCursorInput,
-  X
-} from "lucide-react";
+import { AppWindow, Camera, LoaderCircle, ScanSearch, Send, TextCursorInput } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { mauz } from "@renderer/lib/mauzClient";
 import { detectLensObject } from "@renderer/lib/lensObject";
 import { CaptureDetails } from "./CaptureDetails";
 import { useMauzStore } from "@renderer/state/useMauzStore";
-import { BrandLogo } from "./BrandLogo";
 import { FormattedAnswer } from "./FormattedAnswer";
+import { PanelHeader } from "./PanelHeader";
 
 const DEFAULT_QUESTION = "What is this, and what should I know about it?";
 
@@ -25,7 +16,7 @@ type AskState =
   | { status: "failed"; message: string };
 
 export function LensPanel(): React.JSX.Element {
-  const { currentContext, backToMenu, dictation, setDictation } = useMauzStore();
+  const { currentContext, dictation, setDictation } = useMauzStore();
 
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [question, setQuestion] = useState("");
@@ -40,11 +31,6 @@ export function LensPanel(): React.JSX.Element {
       }
     });
   }, []);
-
-  const handleBack = async (): Promise<void> => {
-    await mauz().menu.showMenu();
-    backToMenu();
-  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
@@ -101,31 +87,7 @@ export function LensPanel(): React.JSX.Element {
 
   return (
     <section className="lens-panel lens-task-panel" aria-label="Ask">
-      <header className="lens-header lens-task-header">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back to Mauz menu"
-          onClick={() => void handleBack()}
-        >
-          <ArrowLeft aria-hidden="true" size={16} />
-        </button>
-        <div className="panel-title">
-          <BrandLogo className="panel-title-logo" />
-          <div>
-            <h1 tabIndex={-1}>Ask</h1>
-            <p>{lensObject.label}</p>
-          </div>
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauz().menu.close()}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
-      </header>
+      <PanelHeader title="Ask" subtitle={lensObject.label} />
 
       <section className="lens-task-summary" aria-label="Current cursor context">
         <div className="lens-task-summary-icon">

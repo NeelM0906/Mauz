@@ -31,6 +31,7 @@ import { MAX_CAPTURE_BLOCKED_APPS, MAX_CAPTURE_BLOCKED_ENTRY_CHARS } from "@mauz
 import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
+import { goBackToMenu } from "./PanelHeader";
 import {
   isConnecting,
   isSubscriptionProvider,
@@ -74,7 +75,7 @@ const FALLBACK_TASK_AGENTS: TaskAgentStatus[] = [
 ];
 
 export function SettingsPanel(): React.JSX.Element {
-  const { settings, setSettings, setStatus, backToMenu } = useMauzStore();
+  const { settings, setSettings, setStatus } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
   // Edited as free text so typing a new line is not normalized away; parsed on Save.
   const [blockedAppsDraft, setBlockedAppsDraft] = useState(formatAppList(settings?.captureBlockedApps));
@@ -243,11 +244,6 @@ export function SettingsPanel(): React.JSX.Element {
     }
   };
 
-  const handleBack = async (): Promise<void> => {
-    await mauz().menu.showMenu();
-    backToMenu();
-  };
-
   const updateDraft = <Key extends keyof MauzSettings>(key: Key, value: MauzSettings[Key]): void => {
     setDraft((current) => (current === null ? current : { ...current, [key]: value }));
   };
@@ -313,7 +309,7 @@ export function SettingsPanel(): React.JSX.Element {
   if (draft === null) {
     return (
       <section className="settings-panel" aria-label="Mauz settings">
-        <SettingsHeader onBack={handleBack} />
+        <SettingsHeader />
         <p className="settings-message">Loading settings...</p>
       </section>
     );
@@ -321,7 +317,7 @@ export function SettingsPanel(): React.JSX.Element {
 
   return (
     <section className="settings-panel" aria-label="Mauz settings">
-      <SettingsHeader onBack={handleBack} />
+      <SettingsHeader />
 
       <div className="settings-content">
         <div className="settings-section">
@@ -671,14 +667,14 @@ function getBrowserExtensionMessage(status: BrowserExtensionStatus | null): stri
     : "Not available: Mauz could not register its browser helper.";
 }
 
-function SettingsHeader({ onBack }: { onBack(): Promise<void> }): React.JSX.Element {
+function SettingsHeader(): React.JSX.Element {
   return (
     <header className="settings-header">
       <button
         className="icon-button"
         type="button"
         aria-label="Back to Mauz menu"
-        onClick={() => void onBack()}
+        onClick={() => void goBackToMenu()}
       >
         <ArrowLeft aria-hidden="true" size={16} />
       </button>

@@ -1,19 +1,19 @@
-import { ArrowLeft, BriefcaseBusiness, FolderOpen, LoaderCircle, Send, X } from "lucide-react";
+import { BriefcaseBusiness, FolderOpen, LoaderCircle, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { TaskAgentId, TaskAgentStatus, TaskFolder } from "@mauzai/shared";
 import { detectLensObject } from "@renderer/lib/lensObject";
 import { mauz } from "@renderer/lib/mauzClient";
 import { findFolderForEditorWindow } from "@renderer/lib/taskFolders";
 import { useMauzStore } from "@renderer/state/useMauzStore";
-import { BrandLogo } from "./BrandLogo";
 import { CaptureDetails } from "./CaptureDetails";
+import { PanelHeader } from "./PanelHeader";
 
 /**
  * Send to agent: the task and what was on screen go to the user's coding agent, which opens
  * in its own window in the chosen folder. Mauz closes once the agent has started.
  */
 export function TaskPanel(): React.JSX.Element {
-  const { currentContext, backToMenu, dictation, setDictation } = useMauzStore();
+  const { currentContext, dictation, setDictation } = useMauzStore();
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [task, setTask] = useState("");
   const [agents, setAgents] = useState<TaskAgentStatus[] | null>(null);
@@ -87,11 +87,6 @@ export function TaskPanel(): React.JSX.Element {
     };
   }, [agentId, currentContext]);
 
-  const handleBack = async (): Promise<void> => {
-    await mauz().menu.showMenu();
-    backToMenu();
-  };
-
   const handleBrowse = async (): Promise<void> => {
     const picked = await mauz().task.pickFolder();
 
@@ -136,31 +131,7 @@ export function TaskPanel(): React.JSX.Element {
 
   return (
     <section className="lens-panel lens-task-panel task-panel" aria-label="Send to agent">
-      <header className="lens-header lens-task-header">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back to Mauz menu"
-          onClick={() => void handleBack()}
-        >
-          <ArrowLeft aria-hidden="true" size={16} />
-        </button>
-        <div className="panel-title">
-          <BrandLogo className="panel-title-logo" />
-          <div>
-            <h1 tabIndex={-1}>Send to agent</h1>
-            <p>{lensObject.label}</p>
-          </div>
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauz().menu.close()}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
-      </header>
+      <PanelHeader title="Send to agent" subtitle={lensObject.label} />
 
       <CaptureDetails context={currentContext} />
 
