@@ -5,7 +5,7 @@ import type { AiProviderStatus, AskMauzRequest } from "@mauzai/shared";
 import { AiProviderError, NoAiProviderError } from "../src/errors";
 import { askMauz, buildAnswerPrompt } from "../src/openai/askMauz";
 import { ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
-import { buildCliEnvironment, resolveCliCommand } from "../src/providers/cliCommand";
+import { buildCliEnvironment, getCliSearchDirectories, resolveCliCommand } from "../src/providers/cliCommand";
 import { parseCodexOutput } from "../src/providers/codexProvider";
 import type { ChildProcessLike, SpawnLike } from "../src/providers/processRunner";
 import { AnswerProviderRegistry, pickProvider } from "../src/providers/registry";
@@ -178,6 +178,27 @@ describe("resolveCliCommand", () => {
     expect(
       resolveCliCommand("codex", { platform: "linux", env: { PATH: "/usr/bin" }, pathExists: () => false })
     ).toBeNull();
+  });
+});
+
+describe("getCliSearchDirectories", () => {
+  it("lists each folder once and includes the Hermes folder on Windows", () => {
+    const directories = getCliSearchDirectories(
+      "win32",
+      {
+        PATH: "C:\\Users\\me\\.local\\bin;C:\\tools;C:\\tools",
+        APPDATA: "C:\\Users\\me\\AppData\\Roaming",
+        LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local"
+      },
+      "C:\\Users\\me"
+    );
+
+    expect(directories).toEqual([
+      "C:\\Users\\me\\.local\\bin",
+      "C:\\tools",
+      "C:\\Users\\me\\AppData\\Roaming\\npm",
+      "C:\\Users\\me\\AppData\\Local\\hermes\\bin"
+    ]);
   });
 });
 

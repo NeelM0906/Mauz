@@ -545,4 +545,16 @@ describe("known defects", () => {
   it("drops ANTHROPIC_AUTH_TOKEN, as the Ask CLI providers do", () => {
     expect(buildAgentEnvironment({ PATH: "p", ANTHROPIC_AUTH_TOKEN: "token" })).toEqual({ PATH: "p" });
   });
+
+  it("keeps a Windows .cmd set in MAUZ_CLAUDE_CODE_PATH as it is, for the terminal to run", () => {
+    const shim = "C:\\tools\\claude.cmd";
+    const launcher = new TaskAgentLauncher({
+      platform: "win32",
+      env: { PATH: "C:\\Windows", MAUZ_CLAUDE_CODE_PATH: shim },
+      homeDirectory: "C:\\Users\\me",
+      pathExists: (path) => path === shim
+    });
+
+    expect(launcher.findExecutable("claude")).toBe(shim);
+  });
 });

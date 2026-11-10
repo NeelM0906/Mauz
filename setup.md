@@ -63,7 +63,7 @@ MAUZ_CLAUDE_CODE_MODEL=sonnet    # any model or alias the claude CLI accepts
 MAUZ_CODEX_MODEL=                # empty uses Codex's default
 ANTHROPIC_ASK_MODEL=claude-opus-5-5
 OPENAI_ASK_MODEL=gpt-5.4-mini
-MAUZ_CLAUDE_CODE_PATH=           # only if claude/codex are not on PATH
+MAUZ_CLAUDE_CODE_PATH=           # only if claude/codex are not on PATH; Send to agent uses them too
 MAUZ_CODEX_PATH=
 ```
 
