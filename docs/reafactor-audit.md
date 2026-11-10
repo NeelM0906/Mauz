@@ -55,7 +55,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
       environment cleaner). Row 3 fixes the CLI-path defect and the credential-list defect.
 - [x] **Phase 2: Ask without HTTP.** (done 2026-11-10; see "Phase 2" in Notes) Row 1. Use plan mode: show the plan and wait for approval before
       you edit. This phase fixes the `.env` defect.
-- [ ] **Phase 3: renderer.** Rows 5 (fixes the late-answer defect), 4, 7, 24, 21, then 6. For row 6,
+- [x] **Phase 3: renderer.** (done 2026-11-10; see "Phase 3" in Notes) Rows 5 (fixes the late-answer defect), 4, 7, 24, 21, then 6. For row 6,
       plan first and get approval. Check the stale-task-agent defect during rows 21 and 6.
 - [ ] **Phase 4: main process and API cleanup.** Rows 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.
       Before you simplify `pickProvider` in row 19, check that both callers build the list in the auto
@@ -267,9 +267,9 @@ Left: `shutdownResources()` stays `async` (reason above).
 
 ### Phase 3 (2026-11-10, base `3404208`)
 
-Rows 5, 4, 7, 24, 21 and 6 are done, one commit each. The owner approved the row 6 plan before it was
-done. The end-of-phase review is not done yet, and the phase is not ticked. Gates after each row:
-typecheck, tests, lint. After row 6: api 49 passed, desktop 178 passed; `corepack pnpm -r build` passes.
+Rows 5, 4, 7, 24, 21 and 6 are done, one commit each, plus one review-fix commit each for rows 7 and 6.
+The owner approved the row 6 plan before it was done. Gates after each commit: typecheck, tests, lint,
+build. After the review fixes: api 49 passed, desktop 183 passed.
 The renderer has no DOM test setup, so the renderer changes were checked by typecheck and by reading.
 
 **Row 5.** The finding is correct. `askAnswer`, `askError`, `askLoading`, their three setters, and the
@@ -300,6 +300,9 @@ keeps its own markup, because its CSS is different (`settings-header`, no Close 
 
 - Change in behaviour: Escape in a panel now waits for `showMenu()` before the menu shows, as the Back
   buttons always did. Before, the menu showed at once.
+- Review fix: `goBackToMenu()` shows the menu in a `finally`, so a failed `showMenu()` no longer leaves
+  Back or Escape stuck in the panel. Before the split, Escape already did this, but the Back buttons
+  stayed in the panel. `goBackToMenu.test.ts` checks the order and the failure case.
 
 **Row 24.** Done as written: `STATUS_TEXT` in `DictatePanel`, `PANELS` in `App.tsx` (`MauzMode` is now
 exported from the store), and an `ANTHROPIC_ERROR_MESSAGES` table in `anthropicProvider.ts`. The generic
@@ -351,6 +354,17 @@ Two changes in behaviour, both approved by the owner:
 - When loading settings fails, the loading screen shows the error. Before, it stayed on "Loading
   settings..." and the error was never shown.
 
+Review fixes: the task-agent list and the extension status are loaded once when the panel mounts
+(`useLoadOnMount` in `SettingsPanel`), as before the split; the sections get them as props. Before this fix
+they loaded only after settings loaded. `parseAppList` and the `AiProviders` type are no longer exported.
+`settingsUpdate.test.ts` also checks both keys, the Anthropic clear, `openAiAuthDisconnected: true` and the
+list limits.
+
+Known gap (not fixed, older than this phase): if loading settings fails and the user opens Settings from
+the tray while Settings is still shown, nothing reloads. `reset()` sets `settings` to `null`, which it
+already is, so the load effect does not run again. Going back to the menu and opening Settings again
+loads them.
+
 **Problems found in other rows (not fixed):**
 
 - Row 14: the OpenAI key field's `onChange` still sets `openAiAuthDisconnected` to `false`
@@ -358,6 +372,11 @@ Two changes in behaviour, both approved by the owner:
 - Section 4: the `error instanceof Error ? error.message : "..."` pattern is still used in the renderer.
 
 **Skipped in Phase 3:** nothing from rows 5, 4, 7, 24, 21 and 6.
+
+**Review.** A separate agent reviewed the phase and found no bugs. Fixed from its list: Back and Escape
+return to the menu when `showMenu()` fails (row 7); the agent list and extension status load once per
+Settings panel (row 6); two dead exports; new tests for `goBackToMenu` and `buildSettingsUpdate`. Left: the
+known gap above (failed load, then a tray open while Settings is shown).
 
 ---
 
