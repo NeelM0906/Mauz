@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
-import { MacInputAgentEventSchema, type PermissionError } from "@mauzai/shared";
+import { MacInputAgentEventSchema } from "@mauzai/shared";
 import type { Readable } from "node:stream";
-import type { ActivationEvent, InputProvider, Unsubscribe } from "./InputProvider";
+import type { InputProvider, InputProviderCallbacks } from "./InputProvider";
 import { ShakeDetector, type ShakeDetectorResult } from "./ShakeDetector";
 
 type ChildProcessLike = {
@@ -48,8 +48,6 @@ const DEFAULT_RESTART_DELAY_MS = 750;
 const DEFAULT_PERMISSION_RETRY_DELAY_MS = 15_000;
 
 export class MacInputAgentProvider implements InputProvider {
-  private readonly activationListeners = new Set<(event: ActivationEvent) => void>();
-  private readonly permissionListeners = new Set<(error: PermissionError) => void>();
   private readonly detector: ShakeDetectorLike;
   private readonly maxRestarts: number;
   private readonly restartDelayMs: number;
@@ -66,7 +64,10 @@ export class MacInputAgentProvider implements InputProvider {
   private permissionFailure = false;
   private permissionRetryTimer: NodeJS.Timeout | null = null;
 
-  constructor(options: MacInputAgentProviderOptions = {}) {
+  constructor(
+    private readonly callbacks: InputProviderCallbacks,
+    options: MacInputAgentProviderOptions = {}
+  ) {
     this.detector = options.detector ?? new ShakeDetector();
     this.maxRestarts = options.maxRestarts ?? DEFAULT_MAX_RESTARTS;
     this.restartDelayMs = options.restartDelayMs ?? DEFAULT_RESTART_DELAY_MS;
@@ -96,7 +97,7 @@ export class MacInputAgentProvider implements InputProvider {
     }
 
     if (this.platform !== "darwin") {
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: "unknown",
         message: "Native mouse shake is only available on macOS."
       });
@@ -104,7 +105,7 @@ export class MacInputAgentProvider implements InputProvider {
     }
 
     if (!this.pathExists(this.helperPath)) {
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: "unknown",
         message: HELPER_NOT_FOUND_MESSAGE
       });
@@ -138,20 +139,6 @@ export class MacInputAgentProvider implements InputProvider {
     }
   }
 
-  onActivation(callback: (event: ActivationEvent) => void): Unsubscribe {
-    this.activationListeners.add(callback);
-    return () => {
-      this.activationListeners.delete(callback);
-    };
-  }
-
-  onPermissionError(callback: (error: PermissionError) => void): Unsubscribe {
-    this.permissionListeners.add(callback);
-    return () => {
-      this.permissionListeners.delete(callback);
-    };
-  }
-
   private startExecutableChild(env?: NodeJS.ProcessEnv): void {
     const child = this.spawnHelper(this.helperPath, [], env !== undefined ? { env } : undefined);
     this.child = child;
@@ -166,7 +153,7 @@ export class MacInputAgentProvider implements InputProvider {
       if (this.child === child) {
         this.child = null;
       }
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: "unknown",
         message: `Mauz could not start the native input helper: ${error.message}`
       });
@@ -230,7 +217,7 @@ export class MacInputAgentProvider implements InputProvider {
 
     if (parsedEvent.data.type === "permission_error") {
       this.permissionFailure = true;
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: parsedEvent.data.permission,
         message: parsedEvent.data.message || ACCESSIBILITY_PERMISSION_MESSAGE
       });
@@ -261,7 +248,7 @@ export class MacInputAgentProvider implements InputProvider {
     });
 
     if (result.activated) {
-      this.emitActivation({
+      this.callbacks.onActivation({
         source: "mouse-shake",
         cursor: {
           x: parsedEvent.data.x,
@@ -297,18 +284,6 @@ export class MacInputAgentProvider implements InputProvider {
         this.startExecutableChild({ ...process.env, MAUZ_AX_PROMPT: "0" });
       }
     }, this.permissionRetryDelayMs);
-  }
-
-  private emitActivation(event: ActivationEvent): void {
-    for (const listener of this.activationListeners) {
-      listener(event);
-    }
-  }
-
-  private emitPermissionError(error: PermissionError): void {
-    for (const listener of this.permissionListeners) {
-      listener(error);
-    }
   }
 }
 

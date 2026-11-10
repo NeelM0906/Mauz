@@ -32,7 +32,7 @@ import { ContextCollector } from "./context/ContextCollector";
 import { WindowsContextHelper } from "./context/WindowsContextHelper";
 import { CursorPollingInputProvider } from "./input/CursorPollingInputProvider";
 import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
-import type { InputProvider } from "./input/InputProvider";
+import type { InputProvider, InputProviderCallbacks } from "./input/InputProvider";
 import { MacInputAgentProvider } from "./input/MacInputAgentProvider";
 import { getShakeDetectorConfigForSensitivity, ShakeDetector } from "./input/ShakeDetector";
 import { TalkTranscriber } from "./talk/TalkTranscriber";
@@ -224,20 +224,31 @@ async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSett
 
 function createInputProviders(settings: MauzSettings): InputProvider[] {
   const providers: InputProvider[] = [];
+  const callbacks: InputProviderCallbacks = {
+    onActivation: (event) => {
+      void handleActivation(event.cursor);
+    },
+    onPermissionError: (error) => {
+      popover?.hide();
+      showPermissionError(error);
+    }
+  };
 
   if (settings.devHotkeyEnabled) {
-    providers.push(new DevHotkeyInputProvider());
+    providers.push(new DevHotkeyInputProvider(callbacks));
   }
 
   if (settings.nativeShakeEnabled) {
     const detector = new ShakeDetector(getShakeDetectorConfigForSensitivity(settings.shakeSensitivity));
 
     if (process.platform === "darwin") {
-      providers.push(new MacInputAgentProvider({ helperPath: getNativeInputAgentPath(), detector }));
+      providers.push(
+        new MacInputAgentProvider(callbacks, { helperPath: getNativeInputAgentPath(), detector })
+      );
     } else {
       // Windows and Linux: sample the cursor; no native helper or OS permission needed.
       providers.push(
-        new CursorPollingInputProvider({
+        new CursorPollingInputProvider(callbacks, {
           readCursor: () => screen.getCursorScreenPoint(),
           detector
         })
@@ -397,13 +408,6 @@ function startInputProviders(settings: MauzSettings): void {
   inputProviders = createInputProviders(settings);
 
   for (const provider of inputProviders) {
-    provider.onActivation((event) => {
-      void handleActivation(event.cursor);
-    });
-    provider.onPermissionError((error) => {
-      popover?.hide();
-      showPermissionError(error);
-    });
     provider.start();
   }
 }

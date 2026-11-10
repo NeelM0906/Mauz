@@ -23,11 +23,15 @@ function createDetector(result: ShakeDetectorResult = { activated: false }) {
   };
 }
 
+function createCallbacks() {
+  return { onActivation: vi.fn(), onPermissionError: vi.fn() };
+}
+
 describe("MacInputAgentProvider", () => {
   it("parses mouse_move JSON and feeds the shake detector", () => {
     const child = new FakeChildProcess();
     const detector = createDetector();
-    const provider = new MacInputAgentProvider({
+    const provider = new MacInputAgentProvider(createCallbacks(), {
       platform: "darwin",
       helperPath: "/tmp/MauzInputAgent",
       pathExists: () => true,
@@ -48,7 +52,7 @@ describe("MacInputAgentProvider", () => {
   it("ignores malformed JSON from the helper", () => {
     const child = new FakeChildProcess();
     const detector = createDetector();
-    const provider = new MacInputAgentProvider({
+    const provider = new MacInputAgentProvider(createCallbacks(), {
       platform: "darwin",
       helperPath: "/tmp/MauzInputAgent",
       pathExists: () => true,
@@ -65,21 +69,20 @@ describe("MacInputAgentProvider", () => {
 
   it("forwards permission_error events", () => {
     const child = new FakeChildProcess();
-    const provider = new MacInputAgentProvider({
+    const callbacks = createCallbacks();
+    const provider = new MacInputAgentProvider(callbacks, {
       platform: "darwin",
       helperPath: "/tmp/MauzInputAgent",
       pathExists: () => true,
       spawn: () => child
     });
-    const listener = vi.fn();
 
-    provider.onPermissionError(listener);
     provider.start();
     child.stdout.write(
       '{"type":"permission_error","permission":"accessibility","message":"Mauz needs Accessibility permission to detect the mouse shake."}\n'
     );
 
-    expect(listener).toHaveBeenCalledWith({
+    expect(callbacks.onPermissionError).toHaveBeenCalledWith({
       permission: "accessibility",
       message: "Mauz needs Accessibility permission to detect the mouse shake."
     });
@@ -87,20 +90,19 @@ describe("MacInputAgentProvider", () => {
 
   it("emits activation when the shake detector activates", () => {
     const child = new FakeChildProcess();
-    const provider = new MacInputAgentProvider({
+    const callbacks = createCallbacks();
+    const provider = new MacInputAgentProvider(callbacks, {
       platform: "darwin",
       helperPath: "/tmp/MauzInputAgent",
       pathExists: () => true,
       spawn: () => child,
       detector: createDetector({ activated: true })
     });
-    const listener = vi.fn();
 
-    provider.onActivation(listener);
     provider.start();
     child.stdout.write('{"type":"mouse_move","x":321,"y":654,"ts":1710000000000}\n');
 
-    expect(listener).toHaveBeenCalledWith({
+    expect(callbacks.onActivation).toHaveBeenCalledWith({
       source: "mouse-shake",
       cursor: {
         x: 321,
@@ -110,17 +112,16 @@ describe("MacInputAgentProvider", () => {
   });
 
   it("reports a friendly error when the helper binary is missing", () => {
-    const provider = new MacInputAgentProvider({
+    const callbacks = createCallbacks();
+    const provider = new MacInputAgentProvider(callbacks, {
       platform: "darwin",
       helperPath: "/missing/MauzInputAgent",
       pathExists: () => false
     });
-    const listener = vi.fn();
 
-    provider.onPermissionError(listener);
     provider.start();
 
-    expect(listener).toHaveBeenCalledWith({
+    expect(callbacks.onPermissionError).toHaveBeenCalledWith({
       permission: "unknown",
       message:
         "Mauz native input helper is not built. Run native/macos/MauzInputAgent/build.sh, then restart Mauz."
@@ -129,7 +130,7 @@ describe("MacInputAgentProvider", () => {
 
   it("kills the helper process on stop", () => {
     const child = new FakeChildProcess();
-    const provider = new MacInputAgentProvider({
+    const provider = new MacInputAgentProvider(createCallbacks(), {
       platform: "darwin",
       helperPath: "/tmp/MauzInputAgent",
       pathExists: () => true,
@@ -154,7 +155,7 @@ describe("MacInputAgentProvider", () => {
       const children = [new FakeChildProcess(), new FakeChildProcess(), new FakeChildProcess()];
       let spawnCount = 0;
 
-      const provider = new MacInputAgentProvider({
+      const provider = new MacInputAgentProvider(createCallbacks(), {
         platform: "darwin",
         helperPath: "/tmp/MauzInputAgent",
         pathExists: () => true,
@@ -194,7 +195,7 @@ describe("MacInputAgentProvider", () => {
       let spawnCount = 0;
       const spawnEnvs: Array<NodeJS.ProcessEnv | undefined> = [];
 
-      const provider = new MacInputAgentProvider({
+      const provider = new MacInputAgentProvider(createCallbacks(), {
         platform: "darwin",
         helperPath: "/tmp/MauzInputAgent",
         pathExists: () => true,
@@ -223,7 +224,7 @@ describe("MacInputAgentProvider", () => {
       const children = [new FakeChildProcess(), new FakeChildProcess(), new FakeChildProcess()];
       let spawnCount = 0;
 
-      const provider = new MacInputAgentProvider({
+      const provider = new MacInputAgentProvider(createCallbacks(), {
         platform: "darwin",
         helperPath: "/tmp/MauzInputAgent",
         pathExists: () => true,
@@ -258,7 +259,7 @@ describe("MacInputAgentProvider", () => {
       const children = [new FakeChildProcess()];
       let spawnCount = 0;
 
-      const provider = new MacInputAgentProvider({
+      const provider = new MacInputAgentProvider(createCallbacks(), {
         platform: "darwin",
         helperPath: "/tmp/MauzInputAgent",
         pathExists: () => true,

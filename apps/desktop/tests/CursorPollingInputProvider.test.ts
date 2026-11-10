@@ -13,20 +13,21 @@ function createHarness(path: Array<{ x: number; y: number }>) {
   let pending: ScheduledTick | null = null;
   const activations: ActivationEvent[] = [];
   const delays: number[] = [];
-  const provider = new CursorPollingInputProvider({
-    readCursor: () => path[Math.min(index++, path.length - 1)]!,
-    now: () => clock,
-    schedule: (callback, delayMs) => {
-      pending = { callback, delayMs };
-      delays.push(delayMs);
-      return pending;
-    },
-    cancel: () => {
-      pending = null;
+  const provider = new CursorPollingInputProvider(
+    { onActivation: (event) => activations.push(event) },
+    {
+      readCursor: () => path[Math.min(index++, path.length - 1)]!,
+      now: () => clock,
+      schedule: (callback, delayMs) => {
+        pending = { callback, delayMs };
+        delays.push(delayMs);
+        return pending;
+      },
+      cancel: () => {
+        pending = null;
+      }
     }
-  });
-
-  provider.onActivation((event) => activations.push(event));
+  );
 
   return {
     provider,

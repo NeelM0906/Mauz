@@ -1,5 +1,4 @@
-import type { PermissionError } from "@mauzai/shared";
-import type { ActivationEvent, InputProvider, Unsubscribe } from "./InputProvider";
+import type { InputProvider, InputProviderCallbacks } from "./InputProvider";
 import { ShakeDetector, type ShakeDetectorResult } from "./ShakeDetector";
 
 type Point = {
@@ -34,8 +33,6 @@ const DEFAULT_IDLE_AFTER_MS = 1_500;
  * OS permission, so it is the shake source on Windows and Linux.
  */
 export class CursorPollingInputProvider implements InputProvider {
-  private readonly activationListeners = new Set<(event: ActivationEvent) => void>();
-  private readonly permissionListeners = new Set<(error: PermissionError) => void>();
   private readonly readCursor: () => Point;
   private readonly detector: ShakeDetectorLike;
   private readonly now: () => number;
@@ -48,7 +45,10 @@ export class CursorPollingInputProvider implements InputProvider {
   private lastPoint: Point | null = null;
   private lastMovedAt = Number.NEGATIVE_INFINITY;
 
-  constructor(options: CursorPollingInputProviderOptions) {
+  constructor(
+    private readonly callbacks: Pick<InputProviderCallbacks, "onActivation">,
+    options: CursorPollingInputProviderOptions
+  ) {
     this.readCursor = options.readCursor;
     this.detector = options.detector ?? new ShakeDetector();
     this.now = options.now ?? Date.now;
@@ -76,20 +76,6 @@ export class CursorPollingInputProvider implements InputProvider {
 
     this.lastPoint = null;
     this.detector.reset();
-  }
-
-  onActivation(callback: (event: ActivationEvent) => void): Unsubscribe {
-    this.activationListeners.add(callback);
-    return () => {
-      this.activationListeners.delete(callback);
-    };
-  }
-
-  onPermissionError(callback: (error: PermissionError) => void): Unsubscribe {
-    this.permissionListeners.add(callback);
-    return () => {
-      this.permissionListeners.delete(callback);
-    };
   }
 
   private tick(): void {
@@ -125,9 +111,7 @@ export class CursorPollingInputProvider implements InputProvider {
     const result = this.detector.push({ x: point.x, y: point.y, ts });
 
     if (result.activated) {
-      for (const listener of this.activationListeners) {
-        listener({ source: "mouse-shake", cursor: { x: point.x, y: point.y } });
-      }
+      this.callbacks.onActivation({ source: "mouse-shake", cursor: { x: point.x, y: point.y } });
     }
   }
 }
