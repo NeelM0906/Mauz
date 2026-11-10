@@ -57,7 +57,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
       you edit. This phase fixes the `.env` defect.
 - [x] **Phase 3: renderer.** (done 2026-11-10; see "Phase 3" in Notes) Rows 5 (fixes the late-answer defect), 4, 7, 24, 21, then 6. For row 6,
       plan first and get approval. Check the stale-task-agent defect during rows 21 and 6.
-- [ ] **Phase 4: main process and API cleanup.** Rows 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.
+- [x] **Phase 4: main process and API cleanup.** (done 2026-11-10; see "Phase 4" in Notes) Rows 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.
       Before you simplify `pickProvider` in row 19, check that both callers build the list in the auto
       order.
 - [ ] **Phase 5 (optional): low impact.** Rows 22, 23, 25, 26, 27, and the items in section 4 of the
@@ -519,6 +519,13 @@ checks that an Ask delta that fails the schema is dropped.
 - Row 25: `parseCodexOutput` is exported for its test only, as before.
 
 **Skipped in this session:** nothing from rows 14 to 20.
+
+**Review.** A separate agent reviewed rows 8 to 20 and found no bugs. Fixed: preload no-payload calls again
+send only the channel and payload calls exactly one payload (row 20); the unreachable `AiProviderError`
+branch in `toCliError` is gone (row 17); new tests for the Codex and Claude failure texts
+(`describeCodexFailure` now holds the stdin-line strip), `MAUZ_AI_PROVIDER` parsing, and preload
+`onPayload` and `settings.update`; `CLAUDE.md` names the CLI failure helpers. Left for row 25: the wide
+exports `ProcessTimeoutError`, `CollectedOutput`, and the test-only `CLAUDE_CLI`, `describeCodexFailure`.
 
 ---
 
