@@ -61,7 +61,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
       Before you simplify `pickProvider` in row 19, check that both callers build the list in the auto
       order.
 - [ ] **Phase 5 (optional): low impact.** Rows 22, 23, 25, 26, 27, and the items in section 4 of the
-      audit: write the byte-order mark as `﻿`, remove the "Fix 2" and "Fix 3" comments, use
+      audit: write the byte-order mark as the escape for U+FEFF, remove the "Fix 2" and "Fix 3" comments, use
       `promisify(execFile)`.
 
 ## Manual smoke test (owner, after each phase)
