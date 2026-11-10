@@ -56,6 +56,19 @@ describe("preload bridge", () => {
     expect(electron.ipcRenderer.invoke).toHaveBeenCalledWith(IPC_CHANNELS.taskPickFolder);
   });
 
+  it("passes on an Ask delta only when it matches the schema", async () => {
+    await import("../src/preload/index");
+    const mauzApi = electron.getMauzApi() as MauzBridge;
+    const onDelta = vi.fn();
+
+    mauzApi.ask.onDelta(onDelta);
+    electron.emit(IPC_CHANNELS.askDelta, { requestId: "req-1", text: "partial" });
+    electron.emit(IPC_CHANNELS.askDelta, { text: 42 });
+
+    expect(onDelta).toHaveBeenCalledOnce();
+    expect(onDelta).toHaveBeenCalledWith({ requestId: "req-1", text: "partial" });
+  });
+
   it("tells the renderer when the popover is hidden and can unsubscribe", async () => {
     await import("../src/preload/index");
     const mauzApi = electron.getMauzApi() as MauzBridge;
