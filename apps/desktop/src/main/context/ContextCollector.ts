@@ -171,12 +171,13 @@ export class ContextCollector {
     // Read before the popover opens over the pointer.
     const readings = await this.captureReadings(cursor, metadata, foregroundPage);
 
-    this.activationSnapshot = withOptionalActivationFields({
-      ...metadata,
+    this.activationSnapshot = {
+      activeApp: metadata.activeApp,
+      activeWindow: metadata.activeWindow,
       cursor,
       selectedText,
       readings
-    });
+    };
   }
 
   private getPlatform(): Platform {
@@ -198,7 +199,7 @@ export class ContextCollector {
     const activeMetadata =
       activationSnapshot === null
         ? await this.captureActiveWindowMetadata()
-        : getActivationMetadata(activationSnapshot);
+        : { activeApp: activationSnapshot.activeApp, activeWindow: activationSnapshot.activeWindow };
     const cursor = activationSnapshot?.cursor ?? screen.getCursorScreenPoint();
     const basicContext = this.collectBasicContext(cursor);
     const selectedText = this.selectedTextService.capturesAtActivation
@@ -208,11 +209,12 @@ export class ContextCollector {
     const readings = activationSnapshot?.readings ?? (await this.captureReadings(cursor, activeMetadata));
 
     return {
-      context: withOptionalContextFields({
+      context: {
         ...basicContext,
-        ...activeMetadata,
-        selectedText
-      }),
+        activeApp: activeMetadata.activeApp,
+        activeWindow: activeMetadata.activeWindow,
+        selectedText: selectedText?.trim() ? selectedText : undefined
+      },
       readings
     };
   }
@@ -404,88 +406,15 @@ function mergePointerMetadata(
   target: PointerTarget | undefined,
   page: BrowserPage | undefined
 ): PointerContext {
-  const pointerContext: PointerContext = {
-    ...pointer
+  // The screenshot pointer has none of these fields, so an undefined value hides nothing.
+  return {
+    ...pointer,
+    activeApp: context.activeApp,
+    activeWindow: context.activeWindow,
+    selectedText: context.selectedText,
+    target,
+    page
   };
-
-  if (context.activeApp !== undefined) {
-    pointerContext.activeApp = context.activeApp;
-  }
-
-  if (context.activeWindow !== undefined) {
-    pointerContext.activeWindow = context.activeWindow;
-  }
-
-  if (context.selectedText !== undefined) {
-    pointerContext.selectedText = context.selectedText;
-  }
-
-  if (target !== undefined) {
-    pointerContext.target = target;
-  }
-
-  if (page !== undefined) {
-    pointerContext.page = page;
-  }
-
-  return pointerContext;
-}
-
-function getActivationMetadata(snapshot: ActivationSnapshot): ActiveWindowMetadata {
-  const metadata: ActiveWindowMetadata = {};
-
-  if (snapshot.activeApp !== undefined) {
-    metadata.activeApp = snapshot.activeApp;
-  }
-
-  if (snapshot.activeWindow !== undefined) {
-    metadata.activeWindow = snapshot.activeWindow;
-  }
-
-  return metadata;
-}
-
-function withOptionalContextFields(context: MauzDesktopContext): MauzDesktopContext {
-  const nextContext: MauzDesktopContext = {
-    timestamp: context.timestamp,
-    platform: context.platform,
-    cursor: context.cursor
-  };
-
-  if (context.activeApp !== undefined) {
-    nextContext.activeApp = context.activeApp;
-  }
-
-  if (context.activeWindow !== undefined) {
-    nextContext.activeWindow = context.activeWindow;
-  }
-
-  if (context.selectedText?.trim()) {
-    nextContext.selectedText = context.selectedText;
-  }
-
-  return nextContext;
-}
-
-function withOptionalActivationFields(snapshot: ActivationSnapshot): ActivationSnapshot {
-  const nextSnapshot: ActivationSnapshot = {
-    cursor: snapshot.cursor,
-    readings: snapshot.readings
-  };
-
-  if (snapshot.activeApp !== undefined) {
-    nextSnapshot.activeApp = snapshot.activeApp;
-  }
-
-  if (snapshot.activeWindow !== undefined) {
-    nextSnapshot.activeWindow = snapshot.activeWindow;
-  }
-
-  if (snapshot.selectedText?.trim()) {
-    nextSnapshot.selectedText = snapshot.selectedText;
-  }
-
-  return nextSnapshot;
 }
 
 function toScreenshotError(error: unknown): PermissionError {
