@@ -25,8 +25,11 @@ import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
 import type { TalkTranscriber } from "../talk/TalkTranscriber";
+import { isTrustedRendererUrl } from "../windows/WindowSecurity";
 
 type RegisterIpcHandlersOptions = {
+  /** The dev-server URL (`ELECTRON_RENDERER_URL`); without it only `file:` renderers are trusted. */
+  rendererUrl?: string | undefined;
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
   getSettings: () => Promise<MauzSettings>;
@@ -59,18 +62,21 @@ type RegisterIpcHandlersOptions = {
 };
 
 /**
- * Registers an invoke handler that first rejects untrusted senders. It replaces a handler from an
- * earlier call, so registering twice does not throw.
+ * Returns a function that registers an invoke handler which first rejects untrusted senders. It
+ * replaces a handler from an earlier call, so registering twice does not throw.
  */
-function handle(channel: string, listener: (event: IpcMainInvokeEvent, payload: unknown) => unknown): void {
-  ipcMain.removeHandler(channel);
-  ipcMain.handle(channel, async (event, payload: unknown) => {
-    assertTrustedSender(event);
-    return listener(event, payload);
-  });
+function createHandle(rendererUrl: string | undefined) {
+  return (channel: string, listener: (event: IpcMainInvokeEvent, payload: unknown) => unknown): void => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (event, payload: unknown) => {
+      assertTrustedSender(event, rendererUrl);
+      return listener(event, payload);
+    });
+  };
 }
 
 export function registerIpcHandlers({
+  rendererUrl,
   popover,
   contextCollector,
   getSettings,
@@ -82,6 +88,8 @@ export function registerIpcHandlers({
   openExternal,
   browserExtension
 }: RegisterIpcHandlersOptions): void {
+  const handle = createHandle(rendererUrl);
+
   handle(IPC_CHANNELS.menuShowMenu, () => {
     popover.resizeForMenu();
   });
@@ -252,37 +260,13 @@ export function registerIpcHandlers({
   });
 }
 
-function assertTrustedSender(event: IpcMainInvokeEvent | undefined): void {
+function assertTrustedSender(event: IpcMainInvokeEvent | undefined, rendererUrl: string | undefined): void {
   if (event === undefined) {
     throw new Error("Mauz rejected an IPC request without renderer metadata.");
   }
 
-  const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
-
-  try {
-    if (isTrustedRendererOrigin(new URL(frameUrl))) {
-      return;
-    }
-  } catch {
-    // Fall through to the generic rejection below.
+  // Same rule as navigation: a file: page, or the dev server's exact origin.
+  if (!isTrustedRendererUrl(event.senderFrame?.url ?? event.sender.getURL(), rendererUrl)) {
+    throw new Error("Mauz rejected an IPC request from an untrusted renderer.");
   }
-
-  throw new Error("Mauz rejected an IPC request from an untrusted renderer.");
-}
-
-function isTrustedRendererOrigin(url: URL): boolean {
-  if (url.protocol === "file:") {
-    return true;
-  }
-
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return false;
-  }
-
-  return (
-    url.hostname === "localhost" ||
-    url.hostname === "127.0.0.1" ||
-    url.hostname === "::1" ||
-    url.hostname === "[::1]"
-  );
 }

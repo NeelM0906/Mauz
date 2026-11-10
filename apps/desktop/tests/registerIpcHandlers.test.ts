@@ -22,6 +22,7 @@ import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { PopoverWindowController } from "../src/main/windows/PopoverWindowController";
+import { isTrustedRendererUrl } from "../src/main/windows/WindowSecurity";
 
 const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuShowMenu,
@@ -152,8 +153,8 @@ describe("registerIpcHandlers", () => {
     expect(options.contextCollector.collectForAsk).not.toHaveBeenCalled();
   });
 
-  it("accepts trusted loopback dev renderer origins", async () => {
-    const options = createOptions();
+  it("accepts the dev-server origin", async () => {
+    const options = { ...createOptions(), rendererUrl: "http://[::1]:5173/" };
 
     registerIpcHandlers(options);
 
@@ -163,6 +164,25 @@ describe("registerIpcHandlers", () => {
       taskAgent: "auto"
     });
     expect(options.getSettings).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["another loopback port", "http://localhost:5173/", "http://localhost:9999"],
+    ["another loopback host", "http://localhost:5173/", "http://127.0.0.1:5173"],
+    ["another protocol", "http://localhost:5173/", "https://localhost:5173"],
+    ["loopback without a dev server", undefined, "http://localhost:5173"]
+  ])("rejects %s, as navigation does", async (_name, rendererUrl, origin) => {
+    const options = { ...createOptions(), rendererUrl };
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await expect(handler(createInvokeEvent(origin))).rejects.toThrow(
+      "Mauz rejected an IPC request from an untrusted renderer."
+    );
+    expect(isTrustedRendererUrl(`${origin}/index.html`, rendererUrl)).toBe(false);
+    expect(options.getSettings).not.toHaveBeenCalled();
   });
 
   it("rejects renderer requests from non-local origins", async () => {

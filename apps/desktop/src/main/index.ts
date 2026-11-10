@@ -141,6 +141,7 @@ async function bootstrap(): Promise<void> {
   taskAgentLauncher.startHandoffCleanup();
 
   registerIpcHandlers({
+    rendererUrl,
     popover,
     contextCollector,
     getSettings: () => settingsService!.get(),
