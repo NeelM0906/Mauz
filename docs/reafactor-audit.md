@@ -51,7 +51,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
     Mark it skipped or todo if it fails now. If a test is not practical (Electron or UI), write exact
     manual steps in "Notes". Record if each defect is confirmed.
   - Do not refactor in this phase.
-- [ ] **Phase 1: shared foundations.** Row 2 (`z.infer`), then row 3 (one CLI search and one
+- [x] **Phase 1: shared foundations.** (done 2026-11-10; see "Phase 1" in Notes) Row 2 (`z.infer`), then row 3 (one CLI search and one
       environment cleaner). Row 3 fixes the CLI-path defect and the credential-list defect.
 - [ ] **Phase 2: Ask without HTTP.** Row 1. Use plan mode: show the plan and wait for approval before
       you edit. This phase fixes the `.env` defect.
@@ -147,7 +147,7 @@ Cause: `onOpenSettings` calls `reset()`, which keeps `settings`. `SettingsPanel`
 **Skipped in Phase 0:** none of the plan items. Not done: a test that loads the real `bootstrap()`
 (it needs Electron).
 
-### Phase 1 (2026-11-10, base `9767caa`; not yet reviewed or ticked)
+### Phase 1 (2026-11-10, base `9767caa`)
 
 Gates after each row: typecheck, tests (api 47 passed; desktop 176 passed, 1 skipped, which is
 `dotenvStartOrder.test.ts` for row 1), lint. `corepack pnpm -r build` passes.
@@ -196,8 +196,12 @@ For later phases:
 - Rows 12 and 17: the default `resolveCommand` with `fallbackNodeRuntime` is written three times
   (`claudeCodeProvider.ts`, `codexProvider.ts`, `registry.ts` `resolveCliCommandForMauz`).
 
-**Skipped in Phase 1:** nothing from rows 2 and 3. The end-of-phase review and the phase tick were left to
-a separate agent, as the owner asked.
+**Skipped in Phase 1:** nothing from rows 2 and 3.
+
+**Review.** A separate agent reviewed the phase and found no bugs. Fixed from its list: `setup.md` says the
+`MAUZ_*_PATH` overrides also apply to Send to agent; CLAUDE.md has the `z.infer` rule; new tests for a
+Windows `.cmd` override in Send to agent, repeated and Hermes search folders, and a Codex sign-in that
+gets no credentials. Left for Phase 2: the launcher's import of `@mauzai/api/server`.
 
 ---
 
