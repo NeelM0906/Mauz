@@ -138,7 +138,6 @@ export function MauzMenu(): React.JSX.Element {
         <button
           type="button"
           className="bubble"
-          data-accent="agent"
           data-pending={pendingAction === "task" ? "true" : undefined}
           aria-label="Send to agent"
           disabled={pendingAction !== null}

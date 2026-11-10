@@ -147,12 +147,7 @@ export function LensPanel(): React.JSX.Element {
         </button>
       </form>
 
-      <div
-        className="answer-area lens-answer-area"
-        data-empty={ask.status === "idle" || askLoading}
-        aria-live="polite"
-        aria-busy={askLoading}
-      >
+      <div className="answer-area lens-answer-area" aria-live="polite" aria-busy={askLoading}>
         {ask.status === "failed" ? <p className="ask-error">{ask.message}</p> : null}
         {ask.status === "loading" && ask.partial !== null ? <FormattedAnswer answer={ask.partial} /> : null}
         {ask.status === "answered" ? <FormattedAnswer answer={ask.answer} /> : null}
