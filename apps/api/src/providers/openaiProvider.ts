@@ -61,11 +61,7 @@ export class OpenAiApiProvider implements AnswerProvider {
 
     options.onText?.(text);
 
-    return {
-      text,
-      model,
-      ...(response.usage === undefined ? {} : { usage: response.usage })
-    };
+    return { text };
   }
 }
 

@@ -16,7 +16,6 @@ import {
   TaskFoldersRequestSchema,
   TaskFoldersResponseSchema,
   TaskSendRequestSchema,
-  TaskSendResponseSchema,
   type BrowserExtensionStatus,
   type MauzSettings,
   type MauzSettingsUpdate
@@ -176,7 +175,7 @@ export function registerIpcHandlers({
 
   handle(IPC_CHANNELS.taskSend, async (_event, payload) => {
     const request = TaskSendRequestSchema.parse(payload);
-    const result = await taskAgents.launcher.launch(request);
+    await taskAgents.launcher.launch(request);
     const settings = await getSettings();
 
     // The agent picked here becomes the default, so the next task goes to it too.
@@ -184,8 +183,6 @@ export function registerIpcHandlers({
       taskAgent: request.agentId,
       taskAgentFolders: { ...settings.taskAgentFolders, [request.agentId]: request.folder }
     });
-
-    return TaskSendResponseSchema.parse(result);
   });
 
   handle(IPC_CHANNELS.providersStatus, async (_event, payload) => {

@@ -50,12 +50,10 @@ const FolderPathSchema = z.string().trim().max(1_000);
 
 export const AiProviderIdSchema = z.enum(["claude-code", "codex", "anthropic", "openai"]);
 export const AiProviderPreferenceSchema = z.union([z.literal("auto"), AiProviderIdSchema]);
-export const AiProviderKindSchema = z.enum(["subscription", "api-key"]);
 
 export const AiProviderStatusSchema = z.object({
   id: AiProviderIdSchema,
   label: z.string().min(1).max(80),
-  kind: AiProviderKindSchema,
   available: z.boolean(),
   detail: z.string().max(200),
   model: z.string().max(MAX_MODEL_NAME_CHARS)
@@ -105,8 +103,7 @@ export const TalkTranscribeRequestSchema = z.object({
 });
 
 export const TalkTranscribeResponseSchema = z.object({
-  text: z.string().max(MAX_QUESTION_CHARS),
-  engine: z.enum(["openai", "windows"])
+  text: z.string().max(MAX_QUESTION_CHARS)
 });
 
 export const AskAnswerDeltaSchema = z.object({
@@ -339,9 +336,7 @@ export const AskMauzRequestSchema = z.object({
 });
 
 export const AskMauzResponseSchema = z.object({
-  answer: z.string(),
-  model: ModelNameSchema,
-  usage: z.unknown().optional()
+  answer: z.string()
 });
 
 export const TaskAgentStatusSchema = z.object({
@@ -373,5 +368,3 @@ export const TaskSendRequestSchema = z.object({
   task: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
   context: MauzDesktopContextSchema
 });
-
-export const TaskSendResponseSchema = z.object({ agentLabel: z.string().min(1).max(80) });

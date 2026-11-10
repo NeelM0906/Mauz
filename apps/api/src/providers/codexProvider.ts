@@ -79,11 +79,7 @@ export class CodexProvider implements AnswerProvider {
 
       if (parsed.text.length > 0) {
         options.onText?.(parsed.text);
-        return {
-          text: parsed.text,
-          model: model === undefined ? "codex" : `codex:${model}`,
-          ...(parsed.usage === undefined ? {} : { usage: parsed.usage })
-        };
+        return { text: parsed.text };
       }
 
       throw new AiProviderError(
@@ -128,13 +124,11 @@ function buildCodexPrompt(prompt: AnswerPrompt): string {
 type ParsedCodexOutput = {
   text: string;
   error?: string | undefined;
-  usage?: unknown;
 };
 
 export function parseCodexOutput(stdout: string): ParsedCodexOutput {
   let text = "";
   let error: string | undefined;
-  let usage: unknown;
 
   for (const rawLine of stdout.split(/\r?\n/)) {
     const event = parseJsonLine(rawLine.trim());
@@ -147,14 +141,12 @@ export function parseCodexOutput(stdout: string): ParsedCodexOutput {
 
     if (event.type === "item.completed" && item?.type === "agent_message" && typeof item.text === "string") {
       text = item.text.trim();
-    } else if (event.type === "turn.completed") {
-      usage = event.usage;
     } else if (event.type === "turn.failed" || event.type === "error") {
       error = readCodexErrorMessage(event) ?? error;
     }
   }
 
-  return { text, error, usage };
+  return { text, error };
 }
 
 function readCodexErrorMessage(event: Record<string, unknown>): string | undefined {

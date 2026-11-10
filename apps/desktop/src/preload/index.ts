@@ -21,8 +21,7 @@ import type {
   TaskAgentsResponse,
   TaskFoldersRequest,
   TaskFoldersResponse,
-  TaskSendRequest,
-  TaskSendResponse
+  TaskSendRequest
 } from "@mauzai/shared";
 import {
   AskAnswerDeltaSchema,
@@ -132,8 +131,7 @@ const mauzApi: MauzBridge = {
     folders: (payload: TaskFoldersRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.taskFolders, payload) as Promise<TaskFoldersResponse>,
     pickFolder: () => ipcRenderer.invoke(IPC_CHANNELS.taskPickFolder) as Promise<string | null>,
-    send: (payload: TaskSendRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.taskSend, payload) as Promise<TaskSendResponse>
+    send: (payload: TaskSendRequest) => ipcRenderer.invoke(IPC_CHANNELS.taskSend, payload) as Promise<void>
   }
 };
 

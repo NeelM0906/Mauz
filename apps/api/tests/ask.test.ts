@@ -22,7 +22,7 @@ function buildRequest(): AskMauzRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(askMauz).mockResolvedValue({ answer: "via-askMauz", model: "gpt-mock" });
+  vi.mocked(askMauz).mockResolvedValue({ answer: "via-askMauz" });
 });
 
 describe("answerAsk", () => {
@@ -37,7 +37,7 @@ describe("answerAsk", () => {
     const onText = vi.fn();
     vi.mocked(askMauz).mockImplementation(async (_request, options) => {
       options?.onText?.("partial");
-      return { answer: "done", model: "gpt-mock" };
+      return { answer: "done" };
     });
 
     await answerAsk(buildRequest(), onText);

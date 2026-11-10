@@ -81,7 +81,7 @@ export class AnthropicApiProvider implements AnswerProvider {
         throw new AiProviderError(this.id, "Claude returned an empty answer.");
       }
 
-      return { text, model: message.model, usage: message.usage };
+      return { text };
     } catch (error) {
       throw toAnthropicError(this.id, error);
     }

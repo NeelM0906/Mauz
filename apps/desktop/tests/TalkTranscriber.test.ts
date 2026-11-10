@@ -14,8 +14,7 @@ describe("TalkTranscriber", () => {
     });
 
     await expect(transcriber.transcribe(REQUEST)).resolves.toEqual({
-      text: "hello from openai",
-      engine: "openai"
+      text: "hello from openai"
     });
     expect(transcribeWav).not.toHaveBeenCalled();
   });
@@ -33,8 +32,7 @@ describe("TalkTranscriber", () => {
     });
 
     await expect(transcriber.transcribe(REQUEST)).resolves.toEqual({
-      text: "hello from windows",
-      engine: "windows"
+      text: "hello from windows"
     });
     const writtenPath = writeTempFile.mock.calls[0]?.[0];
     expect(transcribeWav).toHaveBeenCalledWith(writtenPath);

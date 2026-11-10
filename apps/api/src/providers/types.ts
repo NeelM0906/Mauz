@@ -18,8 +18,6 @@ export type AnswerOptions = {
 
 export type AnswerResult = {
   text: string;
-  model: string;
-  usage?: unknown;
 };
 
 export interface AnswerProvider {
@@ -30,4 +28,4 @@ export interface AnswerProvider {
   dispose?(): void;
 }
 
-export type ProviderDetection = Omit<AiProviderStatus, "id" | "label" | "kind">;
+export type ProviderDetection = Omit<AiProviderStatus, "id" | "label">;

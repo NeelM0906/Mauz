@@ -221,7 +221,7 @@ describe("buildCliEnvironment", () => {
 });
 
 describe("ClaudeCodeProvider", () => {
-  it("sends images over stream-json, streams text, and reports the model", async () => {
+  it("sends images over stream-json and streams text", async () => {
     const children: FakeChild[] = [];
     const spawn: SpawnLike = vi.fn(() => {
       const child = createFakeChild(() => ({ stdoutLines: claudeSuccessLines("It is a chart.") }));
@@ -238,7 +238,7 @@ describe("ClaudeCodeProvider", () => {
 
     const result = await provider.answer(PROMPT, { onText: (text) => updates.push(text) });
 
-    expect(result).toMatchObject({ text: "It is a chart.", model: "claude-sonnet-5-5" });
+    expect(result).toEqual({ text: "It is a chart." });
     expect(updates).toEqual(["It i", "It is a chart."]);
     const [, args, options] = (spawn as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(args).toEqual(expect.arrayContaining(["-p", "--tools", "", "--no-session-persistence"]));
@@ -299,7 +299,7 @@ describe("ClaudeCodeProvider", () => {
 });
 
 describe("parseCodexOutput", () => {
-  it("reads the final agent message and usage from JSONL events", () => {
+  it("reads the final agent message from JSONL events", () => {
     const parsed = parseCodexOutput(
       [
         JSON.stringify({ type: "thread.started", thread_id: "t1" }),
@@ -308,7 +308,7 @@ describe("parseCodexOutput", () => {
       ].join("\n")
     );
 
-    expect(parsed).toEqual({ text: "It says 4817.", error: undefined, usage: { output_tokens: 6 } });
+    expect(parsed).toEqual({ text: "It says 4817.", error: undefined });
   });
 
   it("captures turn failures", () => {
@@ -326,7 +326,6 @@ describe("pickProvider", () => {
     (["anthropic", "openai", "claude-code", "codex"] as const).map((id) => ({
       id,
       label: id,
-      kind: id === "anthropic" || id === "openai" ? "api-key" : "subscription",
       available: available[id] === true,
       detail: "",
       model: "m"
@@ -412,7 +411,7 @@ describe("askMauz provider routing", () => {
   it("answers through the resolved provider and streams text", async () => {
     const answer = vi.fn<AnswerProvider["answer"]>(async (_prompt, options) => {
       options?.onText?.("Partial");
-      return { text: "Final answer", model: "claude-sonnet-5-5" };
+      return { text: "Final answer" };
     });
     const onText = vi.fn();
 
@@ -421,7 +420,7 @@ describe("askMauz provider routing", () => {
       onText
     });
 
-    expect(response).toEqual({ answer: "Final answer", model: "claude-sonnet-5-5" });
+    expect(response).toEqual({ answer: "Final answer" });
     expect(onText).toHaveBeenCalledWith("Partial");
   });
 

@@ -1,7 +1,6 @@
 import type { z } from "zod";
 import type {
   AiProviderIdSchema,
-  AiProviderKindSchema,
   AiProviderPreferenceSchema,
   AiProvidersStatusRequestSchema,
   AiProvidersStatusResponseSchema,
@@ -41,8 +40,7 @@ import type {
   TaskFolderSchema,
   TaskFoldersRequestSchema,
   TaskFoldersResponseSchema,
-  TaskSendRequestSchema,
-  TaskSendResponseSchema
+  TaskSendRequestSchema
 } from "./schemas";
 
 export type Platform = z.infer<typeof PlatformSchema>;
@@ -64,7 +62,6 @@ export type AskMauzResponse = z.infer<typeof AskMauzResponseSchema>;
 
 export type AiProviderId = z.infer<typeof AiProviderIdSchema>;
 export type AiProviderPreference = z.infer<typeof AiProviderPreferenceSchema>;
-export type AiProviderKind = z.infer<typeof AiProviderKindSchema>;
 export type AiProviderStatus = z.infer<typeof AiProviderStatusSchema>;
 export type AiProvidersStatusResponse = z.infer<typeof AiProvidersStatusResponseSchema>;
 export type AiProvidersStatusRequest = NonNullable<z.infer<typeof AiProvidersStatusRequestSchema>>;
@@ -79,7 +76,6 @@ export type SubscriptionDisconnectRequest = z.infer<typeof SubscriptionDisconnec
 
 export type TalkTranscribeRequest = z.infer<typeof TalkTranscribeRequestSchema>;
 export type TalkTranscribeResponse = z.infer<typeof TalkTranscribeResponseSchema>;
-export type TalkTranscriptionEngine = TalkTranscribeResponse["engine"];
 
 export type PermissionError = z.infer<typeof PermissionErrorSchema>;
 export type ShakeSensitivity = z.infer<typeof ShakeSensitivitySchema>;
@@ -96,7 +92,6 @@ export type TaskFolder = z.infer<typeof TaskFolderSchema>;
 export type TaskFoldersRequest = z.infer<typeof TaskFoldersRequestSchema>;
 export type TaskFoldersResponse = z.infer<typeof TaskFoldersResponseSchema>;
 export type TaskSendRequest = z.infer<typeof TaskSendRequestSchema>;
-export type TaskSendResponse = z.infer<typeof TaskSendResponseSchema>;
 
 export type BrowserExtensionStatus = {
   /** Browsers whose Mauz extension is connected now. */
@@ -156,6 +151,6 @@ export type MauzBridge = {
      * Starts the task as a background thread in the agent's desktop app (Windows), or opens
      * the agent in its own terminal window, then returns.
      */
-    send(payload: TaskSendRequest): Promise<TaskSendResponse>;
+    send(payload: TaskSendRequest): Promise<void>;
   };
 };

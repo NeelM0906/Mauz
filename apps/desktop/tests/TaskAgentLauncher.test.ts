@@ -139,7 +139,7 @@ describe("TaskAgentLauncher", () => {
 
       await expect(
         launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Hermes" });
+      ).resolves.toBeUndefined();
 
       expect(startProcess).toHaveBeenCalledOnce();
       const [command, args, options] = startProcess.mock.calls[0] as unknown as [
@@ -194,7 +194,7 @@ describe("TaskAgentLauncher", () => {
 
       await expect(
         launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Hermes" });
+      ).resolves.toBeUndefined();
 
       expect(startProcess).not.toHaveBeenCalled();
       const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
@@ -256,7 +256,7 @@ describe("TaskAgentLauncher", () => {
 
       await expect(
         launcher.launch({ agentId: "claude-code", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Claude Code" });
+      ).resolves.toBeUndefined();
       await launcher.settled();
 
       const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
@@ -379,7 +379,7 @@ describe("TaskAgentLauncher", () => {
       expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
       await expect(
         launcher.launch({ agentId: "codex", folder, task: "Fix this error\nin the parser", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Codex" });
+      ).resolves.toBeUndefined();
 
       const [executable, request] = queueCodexThread.mock.calls[0] as unknown as [
         string,

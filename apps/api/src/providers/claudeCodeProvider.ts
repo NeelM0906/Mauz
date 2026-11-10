@@ -221,8 +221,6 @@ export class ClaudeCodeProvider implements AnswerProvider {
       let streamedText = "";
       let resultText: string | null = null;
       let resultError: string | null = null;
-      let model: string | null = null;
-      let usage: unknown;
       let stderr = "";
       let settled = false;
 
@@ -247,11 +245,6 @@ export class ClaudeCodeProvider implements AnswerProvider {
           return;
         }
 
-        if (event.type === "system" && event.subtype === "init" && typeof event.model === "string") {
-          model = event.model;
-          return;
-        }
-
         const textDelta = getTextDelta(event);
 
         if (textDelta !== null) {
@@ -261,8 +254,6 @@ export class ClaudeCodeProvider implements AnswerProvider {
         }
 
         if (event.type === "result") {
-          usage = event.usage;
-
           if (event.is_error === true || event.subtype !== "success") {
             resultError = typeof event.result === "string" ? event.result : String(event.subtype ?? "error");
           } else if (typeof event.result === "string") {
@@ -287,7 +278,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
         const text = (resultText ?? streamedText).trim();
 
         if (resultError === null && text.length > 0) {
-          finish(() => resolve({ text, model: model ?? this.readModel(), usage }));
+          finish(() => resolve({ text }));
           return;
         }
 

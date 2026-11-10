@@ -181,15 +181,14 @@ describe("registerIpcHandlers", () => {
   it("answers Ask in process and sends text updates keyed by requestId", async () => {
     vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
       onText?.("partial");
-      return { answer: "done", model: "test" };
+      return { answer: "done" };
     });
     registerIpcHandlers(createOptions());
     const event = createInvokeEvent();
     const request = { question: "What is this?", context: createAskContext(), requestId: "req-1" };
 
     await expect(getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request)).resolves.toEqual({
-      answer: "done",
-      model: "test"
+      answer: "done"
     });
 
     expect(answerAsk).toHaveBeenCalledWith(request, expect.any(Function));
@@ -202,7 +201,7 @@ describe("registerIpcHandlers", () => {
   it("does not send Ask text updates to a destroyed window", async () => {
     vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
       onText?.("partial");
-      return { answer: "done", model: "test" };
+      return { answer: "done" };
     });
     registerIpcHandlers(createOptions());
     const event = createInvokeEvent();
@@ -218,7 +217,7 @@ describe("registerIpcHandlers", () => {
   });
 
   it("passes no text callback for an Ask request without a requestId", async () => {
-    vi.mocked(answerAsk).mockResolvedValue({ answer: "done", model: "test" });
+    vi.mocked(answerAsk).mockResolvedValue({ answer: "done" });
     registerIpcHandlers(createOptions());
     const event = createInvokeEvent();
     const request = { question: "What is this?", context: createAskContext() };
@@ -264,7 +263,6 @@ describe("registerIpcHandlers", () => {
         {
           id: "claude-code" as const,
           label: "Claude Code subscription",
-          kind: "subscription" as const,
           available: true,
           detail: "Signed in (max plan).",
           model: "sonnet"
@@ -368,7 +366,7 @@ describe("registerIpcHandlers", () => {
     const handler = getRegisteredHandler(IPC_CHANNELS.taskSend);
     const request = { agentId: "hermes", folder: "C:/work/mauz", task: "Fix this", context: createContext() };
 
-    await expect(handler(createInvokeEvent(), request)).resolves.toEqual({ agentLabel: "Hermes" });
+    await expect(handler(createInvokeEvent(), request)).resolves.toBeUndefined();
     expect(options.taskAgents.launcher.launch).toHaveBeenCalledWith(request);
     expect(options.updateSettings).toHaveBeenCalledWith({
       taskAgent: "hermes",
@@ -464,7 +462,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
         toTaskFolder: vi.fn((path: string) => ({ path, name: path.split("/").pop() ?? path })),
         folderKey: vi.fn((path: string) => path.toLowerCase()),
         defaultFolder: vi.fn((configured: string) => configured || "C:/Users/test"),
-        launch: vi.fn(async () => ({ agentLabel: "Hermes" }))
+        launch: vi.fn(async () => {})
       },
       pickFolder: vi.fn(async () => null)
     },

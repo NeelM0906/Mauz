@@ -1,7 +1,6 @@
 import { tmpdir } from "node:os";
 import type {
   AiProviderId,
-  AiProviderKind,
   AiProviderPreference,
   AiProviderStatus,
   AiProvidersStatusResponse
@@ -26,13 +25,6 @@ const PROVIDER_LABELS: Record<AiProviderId, string> = {
   codex: "Codex (ChatGPT) subscription",
   anthropic: "Anthropic API key",
   openai: "OpenAI API key"
-};
-
-const PROVIDER_KINDS: Record<AiProviderId, AiProviderKind> = {
-  "claude-code": "subscription",
-  codex: "subscription",
-  anthropic: "api-key",
-  openai: "api-key"
 };
 
 const CLI_DETECTION_TTL_MS = 5 * 60_000;
@@ -81,7 +73,6 @@ export class AnswerProviderRegistry {
     const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
       id,
       label: PROVIDER_LABELS[id],
-      kind: PROVIDER_KINDS[id],
       ...detections[id]
     }));
     const preference = readPreference(env.MAUZ_AI_PROVIDER);
@@ -127,7 +118,6 @@ export class AnswerProviderRegistry {
     const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
       id,
       label: PROVIDER_LABELS[id],
-      kind: PROVIDER_KINDS[id],
       ...(id === "claude-code" || id === "codex"
         ? cli[id]
         : detectApiKey(id === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY, undefined, "unused"))

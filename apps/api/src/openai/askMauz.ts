@@ -24,11 +24,7 @@ export async function askMauz(
     onText: options.onText
   });
 
-  return {
-    answer: result.text,
-    model: toModelLabel(result.model),
-    ...(result.usage === undefined ? {} : { usage: result.usage })
-  };
+  return { answer: result.text };
 }
 
 /** Provider-neutral prompt: system prompt, context text, and labeled images in send order. */
@@ -46,15 +42,6 @@ export function buildAnswerPrompt(request: AskMauzRequest): AnswerPrompt {
     userText: buildContextText(request),
     images
   };
-}
-
-function toModelLabel(model: string): string {
-  const label = model
-    .trim()
-    .replace(/[^A-Za-z0-9._:/-]+/g, "-")
-    .slice(0, 128);
-
-  return label.length > 0 ? label : "unknown-model";
 }
 
 export function buildContextText(request: AskMauzRequest): string {

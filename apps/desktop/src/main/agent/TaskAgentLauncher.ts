@@ -225,7 +225,7 @@ export class TaskAgentLauncher {
     return trimmed.length > 0 ? trimmed : this.home;
   }
 
-  async launch(request: LaunchTaskRequest): Promise<{ agentLabel: string }> {
+  async launch(request: LaunchTaskRequest): Promise<void> {
     const agent = TASK_AGENTS.find((candidate) => candidate.id === request.agentId);
     const executable = agent === undefined ? null : this.findExecutable(agent.command);
     const hasDesktopApp = agent !== undefined && this.hasDesktopApp(agent.id);
@@ -271,13 +271,13 @@ export class TaskAgentLauncher {
 
         if (codexExecutable !== null) {
           await this.startInCodexApp(codexExecutable, handoff);
-          return { agentLabel: agent.label };
+          return;
         }
       } else if (executable !== null) {
         await (agent.id === "hermes"
           ? this.startInHermesApp(executable, handoff)
           : this.startInClaudeApp(executable, handoff));
-        return { agentLabel: agent.label };
+        return;
       }
     }
 
@@ -299,8 +299,6 @@ export class TaskAgentLauncher {
       args,
       handoffDirectory
     });
-
-    return { agentLabel: agent.label };
   }
 
   /**
