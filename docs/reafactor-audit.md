@@ -265,6 +265,77 @@ renderer as a plain `Error`, so the text stays "Error: <message>" as before (Ele
 `err.toString()`); new tests for an Ask without a `requestId` and for a response that fails the schema.
 Left: `shutdownResources()` stays `async` (reason above).
 
+### Phase 3 (2026-11-10, base `3404208`)
+
+Rows 5, 4, 7, 24 and 21 are done, one commit each. Row 6 is not started: its plan goes to the owner for
+approval first. The end-of-phase review is not done yet, and the phase is not ticked. Gates after each row:
+typecheck, tests, lint. After row 21: api 49 passed, desktop 176 passed; `corepack pnpm -r build` passes.
+The renderer has no DOM test setup, so the renderer changes were checked by typecheck and by reading.
+
+**Row 5.** The finding is correct. `askAnswer`, `askError`, `askLoading`, their three setters, and the
+lines in `backToMenu`, `reset` and `MauzMenu.openPanel` that cleared them are gone. `LensPanel` holds one
+`AskState` union (`idle | loading(partial) | answered | failed`). The streamed text is now `partial`.
+
+- Late-answer defect: fixed. The state belongs to one `LensPanel` instance. When the panel closes and opens
+  again, the old instance is unmounted (activation calls `reset()`, which shows the menu), so its late
+  `setAsk` does nothing, and the new panel starts at `idle`. In one instance, the answer and the error are
+  written only if `askRequestIdRef` still holds that request. A delta after the answer is ignored. The
+  owner should run the manual steps from Phase 0.
+- Small change: when there is no cursor context, only the error shows. Before, an earlier answer stayed
+  under the error.
+
+**Row 4.** The finding is correct. `mauzClient.ts` now exports only `mauz()`, which returns `window.mauz` or
+throws the same "bridge is unavailable" message. The fake bridge and the wrapper are gone (decision 2).
+`window.mauz` is now typed as optional. The call sites use the `MauzBridge` methods. `mauzClient.test.ts`
+now tests `mauz()`. In `CLAUDE.md`, the "new IPC call" rule no longer names `mauzClient.ts`. One difference:
+`providers.status()` is called with no payload, where `mauzClient` passed `{}`. The schema accepts both.
+Prettier now formats `mauz().x.y().then(...)` as a chain on several lines.
+
+**Row 7.** Status was Reported. The finding is correct: the Ask, Send to agent and Dictate headers had the
+same markup, and the back sequence (`showMenu`, then `backToMenu`) was in five places (three panels,
+Settings, App Escape). New `components/PanelHeader.tsx` has `PanelHeader` (title, subtitle, and `onLeave`,
+which Dictate uses to stop the microphone before Back and Close) and `goBackToMenu()`. The Settings header
+keeps its own markup, because its CSS is different (`settings-header`, no Close button). It calls
+`goBackToMenu()`.
+
+- Change in behaviour: Escape in a panel now waits for `showMenu()` before the menu shows, as the Back
+  buttons always did. Before, the menu showed at once.
+
+**Row 24.** Done as written: `STATUS_TEXT` in `DictatePanel`, `PANELS` in `App.tsx` (`MauzMode` is now
+exported from the store), and an `ANTHROPIC_ERROR_MESSAGES` table in `anthropicProvider.ts`. The generic
+`APIError` check stays after the table, because the four classes extend it. The Anthropic error messages
+had no test, so `providers.test.ts` has two new tests.
+
+**Row 21.** The finding is correct. Changes:
+
+- `menu.setLensExpanded({ expanded })` is now `menu.expand()` (channel `menuExpand`,
+  `"mauz:menu:expand"`). `MauzLensResizeRequestSchema` and its type are gone. The handler calls
+  `resizeForAsk()`. The `expanded: false` branch had no caller.
+- The `MauzMenu` settings prefetch (the only `resizePopover: false` caller) is gone, and so are
+  `MauzSettingsOpenOptions` and `shouldResizeForSettingsOpen`. `settings.open()` always resizes for
+  Settings. Settings are now read in two places: the menu's Settings button and `SettingsPanel` when the
+  store has none. `CLAUDE.md` no longer lists `MauzSettingsOpenOptions` as hand-written.
+- Stale-task-agent defect: fixed in this commit. Removing the prefetch alone fixes the Phase 0 steps, but
+  not this variant: open Settings from the menu, go back, send a task with another agent, open Settings from
+  the tray. So `reset()` now clears `settings` too, and Settings opened from the tray (or at start) always
+  reloads. The second `resizeForSettings()` that this causes has no visible effect: it keeps the same size
+  and anchor.
+- Change in behaviour: if loading settings fails, the menu no longer shows a toast when it opens. The
+  Settings button still shows the error.
+- Accepted: if Settings is open with unsaved edits and the user opens Settings from the tray again, the
+  edits are replaced by the saved settings.
+
+**Problems found in other rows (not fixed):**
+
+- Row 6: `SettingsPanel` shows "Loading settings..." for ever when loading fails, because
+  `settingsMessage` is not shown while `draft` is `null`. The `[settings]` effect and `loadSettings` clear
+  the OpenAI key draft but not the Anthropic draft.
+- Row 14: the OpenAI key field's `onChange` still sets `openAiAuthDisconnected` to `false`. The two key
+  blocks can only become one after row 14, or the merged component must keep that line.
+- Section 4: the `error instanceof Error ? error.message : "..."` pattern is still used in the renderer.
+
+**Skipped in Phase 3:** row 6 (plan only, waiting for approval).
+
 ---
 
 # Audit
