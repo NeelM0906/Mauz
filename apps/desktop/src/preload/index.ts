@@ -11,11 +11,11 @@ import {
 type Channel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 type PayloadSchema<T> = { safeParse(value: unknown): { success: true; data: T } | { success: false } };
 
-/** Calls the main-process handler. `MauzBridge` gives each call its payload and result types. */
-const invoke =
-  (channel: Channel) =>
-  (...args: unknown[]) =>
-    ipcRenderer.invoke(channel, ...args);
+// `MauzBridge` gives each call its payload and result types.
+/** A call with no payload: sends only the channel, whatever the caller passes (e.g. a click event). */
+const invoke = (channel: Channel) => () => ipcRenderer.invoke(channel);
+/** A call with one payload: sends exactly that payload. */
+const invokeWith = (channel: Channel) => (payload: unknown) => ipcRenderer.invoke(channel, payload);
 
 function subscribe(channel: Channel, listener: (event: Electron.IpcRendererEvent, payload: unknown) => void) {
   ipcRenderer.on(channel, listener);
@@ -45,20 +45,20 @@ const mauzApi: MauzBridge = {
     onHidden: onSignal(IPC_CHANNELS.menuHidden)
   },
   ask: {
-    submit: invoke(IPC_CHANNELS.askSubmit),
+    submit: invokeWith(IPC_CHANNELS.askSubmit),
     onDelta: onPayload(IPC_CHANNELS.askDelta, AskAnswerDeltaSchema)
   },
   providers: {
-    status: invoke(IPC_CHANNELS.providersStatus),
-    connect: invoke(IPC_CHANNELS.providersConnect),
-    submitCode: invoke(IPC_CHANNELS.providersConnectCode),
-    cancelConnect: invoke(IPC_CHANNELS.providersConnectCancel),
-    disconnect: invoke(IPC_CHANNELS.providersDisconnect),
-    openConnectPage: invoke(IPC_CHANNELS.providersConnectOpenPage),
+    status: invokeWith(IPC_CHANNELS.providersStatus),
+    connect: invokeWith(IPC_CHANNELS.providersConnect),
+    submitCode: invokeWith(IPC_CHANNELS.providersConnectCode),
+    cancelConnect: invokeWith(IPC_CHANNELS.providersConnectCancel),
+    disconnect: invokeWith(IPC_CHANNELS.providersDisconnect),
+    openConnectPage: invokeWith(IPC_CHANNELS.providersConnectOpenPage),
     onConnectState: onPayload(IPC_CHANNELS.providersConnectState, SubscriptionConnectStateSchema)
   },
   talk: {
-    transcribe: invoke(IPC_CHANNELS.talkTranscribe)
+    transcribe: invokeWith(IPC_CHANNELS.talkTranscribe)
   },
   browser: {
     status: invoke(IPC_CHANNELS.browserStatus),
@@ -78,9 +78,9 @@ const mauzApi: MauzBridge = {
   },
   task: {
     agents: invoke(IPC_CHANNELS.taskAgents),
-    folders: invoke(IPC_CHANNELS.taskFolders),
+    folders: invokeWith(IPC_CHANNELS.taskFolders),
     pickFolder: invoke(IPC_CHANNELS.taskPickFolder),
-    send: invoke(IPC_CHANNELS.taskSend)
+    send: invokeWith(IPC_CHANNELS.taskSend)
   }
 };
 
