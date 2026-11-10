@@ -166,6 +166,19 @@ describe("registerIpcHandlers", () => {
     expect(options.getSettings).toHaveBeenCalledOnce();
   });
 
+  it("still accepts a file: page when a dev server is set, as navigation does", async () => {
+    const options = { ...createOptions(), rendererUrl: "http://localhost:5173/" };
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await expect(handler(createInvokeEvent("file:///renderer"))).resolves.toMatchObject({
+      taskAgent: "auto"
+    });
+    expect(isTrustedRendererUrl("file:///renderer/index.html", options.rendererUrl)).toBe(true);
+  });
+
   it.each([
     ["another loopback port", "http://localhost:5173/", "http://localhost:9999"],
     ["another loopback host", "http://localhost:5173/", "http://127.0.0.1:5173"],
