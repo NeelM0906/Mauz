@@ -87,7 +87,8 @@ the environment.
   uses them through `@mauzai/api/server`, but keeps Windows `.cmd` shims as they are (it starts the
   agent through a terminal or `cmd.exe`); Ask resolves them to `node <script>`.
 - A new IPC call needs changes in: `MauzBridge` and `IPC_CHANNELS` (shared), the request schema,
-  preload, `mauzClient.ts` (wrapper and preview bridge), `HANDLED_IPC_CHANNELS`, and the handler.
+  preload, `HANDLED_IPC_CHANNELS`, and the handler. The renderer calls the bridge through `mauz()`
+  (`lib/mauzClient.ts`); it runs only in Electron.
 - Services accept injected dependencies in an options object. Tests use these to replace
   `spawn`, the file system, and Electron APIs.
 

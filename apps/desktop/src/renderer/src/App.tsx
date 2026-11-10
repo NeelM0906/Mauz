@@ -5,7 +5,7 @@ import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TaskPanel } from "./components/TaskPanel";
-import { mauzClient } from "./lib/mauzClient";
+import { mauz } from "./lib/mauzClient";
 import { useMauzStore } from "./state/useMauzStore";
 import "./styles.css";
 
@@ -15,20 +15,20 @@ function App(): React.JSX.Element {
   const setMode = useMauzStore((state) => state.setMode);
 
   React.useEffect(() => {
-    return mauzClient.onActivation(() => {
+    return mauz().events.onActivation(() => {
       reset();
     });
   }, [reset]);
 
   React.useEffect(() => {
-    return mauzClient.onOpenSettings(() => {
+    return mauz().events.onOpenSettings(() => {
       reset();
       setMode("settings");
     });
   }, [reset, setMode]);
 
   React.useEffect(() => {
-    return mauzClient.onPermissionError((error) => {
+    return mauz().events.onPermissionError((error) => {
       useMauzStore.getState().setStatus(error.message);
     });
   }, []);
@@ -48,9 +48,9 @@ function App(): React.JSX.Element {
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
       const state = useMauzStore.getState();
       if (state.mode === "menu") {
-        void mauzClient.close();
+        void mauz().menu.close();
       } else {
-        void mauzClient.showMenu();
+        void mauz().menu.showMenu();
         state.backToMenu();
       }
     };

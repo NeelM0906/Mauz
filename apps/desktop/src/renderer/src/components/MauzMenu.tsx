@@ -1,7 +1,7 @@
 import { BriefcaseBusiness, Mic, ScanSearch } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AiProvidersStatusResponse } from "@mauzai/shared";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
@@ -37,16 +37,18 @@ export function MauzMenu(): React.JSX.Element {
   useEffect(() => {
     let disposed = false;
 
-    void mauzClient.getProvidersStatus().then(
-      (status) => {
-        if (!disposed) {
-          setProvidersStatus(status);
+    void mauz()
+      .providers.status()
+      .then(
+        (status) => {
+          if (!disposed) {
+            setProvidersStatus(status);
+          }
+        },
+        () => {
+          // The status dot stays neutral; asking still reports a precise error.
         }
-      },
-      () => {
-        // The status dot stays neutral; asking still reports a precise error.
-      }
-    );
+      );
 
     return () => {
       disposed = true;
@@ -58,7 +60,7 @@ export function MauzMenu(): React.JSX.Element {
 
     const loadSettings = async (): Promise<void> => {
       try {
-        const loadedSettings = await mauzClient.openSettings({
+        const loadedSettings = await mauz().settings.open({
           resizePopover: false
         });
 
@@ -85,7 +87,7 @@ export function MauzMenu(): React.JSX.Element {
     setStatus(null);
 
     try {
-      const settings = await mauzClient.openSettings();
+      const settings = await mauz().settings.open();
       setSettings(settings);
       setMode("settings");
     } catch (error) {
@@ -99,9 +101,9 @@ export function MauzMenu(): React.JSX.Element {
     setStatus(null);
 
     try {
-      const context = await mauzClient.startAsk();
+      const context = await mauz().menu.startAsk();
       setCurrentContext(context);
-      await mauzClient.setLensExpanded({ expanded: true });
+      await mauz().menu.setLensExpanded({ expanded: true });
       setMode(PANEL_FOR_BUBBLE[bubble]);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
@@ -122,7 +124,7 @@ export function MauzMenu(): React.JSX.Element {
         className="bubble-cluster-backdrop"
         aria-label="Close Mauz"
         tabIndex={-1}
-        onClick={() => void mauzClient.close()}
+        onClick={() => void mauz().menu.close()}
       />
 
       <div className="bubble-cluster">

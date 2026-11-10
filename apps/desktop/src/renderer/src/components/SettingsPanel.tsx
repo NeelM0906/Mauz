@@ -28,7 +28,7 @@ import type {
   TaskAgentStatus
 } from "@mauzai/shared";
 import { MAX_CAPTURE_BLOCKED_APPS, MAX_CAPTURE_BLOCKED_ENTRY_CHARS } from "@mauzai/shared";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 import {
@@ -99,7 +99,7 @@ export function SettingsPanel(): React.JSX.Element {
     setProvidersLoading(true);
 
     try {
-      setProvidersStatus(await mauzClient.getProvidersStatus({ refresh }));
+      setProvidersStatus(await mauz().providers.status({ refresh }));
     } catch {
       setProvidersStatus(null);
     } finally {
@@ -114,16 +114,18 @@ export function SettingsPanel(): React.JSX.Element {
   useEffect(() => {
     let disposed = false;
 
-    void mauzClient.getBrowserExtensionStatus().then(
-      (status) => {
-        if (!disposed) {
-          setBrowserStatus(status);
+    void mauz()
+      .browser.status()
+      .then(
+        (status) => {
+          if (!disposed) {
+            setBrowserStatus(status);
+          }
+        },
+        () => {
+          // The section shows setup steps without a connection state.
         }
-      },
-      () => {
-        // The section shows setup steps without a connection state.
-      }
-    );
+      );
 
     return () => {
       disposed = true;
@@ -132,7 +134,7 @@ export function SettingsPanel(): React.JSX.Element {
 
   useEffect(
     () =>
-      mauzClient.onSubscriptionConnectState((state) => {
+      mauz().providers.onConnectState((state) => {
         setConnectStates((current) => ({ ...current, [state.providerId]: state }));
 
         if (state.phase === "connected") {
@@ -147,7 +149,7 @@ export function SettingsPanel(): React.JSX.Element {
     setProviderActionError(null);
 
     try {
-      const state = await mauzClient.connectSubscription(providerId);
+      const state = await mauz().providers.connect({ providerId });
       setConnectStates((current) => ({ ...current, [providerId]: state }));
     } catch (error) {
       setProviderActionError(error instanceof Error ? error.message : "Could not start sign-in.");
@@ -155,7 +157,9 @@ export function SettingsPanel(): React.JSX.Element {
   };
 
   const cancelSubscriptionConnect = (state: SubscriptionConnectState): void => {
-    void mauzClient.cancelSubscriptionConnect(state.connectId).catch(() => {});
+    void mauz()
+      .providers.cancelConnect({ connectId: state.connectId })
+      .catch(() => {});
     setConnectStates((current) => ({ ...current, [state.providerId]: undefined }));
   };
 
@@ -164,7 +168,7 @@ export function SettingsPanel(): React.JSX.Element {
     setProviderActionError(null);
 
     try {
-      setProvidersStatus(await mauzClient.disconnectSubscription(providerId));
+      setProvidersStatus(await mauz().providers.disconnect({ providerId }));
       setConnectStates((current) => ({ ...current, [providerId]: undefined }));
     } catch (error) {
       setProviderActionError(error instanceof Error ? error.message : "Could not sign out.");
@@ -186,7 +190,7 @@ export function SettingsPanel(): React.JSX.Element {
 
     const loadSettings = async (): Promise<void> => {
       try {
-        const nextSettings = await mauzClient.openSettings();
+        const nextSettings = await mauz().settings.open();
 
         if (!disposed) {
           setSettings(nextSettings);
@@ -213,16 +217,18 @@ export function SettingsPanel(): React.JSX.Element {
   useEffect(() => {
     let disposed = false;
 
-    void mauzClient.getTaskAgents().then(
-      (response) => {
-        if (!disposed) {
-          setTaskAgents(response.agents);
+    void mauz()
+      .task.agents()
+      .then(
+        (response) => {
+          if (!disposed) {
+            setTaskAgents(response.agents);
+          }
+        },
+        () => {
+          // The picker still lists every agent, just without install status.
         }
-      },
-      () => {
-        // The picker still lists every agent, just without install status.
-      }
-    );
+      );
 
     return () => {
       disposed = true;
@@ -230,7 +236,7 @@ export function SettingsPanel(): React.JSX.Element {
   }, []);
 
   const browseTaskFolder = async (): Promise<void> => {
-    const picked = await mauzClient.pickTaskFolder();
+    const picked = await mauz().task.pickFolder();
 
     if (picked !== null) {
       updateDraft("taskFolder", picked);
@@ -238,7 +244,7 @@ export function SettingsPanel(): React.JSX.Element {
   };
 
   const handleBack = async (): Promise<void> => {
-    await mauzClient.showMenu();
+    await mauz().menu.showMenu();
     backToMenu();
   };
 
@@ -286,7 +292,7 @@ export function SettingsPanel(): React.JSX.Element {
         update.clearAnthropicApiKey = true;
       }
 
-      const nextSettings = await mauzClient.updateSettings(update);
+      const nextSettings = await mauz().settings.update(update);
       setSettings(nextSettings);
       setOpenAiApiKeyDraft("");
       setClearSavedOpenAiApiKey(false);
@@ -618,7 +624,7 @@ export function SettingsPanel(): React.JSX.Element {
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => void mauzClient.openBrowserExtensionFolder()}
+                onClick={() => void mauz().browser.openExtensionFolder()}
               >
                 <FolderOpen aria-hidden="true" size={13} />
                 <span>Extension folder</span>

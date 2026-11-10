@@ -1,7 +1,7 @@
 import { ArrowLeft, BriefcaseBusiness, LoaderCircle, Mic, ScanSearch, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recordingToWav } from "@renderer/lib/pushToTalk";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
@@ -111,7 +111,7 @@ export function DictatePanel(): React.JSX.Element {
         return;
       }
 
-      const transcription = await mauzClient.transcribeTalk({
+      const transcription = await mauz().talk.transcribe({
         audioBase64: audio.base64,
         mimeType: "audio/wav"
       });
@@ -142,7 +142,7 @@ export function DictatePanel(): React.JSX.Element {
     return abandonRecording;
   }, [abandonRecording, startListening]);
 
-  useEffect(() => mauzClient.onPopoverHidden(abandonRecording), [abandonRecording]);
+  useEffect(() => mauz().menu.onHidden(abandonRecording), [abandonRecording]);
 
   useEffect(() => {
     // Space stops listening, like a dictation key; it types normally in the text box.
@@ -170,7 +170,7 @@ export function DictatePanel(): React.JSX.Element {
 
   const handleBack = async (): Promise<void> => {
     abandonRecording();
-    await mauzClient.showMenu();
+    await mauz().menu.showMenu();
     backToMenu();
   };
 
@@ -202,7 +202,7 @@ export function DictatePanel(): React.JSX.Element {
           aria-label="Close Mauz"
           onClick={() => {
             abandonRecording();
-            void mauzClient.close();
+            void mauz().menu.close();
           }}
         >
           <X aria-hidden="true" size={16} />

@@ -9,7 +9,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { detectLensObject } from "@renderer/lib/lensObject";
 import { CaptureDetails } from "./CaptureDetails";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -34,7 +34,7 @@ export function LensPanel(): React.JSX.Element {
   const askRequestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    return mauzClient.onAnswerDelta(({ requestId, text }) => {
+    return mauz().ask.onDelta(({ requestId, text }) => {
       if (requestId === askRequestIdRef.current) {
         setAsk((current) => (current.status === "loading" ? { status: "loading", partial: text } : current));
       }
@@ -42,7 +42,7 @@ export function LensPanel(): React.JSX.Element {
   }, []);
 
   const handleBack = async (): Promise<void> => {
-    await mauzClient.showMenu();
+    await mauz().menu.showMenu();
     backToMenu();
   };
 
@@ -64,7 +64,7 @@ export function LensPanel(): React.JSX.Element {
     setAsk({ status: "loading", partial: null });
 
     try {
-      const response = await mauzClient.submitAsk({
+      const response = await mauz().ask.submit({
         question: prompt,
         context: currentContext,
         requestId
@@ -121,7 +121,7 @@ export function LensPanel(): React.JSX.Element {
           className="icon-button"
           type="button"
           aria-label="Close Mauz"
-          onClick={() => void mauzClient.close()}
+          onClick={() => void mauz().menu.close()}
         >
           <X aria-hidden="true" size={16} />
         </button>
