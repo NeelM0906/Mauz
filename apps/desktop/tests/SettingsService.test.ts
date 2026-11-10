@@ -202,6 +202,33 @@ describe("SettingsService", () => {
     expect(writes.at(-1)).not.toContain("sk-new");
   });
 
+  it("stores and clears the Anthropic key encrypted", async () => {
+    const { service, writes } = createSettingsService({
+      settingsJson: JSON.stringify(DEFAULT_SETTINGS),
+      secretCodec: createTestSecretCodec()
+    });
+
+    await service.update({ anthropicApiKey: " sk-ant-new " });
+    expect(JSON.parse(writes.at(-1)!).encryptedAnthropicApiKey).toBe(
+      createTestSecretCodec().encrypt("sk-ant-new")
+    );
+    await expect(service.getRuntime()).resolves.toMatchObject({ anthropicApiKey: "sk-ant-new" });
+
+    await service.update({ clearAnthropicApiKey: true });
+    expect(writes.at(-1)).not.toContain("encryptedAnthropicApiKey");
+  });
+
+  it("refuses to save a key when secure storage is unavailable", async () => {
+    const { service } = createSettingsService({ settingsJson: JSON.stringify(DEFAULT_SETTINGS) });
+
+    await expect(service.update({ openAiApiKey: "sk-new" })).rejects.toThrow(
+      "Mauz could not save the OpenAI API key securely on this computer."
+    );
+    await expect(service.update({ anthropicApiKey: "sk-ant-new" })).rejects.toThrow(
+      "Mauz could not save the Anthropic API key securely on this computer."
+    );
+  });
+
   it("loads an old file with openAiAuthDisconnected and uses the environment key", async () => {
     const { service } = createSettingsService({
       environmentApiKey: "sk-env",
