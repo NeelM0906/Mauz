@@ -11,7 +11,6 @@ import type { AnswerImage, AnswerPrompt } from "../providers/types";
 export type AskMauzOptions = {
   registry?: Pick<AnswerProviderRegistry, "resolve">;
   onText?: (textSoFar: string) => void;
-  signal?: AbortSignal;
 };
 
 /** Answers with the provider the user configured or signed in to (API key or Claude Code / Codex subscription). */
@@ -22,8 +21,7 @@ export async function askMauz(
   const registry = options.registry ?? getDefaultAnswerProviderRegistry();
   const provider = await registry.resolve();
   const result = await provider.answer(buildAnswerPrompt(request), {
-    onText: options.onText,
-    signal: options.signal
+    onText: options.onText
   });
 
   return {

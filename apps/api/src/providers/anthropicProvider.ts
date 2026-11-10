@@ -46,20 +46,17 @@ export class AnthropicApiProvider implements AnswerProvider {
     content.push({ type: "text", text: prompt.userText });
 
     try {
-      const stream = client.beta.messages.stream(
-        {
-          model,
-          max_tokens: MAX_OUTPUT_TOKENS,
-          // Quick desktop answers: low effort keeps latency down; thinking stays adaptive.
-          output_config: { effort: "low" },
-          // If a safety classifier declines, the API retries on a fallback model in the same call.
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
-          system: prompt.systemPrompt,
-          messages: [{ role: "user", content }]
-        },
-        options.signal === undefined ? undefined : { signal: options.signal }
-      );
+      const stream = client.beta.messages.stream({
+        model,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        // Quick desktop answers: low effort keeps latency down; thinking stays adaptive.
+        output_config: { effort: "low" },
+        // If a safety classifier declines, the API retries on a fallback model in the same call.
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: prompt.systemPrompt,
+        messages: [{ role: "user", content }]
+      });
       let streamedText = "";
 
       for await (const event of stream) {

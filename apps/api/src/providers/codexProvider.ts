@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { AiProviderError } from "../errors";
 import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from "./cliCommand";
 import {
-  ProcessAbortedError,
   ProcessTimeoutError,
   parseJsonLine,
   runAndCollect,
@@ -100,8 +99,7 @@ export class CodexProvider implements AnswerProvider {
       });
       const output = await runAndCollect(child, {
         stdinText: buildCodexPrompt(prompt),
-        timeoutMs: this.answerTimeoutMs,
-        signal: options.signal
+        timeoutMs: this.answerTimeoutMs
       }).catch((error: unknown) => {
         throw toCodexError(this.id, error);
       });
@@ -226,10 +224,6 @@ function toCodexError(providerId: string, error: unknown): AiProviderError {
 
   if (error instanceof ProcessTimeoutError) {
     return new AiProviderError(providerId, "Codex did not answer in time. Try again.", { cause: error });
-  }
-
-  if (error instanceof ProcessAbortedError) {
-    return new AiProviderError(providerId, "The Codex request was cancelled.", { cause: error });
   }
 
   const message = error instanceof Error ? error.message : String(error);

@@ -233,24 +233,13 @@ export class ClaudeCodeProvider implements AnswerProvider {
 
         settled = true;
         clearTimeout(timer);
-        options.signal?.removeEventListener("abort", onAbort);
         callback();
-      };
-      const onAbort = (): void => {
-        killQuietly(child);
-        finish(() => reject(new AiProviderError(this.id, "The Claude Code request was cancelled.")));
       };
       const timer = setTimeout(() => {
         killQuietly(child);
         finish(() => reject(new AiProviderError(this.id, "Claude Code did not answer in time. Try again.")));
       }, this.answerTimeoutMs);
 
-      if (options.signal?.aborted === true) {
-        onAbort();
-        return;
-      }
-
-      options.signal?.addEventListener("abort", onAbort, { once: true });
       onLines(child.stdout, (line) => {
         const event = parseJsonLine(line);
 

@@ -13,7 +13,6 @@ export type AnswerPrompt = {
 };
 
 export type AnswerOptions = {
-  signal?: AbortSignal | undefined;
   onText?: ((textSoFar: string) => void) | undefined;
 };
 

@@ -38,20 +38,12 @@ export type CollectedOutput = {
 export type RunCollectOptions = {
   stdinText?: string | undefined;
   timeoutMs: number;
-  signal?: AbortSignal | undefined;
 };
 
 export class ProcessTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`The command did not finish within ${Math.round(timeoutMs / 1000)} seconds.`);
     this.name = "ProcessTimeoutError";
-  }
-}
-
-export class ProcessAbortedError extends Error {
-  constructor() {
-    super("The command was cancelled.");
-    this.name = "ProcessAbortedError";
   }
 }
 
@@ -71,24 +63,13 @@ export function runAndCollect(child: ChildProcessLike, options: RunCollectOption
 
       settled = true;
       clearTimeout(timer);
-      options.signal?.removeEventListener("abort", onAbort);
       callback();
-    };
-    const onAbort = (): void => {
-      killQuietly(child);
-      finish(() => reject(new ProcessAbortedError()));
     };
     const timer = setTimeout(() => {
       killQuietly(child);
       finish(() => reject(new ProcessTimeoutError(options.timeoutMs)));
     }, options.timeoutMs);
 
-    if (options.signal?.aborted === true) {
-      onAbort();
-      return;
-    }
-
-    options.signal?.addEventListener("abort", onAbort, { once: true });
     child.stdout?.on("data", (chunk: Buffer) => {
       stdout += stdoutDecoder.write(chunk);
     });
