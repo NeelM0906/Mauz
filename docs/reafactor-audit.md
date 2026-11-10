@@ -60,7 +60,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
 - [x] **Phase 4: main process and API cleanup.** (done 2026-11-10; see "Phase 4" in Notes) Rows 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20.
       Before you simplify `pickProvider` in row 19, check that both callers build the list in the auto
       order.
-- [ ] **Phase 5 (optional): low impact.** Rows 22, 23, 25, 26, 27, and the items in section 4 of the
+- [x] **Phase 5 (optional): low impact.** (done 2026-11-10; see "Phase 5" in Notes) Rows 22, 23, 25, 26, 27, and the items in section 4 of the
       audit: write the byte-order mark as the escape for U+FEFF, remove the "Fix 2" and "Fix 3" comments, use
       `promisify(execFile)`.
 
@@ -529,10 +529,9 @@ exports `ProcessTimeoutError`, `CollectedOutput`, and the test-only `CLAUDE_CLI`
 
 ### Phase 5 (2026-11-10, base `dc00913`)
 
-Rows 22, 25, 26, 27 and the three section 4 items are done, one commit each. Row 23 is skipped (below).
-The end-of-phase review has not run and the phase is not ticked. Gates after each commit: typecheck,
-tests, lint; `corepack pnpm -r build` passes at the end. After the phase: api 70 passed, desktop 188
-passed.
+Rows 22, 25, 26, 27 and the three section 4 items are done, one commit each, plus one review-fix commit
+each for rows 22 and 26. Row 23 is skipped (below). Gates after each commit: typecheck, tests, lint;
+`corepack pnpm -r build` passes. After the review fixes: api 70 passed, desktop 189 passed.
 
 **Row 22.** The finding is correct. A script listed every class, attribute selector and `--variable` in
 `styles.css` and searched the TSX, TS and `index.html` for each (class names built from template strings
@@ -582,7 +581,9 @@ identical for any of them, checked on Node 24:
 of `ELECTRON_RENDERER_URL`. `registerIpcHandlers` takes `rendererUrl` (from `index.ts`). Navigation is
 unchanged. **Change in behaviour:** IPC no longer trusts other loopback ports or hosts (`localhost:9999`,
 `127.0.0.1` when the dev server is `localhost`), or any loopback page in a packaged build. New tests check
-these four cases against both IPC and `isTrustedRendererUrl`.
+these four cases against both IPC and `isTrustedRendererUrl`. Both IPC and navigation trust any `file:` URL,
+not only the app's own renderer file, also when a dev server is set (a test pins this down). That was
+true before this phase too and is not changed.
 
 **Row 27.** Done as moves. `agent/agentProcess.ts` now holds the agent start code (arguments, launcher
 scripts, `buildAgentEnvironment`, `startDetached`, `buildHiddenStartCommand`, `startHiddenProcess`,
@@ -594,22 +595,30 @@ itself was not split: its methods share state, and a split would need new interf
 
 **Section 4.**
 
-- The launcher BOM is now `﻿`. It was the only U+FEFF in the source. The existing test checks the
+- The launcher BOM is now `\uFEFF`. It was the only U+FEFF in the source. The existing test checks the
   three BOM bytes in `launch.ps1`.
 - The "Fix N:" labels are gone from `MacInputAgentProvider.ts` (Fix 2, Fix 3) and `main.swift` (Fix 1, 3,
   4; same kind of label). The comment text stays.
 - `promisify(execFile)` in `AppleScriptRunner.ts`, `BrowserBridge.ts` `runRegCommand` and
   `findCodexAppExecutable`. Same results: errors still reject (the `reg.exe` and `osascript` errors now
-  also carry `stdout`/`stderr` properties), and `findCodexAppExecutable` still returns `null` on any failure.
+  also carry `stdout`/`stderr` properties), and `findCodexAppExecutable` still returns `null` when the
+  command fails. A synchronous throw from `execFile` (for example a bad option) still rejects in all three:
+  `promisify(execFile)` throws before `.then` is attached, so the `async` function rejects. This was
+  checked by running the old and new forms with `timeout: -1`; both reject with `ERR_OUT_OF_RANGE`.
 
 **Problems found in other rows (not fixed):**
 
-- Row 22 leftovers in TSX: `LensPanel` still sets `data-empty` and `MauzMenu` sets `data-accent="agent"`;
-  no CSS reads either now.
-- `codexAppServer.ts` uses `createInterface({ input: child.stdout })` with no `error` listener on the
+- `codexAppServer.ts` (older than this phase) uses `createInterface({ input: child.stdout })` with no `error` listener on the
   interface, so an error on Codex's stdout would be an uncaught exception in the main process.
 
-**Skipped in Phase 5:** row 23 (reasons above). Not checked: the Swift change compiles.
+**Skipped in Phase 5:** row 23 (`readline` is not identical; reasons above). Not checked: the Swift change
+compiles.
+
+**Review.** A separate agent reviewed the phase and found no bugs (the row 27 strings are byte-identical).
+Fixed: the `data-empty` and `data-accent="agent"` attributes that no CSS reads are gone (row 22); a test
+pins down that IPC trusts a `file:` page when a dev server is set (row 26). Not changed: the claim that
+`findCodexAppExecutable` now returns `null` on a synchronous `execFile` throw was checked and is wrong
+(see Section 4). Left: the `codexAppServer.ts` missing `error` listener.
 
 ---
 
