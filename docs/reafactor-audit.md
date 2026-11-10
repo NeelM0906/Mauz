@@ -203,6 +203,54 @@ For later phases:
 Windows `.cmd` override in Send to agent, repeated and Hermes search folders, and a Codex sign-in that
 gets no credentials. Left for Phase 2: the launcher's import of `@mauzai/api/server`.
 
+### Phase 2 (2026-11-10, base `844822e`)
+
+Row 1 is done as the approved plan says, in one commit. Gates: typecheck, tests (api 46 passed;
+desktop 175 passed, 0 skipped), lint, `node scripts/check-env.mjs`, `node scripts/check-secrets.mjs`,
+`corepack pnpm -r build`. `check-env.mjs` needs no real `.env`.
+
+- `server.ts` exports `answerAsk(request, onText?)` and `loadLocalEnv()`. The three `cliCommand`
+  re-exports stay, so `TaskAgentLauncher.ts` still imports from `@mauzai/api/server`.
+- The `askSubmit` handler sends `ask:delta` to `event.sender` (the popover, the only trusted sender),
+  not to `popover.getWebContents()`. It skips the send when the sender is destroyed.
+- `bootstrap()` calls `loadLocalEnv()` first. `dotenvStartOrder.test.ts` runs without `.skip`.
+- `apps/api/package.json` exports only `./server`; `main`/`types` point at `dist/server.*`. `tsx` stays in
+  the lockfile only as an optional transitive package.
+
+Differences from the plan:
+
+- `showBootstrapError()` lost its `error` parameter, because only the "port in use" branch read it.
+  The error was not logged before either.
+- `apps/api/tests/providers.test.ts` used `MAUZ_LOCAL_API_TOKEN` as sample data for the `MAUZ_` prefix
+  rule. It now uses `MAUZ_BROWSER_TOKEN`, so the leftover grep is clean. Same test.
+- `askPayload.test.ts` also lost three unused imports and an unused `buildContext` helper.
+- `registerIpcHandlers.test.ts` has one more test than planned: no `ask:delta` to a destroyed sender.
+- `CLAUDE.md` says that every call into `apps/api` is a direct import and that `bootstrap()` loads `.env`
+  first. The `apps/api` layout row did not mention HTTP, so it is unchanged. `README.md` had nothing to
+  change.
+
+Error mapping, checked against the old code: `MissingOpenAIKeyError`'s default text is the same text that
+`getFriendlyAskApiError` produced for a 503 with `OPENAI_API_KEY`, so the user sees the same message.
+The HTTP-only messages (401 "local API rejected", 400 "Invalid Ask Mauz request", fetch or JSON errors)
+are gone; an invalid payload is still a `ZodError` from the IPC handler.
+
+Accepted risks (owner-approved):
+
+- Ask has no HTTP fetch timeout any more. The provider timeouts remain.
+- `.env` now applies to everything `bootstrap()` reads, for example `MAUZ_EXCLUDE_FROM_CAPTURE`, which was
+  read before the old server loaded `.env`. Set variables still win (`override: false`).
+- The module name `@mauzai/api/server` is kept, although there is no server.
+
+For later phases:
+
+- `shutdownResources()` is still `async` but has no `await` now. It is harmless; leave it unless a row
+  touches it.
+- Row 11: `askMauz` still accepts `signal`; `answerAsk` does not pass one.
+- Row 26: `isTrustedRendererOrigin` still trusts `127.0.0.1` and `localhost` on any port (dev renderer).
+
+**Skipped in Phase 2:** nothing from row 1. The end-of-phase review and the tick are left to the
+reviewing agent, as the orchestrator asked.
+
 ---
 
 # Audit
