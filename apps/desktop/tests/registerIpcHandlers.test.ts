@@ -58,9 +58,11 @@ describe("registerIpcHandlers", () => {
 
     expect(ipcMainMock.removeHandler.mock.calls.map(([channel]) => channel)).toEqual(HANDLED_CHANNELS);
     expect(ipcMainMock.handle.mock.calls.map(([channel]) => channel)).toEqual(HANDLED_CHANNELS);
-    expect(Math.max(...ipcMainMock.removeHandler.mock.invocationCallOrder)).toBeLessThan(
-      Math.min(...ipcMainMock.handle.mock.invocationCallOrder)
-    );
+    HANDLED_CHANNELS.forEach((_channel, index) => {
+      expect(ipcMainMock.removeHandler.mock.invocationCallOrder[index]).toBeLessThan(
+        ipcMainMock.handle.mock.invocationCallOrder[index]!
+      );
+    });
   });
 
   it("can register twice without reusing stale handlers", () => {

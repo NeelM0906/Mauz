@@ -76,7 +76,8 @@ the environment.
 
 ## Rules that the code follows
 
-- Each IPC handler calls `assertTrustedSender(event)` first, then parses the payload with a zod schema.
+- Each IPC handler is registered with `handle()` in `registerIpcHandlers.ts`, which calls
+  `assertTrustedSender(event)` first. The handler then parses the payload with a zod schema.
 - Platform code is selected with `process.platform`. Windows code is in `context/WindowsContextHelper.ts`.
   macOS code is in JXA strings (`ActiveWindowService.ts`, `SelectedTextService.ts`) and the Swift helper.
 - A contract type is defined once, as a zod schema in `schemas.ts`; `types.ts` infers it with `z.infer`.
@@ -87,7 +88,7 @@ the environment.
   uses them through `@mauzai/api/server`, but keeps Windows `.cmd` shims as they are (it starts the
   agent through a terminal or `cmd.exe`); Ask resolves them to `node <script>`.
 - A new IPC call needs changes in: `MauzBridge` and `IPC_CHANNELS` (shared), the request schema,
-  preload, `HANDLED_IPC_CHANNELS`, and the handler. The renderer calls the bridge through `mauz()`
+  preload, and the handler. The renderer calls the bridge through `mauz()`
   (`lib/mauzClient.ts`); it runs only in Electron.
 - Services accept injected dependencies in an options object. Tests use these to replace
   `spawn`, the file system, and Electron APIs.
