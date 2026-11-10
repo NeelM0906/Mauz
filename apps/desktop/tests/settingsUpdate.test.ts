@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MauzSettings } from "@mauzai/shared";
+import { MAX_CAPTURE_BLOCKED_APPS, MAX_CAPTURE_BLOCKED_ENTRY_CHARS } from "@mauzai/shared";
 import { buildSettingsUpdate, EMPTY_KEY_DRAFTS } from "../src/renderer/src/lib/settingsUpdate";
 
 const SETTINGS: MauzSettings = {
@@ -48,5 +49,39 @@ describe("buildSettingsUpdate", () => {
     expect(update).not.toHaveProperty("clearAnthropicApiKey");
     expect(update).not.toHaveProperty("openAiApiKey");
     expect(update.clearOpenAiApiKey).toBe(true);
+  });
+
+  it("sends both typed keys, and an Anthropic clear request", () => {
+    const update = buildSettingsUpdate(
+      SETTINGS,
+      { anthropic: { value: "sk-ant-a", clear: true }, openai: { value: "sk-o", clear: false } },
+      { apps: "", sites: "" }
+    );
+
+    expect(update.anthropicApiKey).toBe("sk-ant-a");
+    expect(update.clearAnthropicApiKey).toBe(true);
+    expect(update.openAiApiKey).toBe("sk-o");
+    expect(update).not.toHaveProperty("clearOpenAiApiKey");
+  });
+
+  it("passes openAiAuthDisconnected through", () => {
+    const update = buildSettingsUpdate({ ...SETTINGS, openAiAuthDisconnected: true }, EMPTY_KEY_DRAFTS, {
+      apps: "",
+      sites: ""
+    });
+
+    expect(update.openAiAuthDisconnected).toBe(true);
+  });
+
+  it("keeps the block lists within the schema limits", () => {
+    const longEntry = "x".repeat(MAX_CAPTURE_BLOCKED_ENTRY_CHARS + 10);
+    const manyApps = Array.from({ length: MAX_CAPTURE_BLOCKED_APPS + 5 }, (_, index) => `app${index}.exe`);
+    const update = buildSettingsUpdate(SETTINGS, EMPTY_KEY_DRAFTS, {
+      apps: manyApps.join("\n"),
+      sites: longEntry
+    });
+
+    expect(update.captureBlockedApps).toEqual(manyApps.slice(0, MAX_CAPTURE_BLOCKED_APPS));
+    expect(update.captureBlockedSites).toEqual(["x".repeat(MAX_CAPTURE_BLOCKED_ENTRY_CHARS)]);
   });
 });

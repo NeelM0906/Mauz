@@ -9,7 +9,7 @@ import {
   Trash2,
   Zap
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   BrowserExtensionStatus,
   MauzSettings,
@@ -84,30 +84,40 @@ export function ApiKeyField({
   );
 }
 
-export function TaskAgentSection({ draft, updateDraft }: DraftProps): React.JSX.Element {
-  const [taskAgents, setTaskAgents] = useState<TaskAgentStatus[] | null>(null);
+/**
+ * Loads a value once when the caller mounts. It stays null until the load succeeds; a failed load
+ * leaves it null (the sections then show their fallback).
+ */
+export function useLoadOnMount<T>(load: () => Promise<T>): T | null {
+  const [value, setValue] = useState<T | null>(null);
+  const loadRef = useRef(load);
 
   useEffect(() => {
     let disposed = false;
 
-    void mauz()
-      .task.agents()
-      .then(
-        (response) => {
-          if (!disposed) {
-            setTaskAgents(response.agents);
-          }
-        },
-        () => {
-          // The picker still lists every agent, just without install status.
+    void loadRef.current().then(
+      (loaded) => {
+        if (!disposed) {
+          setValue(loaded);
         }
-      );
+      },
+      () => {}
+    );
 
     return () => {
       disposed = true;
     };
   }, []);
 
+  return value;
+}
+
+/** `taskAgents` is null until loaded; the picker then lists every agent without install status. */
+export function TaskAgentSection({
+  draft,
+  updateDraft,
+  taskAgents
+}: DraftProps & { taskAgents: TaskAgentStatus[] | null }): React.JSX.Element {
   const browseTaskFolder = async (): Promise<void> => {
     const picked = await mauz().task.pickFolder();
 
@@ -246,30 +256,12 @@ export function NeverCaptureSection({
   );
 }
 
-export function BrowserExtensionSection(): React.JSX.Element {
-  const [browserStatus, setBrowserStatus] = useState<BrowserExtensionStatus | null>(null);
-
-  useEffect(() => {
-    let disposed = false;
-
-    void mauz()
-      .browser.status()
-      .then(
-        (status) => {
-          if (!disposed) {
-            setBrowserStatus(status);
-          }
-        },
-        () => {
-          // The section shows setup steps without a connection state.
-        }
-      );
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
+/** `browserStatus` is null until loaded; the section then shows setup steps without a connection state. */
+export function BrowserExtensionSection({
+  browserStatus
+}: {
+  browserStatus: BrowserExtensionStatus | null;
+}): React.JSX.Element {
   return (
     <div className="settings-section">
       <div className="settings-label">

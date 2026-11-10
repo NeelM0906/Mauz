@@ -20,7 +20,8 @@ import {
   BrowserExtensionSection,
   NeverCaptureSection,
   TaskAgentSection,
-  type UpdateDraft
+  type UpdateDraft,
+  useLoadOnMount
 } from "./SettingsSections";
 
 const AI_PROVIDER_CHOICES: Array<{ value: AiProviderId; label: string }> = [
@@ -65,6 +66,9 @@ export function SettingsPanel(): React.JSX.Element {
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const providers = useAiProviders();
+  // Loaded once when the panel opens, as before the split; the sections render only after settings load.
+  const taskAgents = useLoadOnMount(async () => (await mauz().task.agents()).agents);
+  const browserStatus = useLoadOnMount(() => mauz().browser.status());
 
   // Each new settings value (loaded or saved) resets the drafts. With none, load them: the store
   // has none after an activation or a tray open, so the main process's changes show here.
@@ -188,10 +192,10 @@ export function SettingsPanel(): React.JSX.Element {
           ))}
         </div>
 
-        <TaskAgentSection draft={draft} updateDraft={updateDraft} />
+        <TaskAgentSection draft={draft} updateDraft={updateDraft} taskAgents={taskAgents} />
         <ActivationSection draft={draft} updateDraft={updateDraft} />
         <NeverCaptureSection blocked={blocked} onChange={setBlocked} />
-        <BrowserExtensionSection />
+        <BrowserExtensionSection browserStatus={browserStatus} />
       </div>
 
       <footer className="settings-footer">

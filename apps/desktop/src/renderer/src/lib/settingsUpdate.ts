@@ -17,7 +17,7 @@ export function formatAppList(apps: readonly string[] | undefined): string {
   return apps === undefined ? "" : apps.join("\n");
 }
 
-export function parseAppList(text: string): string[] {
+function parseAppList(text: string): string[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim().slice(0, MAX_CAPTURE_BLOCKED_ENTRY_CHARS))

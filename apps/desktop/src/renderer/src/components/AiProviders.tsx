@@ -13,7 +13,7 @@ import {
   SubscriptionSignIn
 } from "./SubscriptionConnect";
 
-export type AiProviders = ReturnType<typeof useAiProviders>;
+type AiProviders = ReturnType<typeof useAiProviders>;
 
 /** Detected AI providers and the subscription sign-in and sign-out flows. */
 export function useAiProviders() {
