@@ -378,6 +378,74 @@ return to the menu when `showMenu()` fails (row 7); the agent list and extension
 Settings panel (row 6); two dead exports; new tests for `goBackToMenu` and `buildSettingsUpdate`. Left: the
 known gap above (failed load, then a tray open while Settings is shown).
 
+### Phase 4 (2026-11-10, base `398ad7b`)
+
+Rows 8 to 13 are done by one session, one commit each. Rows 14 to 20 are for the next session. The
+end-of-phase review has not run and the phase is not ticked. Gates after each commit: typecheck, tests,
+lint; `corepack pnpm -r build` before the row 13 commit. After row 13: api 49 passed, desktop 181 passed.
+
+**Row 8.** The finding is correct. `InputProvider` is now `start()` and `stop()` only. Each provider takes an
+`InputProviderCallbacks` object (`onActivation(event)`, `onPermissionError(error)`) as its first constructor
+argument; `CursorPollingInputProvider` takes only `onActivation`, because it never reports a permission
+error. `index.ts` `createInputProviders` builds the callbacks once. The listener sets, `Unsubscribe`,
+`InputProviderEvents` and the `emit*` methods are gone. The callbacks keep the `ActivationEvent` shape
+(`source` and `cursor`), not the bare cursor that the audit proposed, so the tests that check `source` stay.
+
+**Row 9.** The precondition is true: `exactOptionalPropertyTypes` is on, but `ActiveWindowMetadata` and
+`PointerContext` come from `z.infer`, so their fields are `?: T | undefined`. The four helpers are gone;
+`mergePointerMetadata` stays (two callers) and returns one object literal.
+
+- Change in behaviour: the context objects now hold keys whose value is `undefined` (`activeApp`,
+  `activeWindow`, `selectedText`, `target`, `page`), where before the keys were missing. IPC (structured
+  clone) keeps them as `undefined`, JSON drops them, and the zod `.optional()` schemas accept them. Nothing
+  uses `in`, `Object.keys` or `toStrictEqual` on these objects. The screenshot `pointer` has none of these
+  keys, so no value is hidden by an `undefined`.
+- The activation snapshot no longer drops a whitespace-only `selectedText`; the Ask context still does,
+  and it is the only reader of the snapshot.
+
+**Row 10.** The finding is correct. A local `handle(channel, listener)` removes the old handler, registers the
+new one, and calls `assertTrustedSender(event)` first. `HANDLED_IPC_CHANNELS` and the 20 copied lines are
+gone. `CLAUDE.md` rules are updated (the IPC rule, and the "new IPC call" list no longer names
+`HANDLED_IPC_CHANNELS`).
+
+- Change in behaviour: every handler is now `async`, so a synchronous throw reaches the renderer as a
+  rejection, as Electron already did. `removeHandler` and `handle` now alternate per channel, not all
+  removes first. The order test checks each pair.
+
+**Row 11.** The finding is correct. `signal` is gone from `AskMauzOptions`, `AnswerOptions` and
+`RunCollectOptions`, with `ProcessAbortedError`, its Codex error mapping, the abort listeners in
+`runAndCollect` and `ClaudeCodeProvider.runTurn`, and the `{ signal }` request options of the Anthropic and
+OpenAI SDK calls. The timeouts and their `killQuietly` calls stay, because they are used. No behaviour
+change: no caller passed a signal.
+
+**Row 12.** Status was Reported. The finding is correct: `CodexProvider` is built only with `{ env }`
+(`registry.ts`) and no test builds it; no caller or test passes the registry's `providers` or `now`;
+`transcribeWithOpenAi` is called with no options and has no test. Removed: every `CodexProviderOptions`
+field except `env`, the registry's `providers` and `now`, and `TranscribeWithOpenAiOptions`. `index.ts`
+passes `transcribeWithOpenAi` directly. Small change: Codex reads the environment once per answer, not once
+per field.
+
+**Row 13.** The finding is correct. `installId` is gone from `SettingsService` (type, default, parse, the
+raw-text salvage and its pattern), and `index.ts` no longer sets `MAUZ_INSTALL_ID`. `.env.example` lost
+`MAUZ_INSTALL_ID=`. A search of the whole repository, `browser-extension` and `native` included, found no
+reader. The shared types, schemas and renderer never had the field. Tests: three `installId` tests are gone;
+a new test loads an old file that has `installId` and a legacy `backendPreset`. `subscriptionConnect.test.ts`
+uses `MAUZ_BROWSER_TOKEN` as its sample `MAUZ_` variable, as Phase 2 did.
+
+- Change in behaviour: a settings file with no `installId` is no longer rewritten when it loads. An old file
+  keeps its `installId` key until the next save, which writes the settings without it.
+
+**Problems found in other rows (not fixed):**
+
+- Row 12 scope: `ClaudeCodeProviderOptions` `model`, `effort` and `answerTimeoutMs` are also passed by no
+  caller and no test. They are not in the row's locations, so they stay.
+- Row 17: `CodexProvider` now has no injection points (`spawn`, `resolveCommand`) and no test of `answer()`.
+  A merge of `runTurn` and `runAndCollect` can only be checked through `ClaudeCodeProvider` tests and
+  `parseCodexOutput`.
+- Row 25: `ActivationEvent.source` is set by every provider but read only by tests.
+
+**Skipped in this session:** nothing from rows 8 to 13.
+
 ---
 
 # Audit
