@@ -163,7 +163,7 @@ async function bootstrap(): Promise<void> {
     talkTranscriber: new TalkTranscriber({
       getWindowsHelper: () => windowsContextHelper,
       hasOpenAiKey: hasOpenAiTranscription,
-      transcribeWithOpenAi: (wavAudio) => transcribeWithOpenAi(wavAudio)
+      transcribeWithOpenAi
     }),
     subscriptionConnector,
     openExternal: (url) => shell.openExternal(url),

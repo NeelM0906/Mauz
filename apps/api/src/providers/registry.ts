@@ -42,8 +42,6 @@ export type AnswerProviderRegistryOptions = {
   env?: () => NodeJS.ProcessEnv;
   spawn?: SpawnLike;
   resolveCommand?: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
-  providers?: Partial<Record<AiProviderId, AnswerProvider>>;
-  now?: () => number;
 };
 
 type CliDetectionCache = {
@@ -56,7 +54,6 @@ export class AnswerProviderRegistry {
   private readonly spawnProcess: SpawnLike;
   private readonly resolveCommand: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
   private readonly providers: Record<AiProviderId, AnswerProvider>;
-  private readonly now: () => number;
   private cliDetection: CliDetectionCache | null = null;
   private lastCliDetection: Record<"claude-code" | "codex", ProviderDetection> | null = null;
 
@@ -64,12 +61,11 @@ export class AnswerProviderRegistry {
     this.readEnv = options.env ?? (() => process.env);
     this.spawnProcess = options.spawn ?? spawnCliProcess;
     this.resolveCommand = options.resolveCommand ?? resolveCliCommandForMauz;
-    this.now = options.now ?? Date.now;
     this.providers = {
-      "claude-code": options.providers?.["claude-code"] ?? new ClaudeCodeProvider({ env: this.readEnv }),
-      codex: options.providers?.codex ?? new CodexProvider({ env: this.readEnv }),
-      anthropic: options.providers?.anthropic ?? new AnthropicApiProvider({ env: this.readEnv }),
-      openai: options.providers?.openai ?? new OpenAiApiProvider({ env: this.readEnv })
+      "claude-code": new ClaudeCodeProvider({ env: this.readEnv }),
+      codex: new CodexProvider({ env: this.readEnv }),
+      anthropic: new AnthropicApiProvider({ env: this.readEnv }),
+      openai: new OpenAiApiProvider({ env: this.readEnv })
     };
   }
 
@@ -152,7 +148,7 @@ export class AnswerProviderRegistry {
   private detectCliProviders(refresh: boolean): Promise<Record<"claude-code" | "codex", ProviderDetection>> {
     const cached = this.cliDetection;
 
-    if (!refresh && cached !== null && this.now() - cached.detectedAt < CLI_DETECTION_TTL_MS) {
+    if (!refresh && cached !== null && Date.now() - cached.detectedAt < CLI_DETECTION_TTL_MS) {
       return cached.promise;
     }
 
@@ -162,7 +158,7 @@ export class AnswerProviderRegistry {
       return detection;
     });
 
-    this.cliDetection = { detectedAt: this.now(), promise };
+    this.cliDetection = { detectedAt: Date.now(), promise };
     promise.catch(() => {
       if (this.cliDetection?.promise === promise) {
         this.cliDetection = null;

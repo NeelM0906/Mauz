@@ -2,27 +2,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AiProviderError } from "../errors";
-import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from "./cliCommand";
-import {
-  ProcessTimeoutError,
-  parseJsonLine,
-  runAndCollect,
-  spawnCliProcess,
-  type SpawnLike
-} from "./processRunner";
+import { buildCliEnvironment, resolveCliCommand } from "./cliCommand";
+import { ProcessTimeoutError, parseJsonLine, runAndCollect, spawnCliProcess } from "./processRunner";
 import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
 
 export const DEFAULT_CODEX_REASONING_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 180_000;
 
 export type CodexProviderOptions = {
-  spawn?: SpawnLike;
-  resolveCommand?: () => ResolvedCliCommand | null;
   env?: () => NodeJS.ProcessEnv;
-  model?: () => string | undefined;
-  reasoningEffort?: () => string;
-  makeWorkingDirectory?: () => Promise<string>;
-  answerTimeoutMs?: number;
 };
 
 /**
@@ -32,35 +20,18 @@ export type CodexProviderOptions = {
  */
 export class CodexProvider implements AnswerProvider {
   readonly id = "codex" as const;
-  private readonly spawnProcess: SpawnLike;
-  private readonly resolveCommand: () => ResolvedCliCommand | null;
   private readonly readEnv: () => NodeJS.ProcessEnv;
-  private readonly readModel: () => string | undefined;
-  private readonly readReasoningEffort: () => string;
-  private readonly makeWorkingDirectory: () => Promise<string>;
-  private readonly answerTimeoutMs: number;
 
   constructor(options: CodexProviderOptions = {}) {
-    this.spawnProcess = options.spawn ?? spawnCliProcess;
     this.readEnv = options.env ?? (() => process.env);
-    this.resolveCommand =
-      options.resolveCommand ??
-      (() =>
-        resolveCliCommand("codex", {
-          env: this.readEnv(),
-          fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
-        }));
-    this.readModel = options.model ?? (() => this.readEnv().MAUZ_CODEX_MODEL?.trim() || undefined);
-    this.readReasoningEffort =
-      options.reasoningEffort ??
-      (() => this.readEnv().MAUZ_CODEX_REASONING_EFFORT?.trim() || DEFAULT_CODEX_REASONING_EFFORT);
-    this.makeWorkingDirectory =
-      options.makeWorkingDirectory ?? (() => mkdtemp(join(tmpdir(), "mauz-codex-")));
-    this.answerTimeoutMs = options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS;
   }
 
   async answer(prompt: AnswerPrompt, options: AnswerOptions = {}): Promise<AnswerResult> {
-    const command = this.resolveCommand();
+    const env = this.readEnv();
+    const command = resolveCliCommand("codex", {
+      env,
+      fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
+    });
 
     if (command === null) {
       throw new AiProviderError(
@@ -69,11 +40,12 @@ export class CodexProvider implements AnswerProvider {
       );
     }
 
-    const workingDirectory = await this.makeWorkingDirectory();
+    const workingDirectory = await mkdtemp(join(tmpdir(), "mauz-codex-"));
 
     try {
       const imagePaths = await writeImages(workingDirectory, prompt);
-      const model = this.readModel();
+      const model = env.MAUZ_CODEX_MODEL?.trim() || undefined;
+      const reasoningEffort = env.MAUZ_CODEX_REASONING_EFFORT?.trim() || DEFAULT_CODEX_REASONING_EFFORT;
       const args = [
         ...command.args,
         "exec",
@@ -88,18 +60,18 @@ export class CodexProvider implements AnswerProvider {
         "--config",
         "features.apps=false",
         "--config",
-        `model_reasoning_effort="${this.readReasoningEffort()}"`,
+        `model_reasoning_effort="${reasoningEffort}"`,
         ...(model === undefined ? [] : ["--model", model]),
         ...imagePaths.flatMap((imagePath) => ["--image", imagePath]),
         "-"
       ];
-      const child = this.spawnProcess(command.command, args, {
+      const child = spawnCliProcess(command.command, args, {
         cwd: workingDirectory,
-        env: { ...buildCliEnvironment(this.readEnv()), ...command.env }
+        env: { ...buildCliEnvironment(env), ...command.env }
       });
       const output = await runAndCollect(child, {
         stdinText: buildCodexPrompt(prompt),
-        timeoutMs: this.answerTimeoutMs
+        timeoutMs: ANSWER_TIMEOUT_MS
       }).catch((error: unknown) => {
         throw toCodexError(this.id, error);
       });

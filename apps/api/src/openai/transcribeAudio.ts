@@ -3,28 +3,16 @@ import { AiProviderError, MissingOpenAIKeyError } from "../errors";
 
 const DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
 
-type TranscriptionClient = Pick<OpenAI, "audio">;
-
-export type TranscribeWithOpenAiOptions = {
-  apiKey?: string | undefined;
-  model?: string | undefined;
-  client?: TranscriptionClient;
-};
-
 /** Speech-to-text for Dictate when the user has added an OpenAI API key. */
-export async function transcribeWithOpenAi(
-  wavAudio: Buffer,
-  options: TranscribeWithOpenAiOptions = {}
-): Promise<string> {
-  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY?.trim();
+export async function transcribeWithOpenAi(wavAudio: Buffer): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
 
-  if (!apiKey && options.client === undefined) {
+  if (!apiKey) {
     throw new MissingOpenAIKeyError();
   }
 
-  const client = options.client ?? new OpenAI({ apiKey });
-  const model =
-    options.model ?? (process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL?.trim() || DEFAULT_TRANSCRIPTION_MODEL);
+  const client = new OpenAI({ apiKey });
+  const model = process.env.OPENAI_REALTIME_TRANSCRIPTION_MODEL?.trim() || DEFAULT_TRANSCRIPTION_MODEL;
 
   try {
     const transcription = await client.audio.transcriptions.create({
