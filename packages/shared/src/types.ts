@@ -15,7 +15,6 @@ import type {
   CaptureBlockedSchema,
   CursorCropFocusSchema,
   MauzDesktopContextSchema,
-  MauzLensResizeRequestSchema,
   MauzSettingsSchema,
   MauzSettingsUpdateSchema,
   MouseMoveSampleSchema,
@@ -87,7 +86,6 @@ export type ShakeSensitivity = z.infer<typeof ShakeSensitivitySchema>;
 export type OpenAiCredentialSource = z.infer<typeof OpenAiCredentialSourceSchema>;
 export type MauzSettings = z.infer<typeof MauzSettingsSchema>;
 export type MauzSettingsUpdate = z.infer<typeof MauzSettingsUpdateSchema>;
-export type MauzLensResizeRequest = z.infer<typeof MauzLensResizeRequestSchema>;
 export type MouseMoveSample = z.infer<typeof MouseMoveSampleSchema>;
 
 export type TaskAgentId = z.infer<typeof TaskAgentIdSchema>;
@@ -99,10 +97,6 @@ export type TaskFoldersRequest = z.infer<typeof TaskFoldersRequestSchema>;
 export type TaskFoldersResponse = z.infer<typeof TaskFoldersResponseSchema>;
 export type TaskSendRequest = z.infer<typeof TaskSendRequestSchema>;
 export type TaskSendResponse = z.infer<typeof TaskSendResponseSchema>;
-
-export type MauzSettingsOpenOptions = {
-  resizePopover?: boolean | undefined;
-};
 
 export type BrowserExtensionStatus = {
   /** Browsers whose Mauz extension is connected now. */
@@ -118,7 +112,8 @@ export type MauzBridge = {
     showMenu(): Promise<void>;
     close(): Promise<void>;
     startAsk(): Promise<MauzDesktopContext>;
-    setLensExpanded(payload: MauzLensResizeRequest): Promise<void>;
+    /** Grows the popover from the menu to the panel size. */
+    expand(): Promise<void>;
     /** The popover was hidden (closed, Escape, or lost focus); stop microphone use. */
     onHidden(callback: () => void): () => void;
   };
@@ -143,7 +138,7 @@ export type MauzBridge = {
     openExtensionFolder(): Promise<void>;
   };
   settings: {
-    open(options?: MauzSettingsOpenOptions): Promise<MauzSettings>;
+    open(): Promise<MauzSettings>;
     update(payload: MauzSettingsUpdate): Promise<MauzSettings>;
   };
   events: {

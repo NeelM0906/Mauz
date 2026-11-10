@@ -6,11 +6,9 @@ import type {
   BrowserExtensionStatus,
   AskMauzRequest,
   AskMauzResponse,
-  MauzLensResizeRequest,
   MauzBridge,
   MauzDesktopContext,
   MauzSettings,
-  MauzSettingsOpenOptions,
   MauzSettingsUpdate,
   PermissionError,
   SubscriptionCancelRequest,
@@ -39,8 +37,7 @@ const mauzApi: MauzBridge = {
     showMenu: () => ipcRenderer.invoke(IPC_CHANNELS.menuShowMenu) as Promise<void>,
     close: () => ipcRenderer.invoke(IPC_CHANNELS.menuClose) as Promise<void>,
     startAsk: () => ipcRenderer.invoke(IPC_CHANNELS.menuStartAsk) as Promise<MauzDesktopContext>,
-    setLensExpanded: (payload: MauzLensResizeRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.menuSetLensExpanded, payload) as Promise<void>,
+    expand: () => ipcRenderer.invoke(IPC_CHANNELS.menuExpand) as Promise<void>,
     onHidden: (callback: () => void) => {
       const listener = (): void => callback();
       ipcRenderer.on(IPC_CHANNELS.menuHidden, listener);
@@ -90,8 +87,7 @@ const mauzApi: MauzBridge = {
     openExtensionFolder: () => ipcRenderer.invoke(IPC_CHANNELS.browserOpenExtensionFolder) as Promise<void>
   },
   settings: {
-    open: (options?: MauzSettingsOpenOptions) =>
-      ipcRenderer.invoke(IPC_CHANNELS.settingsOpen, options) as Promise<MauzSettings>,
+    open: () => ipcRenderer.invoke(IPC_CHANNELS.settingsOpen) as Promise<MauzSettings>,
     update: (payload: MauzSettingsUpdate) =>
       ipcRenderer.invoke(IPC_CHANNELS.settingsUpdate, payload).then((settings: unknown) => {
         const parsed = MauzSettingsSchema.parse(settings);

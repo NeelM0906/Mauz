@@ -27,7 +27,7 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuShowMenu,
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
-  IPC_CHANNELS.menuSetLensExpanded,
+  IPC_CHANNELS.menuExpand,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -102,23 +102,16 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
   });
 
-  it("resizes Lens only when the popover asks to expand or collapse", async () => {
+  it("grows the popover to the panel size when the menu opens a panel", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.menuSetLensExpanded);
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuExpand);
 
-    await handler(createInvokeEvent(), {
-      expanded: true
-    });
+    await handler(createInvokeEvent());
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
     expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
-
-    await handler(createInvokeEvent(), {
-      expanded: false
-    });
-    expect(options.popover.resizeForMenu).toHaveBeenCalledOnce();
   });
 
   it("clears activation context when the popover closes", async () => {
@@ -134,18 +127,16 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.hide).toHaveBeenCalledOnce();
   });
 
-  it("can read settings from the popover without opening the settings panel", async () => {
+  it("sizes the popover for Settings when the renderer opens settings", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
 
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await handler(createInvokeEvent(), {
-      resizePopover: false
-    });
+    await handler(createInvokeEvent());
 
-    expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
+    expect(options.popover.resizeForSettings).toHaveBeenCalledOnce();
   });
 
   it("rejects privileged invoke calls without renderer metadata", async () => {
@@ -166,9 +157,7 @@ describe("registerIpcHandlers", () => {
 
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await expect(
-      handler(createInvokeEvent("http://[::1]:5173"), { resizePopover: false })
-    ).resolves.toMatchObject({
+    await expect(handler(createInvokeEvent("http://[::1]:5173"))).resolves.toMatchObject({
       taskAgent: "auto"
     });
     expect(options.getSettings).toHaveBeenCalledOnce();

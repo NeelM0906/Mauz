@@ -345,10 +345,6 @@ export const AskMauzResponseSchema = z.object({
   usage: z.unknown().optional()
 });
 
-export const MauzLensResizeRequestSchema = z.object({
-  expanded: z.boolean()
-});
-
 export const TaskAgentStatusSchema = z.object({
   id: TaskAgentIdSchema,
   label: z.string().min(1).max(80),

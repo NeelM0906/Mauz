@@ -80,7 +80,7 @@ the environment.
 - Platform code is selected with `process.platform`. Windows code is in `context/WindowsContextHelper.ts`.
   macOS code is in JXA strings (`ActiveWindowService.ts`, `SelectedTextService.ts`) and the Swift helper.
 - A contract type is defined once, as a zod schema in `schemas.ts`; `types.ts` infers it with `z.infer`.
-  Only `MauzBridge`, `BrowserExtensionStatus` and `MauzSettingsOpenOptions` are written by hand.
+  Only `MauzBridge` and `BrowserExtensionStatus` are written by hand.
 - Child processes must not inherit Mauz credentials. Use `buildCliEnvironment` (API) or
   `buildAgentEnvironment` (desktop, which calls `buildCliEnvironment`).
 - CLI search folders and the `MAUZ_*_PATH` overrides are in `cliCommand.ts` only. `TaskAgentLauncher`

@@ -17,7 +17,7 @@ export const IPC_CHANNELS = {
   menuShowMenu: "mauz:menu:show-menu",
   menuClose: "mauz:menu:close",
   menuStartAsk: "mauz:menu:start-ask",
-  menuSetLensExpanded: "mauz:menu:set-lens-expanded",
+  menuExpand: "mauz:menu:expand",
   menuHidden: "mauz:menu:hidden",
   settingsOpen: "mauz:settings:open",
   settingsUpdate: "mauz:settings:update",

@@ -30,7 +30,7 @@ function bubbleStyle(key: BubbleKey, order: number, size = 52): React.CSSPropert
 }
 
 export function MauzMenu(): React.JSX.Element {
-  const { settings, status, setCurrentContext, setMode, setSettings, setStatus } = useMauzStore();
+  const { status, setCurrentContext, setMode, setSettings, setStatus } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<BubbleKey | null>(null);
   const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
 
@@ -55,34 +55,6 @@ export function MauzMenu(): React.JSX.Element {
     };
   }, []);
 
-  useEffect(() => {
-    let disposed = false;
-
-    const loadSettings = async (): Promise<void> => {
-      try {
-        const loadedSettings = await mauz().settings.open({
-          resizePopover: false
-        });
-
-        if (!disposed) {
-          setSettings(loadedSettings);
-        }
-      } catch (error) {
-        if (!disposed) {
-          setStatus(error instanceof Error ? error.message : "Mauz settings failed.");
-        }
-      }
-    };
-
-    if (settings === null) {
-      void loadSettings();
-    }
-
-    return () => {
-      disposed = true;
-    };
-  }, [setSettings, setStatus, settings]);
-
   const handleSettings = async (): Promise<void> => {
     setStatus(null);
 
@@ -103,7 +75,7 @@ export function MauzMenu(): React.JSX.Element {
     try {
       const context = await mauz().menu.startAsk();
       setCurrentContext(context);
-      await mauz().menu.setLensExpanded({ expanded: true });
+      await mauz().menu.expand();
       setMode(PANEL_FOR_BUBBLE[bubble]);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");

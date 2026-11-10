@@ -4,7 +4,6 @@ import {
   AiProvidersStatusResponseSchema,
   AskMauzRequestSchema,
   IPC_CHANNELS,
-  MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
   SubscriptionCancelRequestSchema,
   SubscriptionCodeRequestSchema,
@@ -64,7 +63,7 @@ const HANDLED_IPC_CHANNELS = [
   IPC_CHANNELS.menuShowMenu,
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
-  IPC_CHANNELS.menuSetLensExpanded,
+  IPC_CHANNELS.menuExpand,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -114,25 +113,14 @@ export function registerIpcHandlers({
     assertTrustedSender(event);
     return contextCollector.collectForAsk();
   });
-  ipcMain.handle(IPC_CHANNELS.menuSetLensExpanded, (event, payload: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.menuExpand, (event) => {
     assertTrustedSender(event);
-    const request = MauzLensResizeRequestSchema.parse(payload);
-
-    if (request.expanded) {
-      popover.resizeForAsk();
-      return;
-    }
-
-    popover.resizeForMenu();
+    popover.resizeForAsk();
   });
 
-  ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event, payload: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event) => {
     assertTrustedSender(event);
-
-    if (shouldResizeForSettingsOpen(payload)) {
-      popover.resizeForSettings();
-    }
-
+    popover.resizeForSettings();
     return getSettings();
   });
 
@@ -336,12 +324,4 @@ function isTrustedRendererOrigin(url: URL): boolean {
     url.hostname === "::1" ||
     url.hostname === "[::1]"
   );
-}
-
-function shouldResizeForSettingsOpen(payload: unknown): boolean {
-  if (typeof payload !== "object" || payload === null || !("resizePopover" in payload)) {
-    return true;
-  }
-
-  return payload.resizePopover !== false;
 }

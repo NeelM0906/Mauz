@@ -36,11 +36,14 @@ export const useMauzStore = create<MauzStore>((set) => ({
       status: null,
       dictation: null
     }),
+  // Clears settings too: the main process can change them (Send to agent saves the agent), so
+  // Settings reloads them after each activation or tray open.
   reset: () =>
     set({
       mode: "menu",
       status: null,
       currentContext: null,
+      settings: null,
       dictation: null
     })
 }));

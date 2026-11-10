@@ -203,7 +203,7 @@ async function openSettings(): Promise<void> {
     return;
   }
 
-  // Size for Settings up front: the renderer skips settings.open() (and its resize) once settings are loaded.
+  // Size for Settings up front, so the panel does not first show at menu size; its settings.open() resizes again.
   await popover.showAt(screen.getCursorScreenPoint(), { notifyActivation: false, forSettings: true });
   popover.getWebContents()?.send(IPC_CHANNELS.openSettings);
 }
