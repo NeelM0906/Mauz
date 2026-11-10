@@ -8,10 +8,9 @@ import {
   buildAgentEnvironment,
   buildHiddenStartCommand,
   buildPowerShellLauncher,
-  buildShellLauncher,
-  TaskAgentLauncher,
-  threadTitle
-} from "../src/main/agent/TaskAgentLauncher";
+  buildShellLauncher
+} from "../src/main/agent/agentProcess";
+import { TaskAgentLauncher, threadTitle } from "../src/main/agent/TaskAgentLauncher";
 
 const CONTEXT: MauzDesktopContext = {
   timestamp: "2026-11-04T12:00:00.000Z",

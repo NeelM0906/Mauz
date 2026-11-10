@@ -44,7 +44,7 @@ to their source files. The desktop build bundles both packages from source.
 | `context/`  | Capture: active window, selected text, screenshot, browser page, Windows helper (PowerShell). |
 | `windows/`  | The popover window, its position, the tray, navigation hardening.                             |
 | `ipc/`      | `registerIpcHandlers.ts`: one handler for each invoke channel.                                |
-| `agent/`    | `TaskAgentLauncher.ts`: find the agent CLI, write the task brief, start the agent.            |
+| `agent/`    | `TaskAgentLauncher.ts`: find the agent CLI, write the brief; `agentProcess.ts`: start it.     |
 | `settings/` | `SettingsService.ts`: settings file, encrypted API keys.                                      |
 | `talk/`     | `TalkTranscriber.ts`: OpenAI first, Windows speech recognition second.                        |
 
@@ -79,7 +79,8 @@ the environment.
 
 - Each IPC handler is registered with `handle()` in `registerIpcHandlers.ts`, which calls
   `assertTrustedSender(event)` first. The handler then parses the payload with a zod schema.
-- Platform code is selected with `process.platform`. Windows code is in `context/WindowsContextHelper.ts`.
+- Platform code is selected with `process.platform`. Windows code is in `context/WindowsContextHelper.ts`
+  (its PowerShell program is in `windowsHelperScript.ts`).
   macOS code is in JXA strings (`ActiveWindowService.ts`, `SelectedTextService.ts`) and the Swift helper.
 - A contract type is defined once, as a zod schema in `schemas.ts`; `types.ts` infers it with `z.infer`.
   Only `MauzBridge` and `BrowserExtensionStatus` are written by hand.
