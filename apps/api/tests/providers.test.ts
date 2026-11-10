@@ -467,6 +467,19 @@ describe("AnswerProviderRegistry", () => {
     expect(status.providers.find((provider) => provider.id === "codex")?.available).toBe(true);
   });
 
+  it.each([
+    [" codex ", "codex"],
+    ["foo", "auto"],
+    [undefined, "auto"]
+  ])("reads MAUZ_AI_PROVIDER %j as %s", async (value, expected) => {
+    const registry = createRegistry(value === undefined ? {} : { MAUZ_AI_PROVIDER: value }, {
+      claude: JSON.stringify({ loggedIn: false }),
+      codex: "Not logged in"
+    });
+
+    await expect(registry.getStatus()).resolves.toMatchObject({ preference: expected });
+  });
+
   it("explains when the selected provider is not ready", async () => {
     const registry = createRegistry(
       { MAUZ_AI_PROVIDER: "anthropic" },
