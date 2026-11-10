@@ -161,7 +161,7 @@ describe("TaskAgentLauncher", () => {
       expect(script).toContain("$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'");
       expect(brief).toContain("<task>\nFix this error\n</task>");
       expect(brief).toContain("<selected_text>\nTypeError: x is undefined\n</selected_text>");
-      expect(brief).toContain(`<image>${join(handoff, "screen.png")} (crop framed on the pointed element`);
+      expect(brief).toContain("<image>attached: crop framed on the pointed element");
       expect(readFileSync(join(handoff, "screen.png"), "utf8")).toBe("png-bytes");
       expect(script).toContain(`Set-Location -LiteralPath '${folder}'`);
       expect(script).toContain("'chat' '--query-file'");
@@ -232,20 +232,25 @@ describe("TaskAgentLauncher", () => {
       mkdirSync(join(localAppData, "Microsoft", "WindowsApps", "Claude_pzs8sxrjxfjjc"), { recursive: true });
       const startHidden = vi.fn(async () => {});
       const startProcess = vi.fn(async () => {});
+      // The run's log as Mauz polls it: still working, then the result.
+      const logLines = ['{"type":"assistant"}\n', '{"type":"result","subtype":"success"}\n'];
       const launcher = new TaskAgentLauncher({
         platform: "win32",
-        env: { PATH: "", LOCALAPPDATA: localAppData },
+        env: { PATH: "", LOCALAPPDATA: localAppData, CLAUDE_CODE_SESSION_ID: "parent", CLAUDECODE: "1" },
         homeDirectory: home,
         tempDirectory: createHome(),
         pathExists: (path) => path === join(home, ".local", "bin", "claude.exe") || existsSync(path),
         startProcess,
         startHidden,
-        // Claude Code writes its transcript a moment after it starts.
         sleep: async () => {
-          const [, args] = startHidden.mock.calls[0] as unknown as [string, string[]];
-          const sessionId = args[args.indexOf("--session-id") + 1];
-          mkdirSync(join(home, ".claude", "projects", "C--work"), { recursive: true });
-          writeFileSync(join(home, ".claude", "projects", "C--work", `${sessionId}.jsonl`), "{}\n");
+          const [, , options] = startHidden.mock.calls[0] as unknown as [
+            string,
+            string[],
+            { logPath: string }
+          ];
+          writeFileSync(options.logPath, logLines.shift() ?? "", { flag: "a" });
+          // Not imported while the run is still going.
+          expect(startProcess).toHaveBeenCalledTimes(0);
         }
       });
 
@@ -257,7 +262,7 @@ describe("TaskAgentLauncher", () => {
       const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
         string,
         string[],
-        { cwd: string; logPath: string; stdinPath: string }
+        { cwd: string; logPath: string; stdinPath: string; env: NodeJS.ProcessEnv }
       ];
       const handoff = join(options.logPath, "..");
       const sessionId = args[args.indexOf("--session-id") + 1] ?? "";
@@ -269,13 +274,31 @@ describe("TaskAgentLauncher", () => {
         sessionId,
         "--permission-mode",
         "auto",
-        "--add-dir",
-        handoff,
+        "--input-format",
+        "stream-json",
         "--output-format",
-        "json"
+        "stream-json",
+        "--verbose"
       ]);
-      expect(options.stdinPath).toBe(join(handoff, "task.md"));
       expect(options.cwd).toBe(folder);
+      expect(options.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
+      expect(options.env.CLAUDECODE).toBeUndefined();
+
+      // The prompt is one message: the brief, with the screenshot attached.
+      expect(options.stdinPath).toBe(join(handoff, "prompt.jsonl"));
+      const message = JSON.parse(readFileSync(options.stdinPath, "utf8")) as {
+        message: { content: Array<{ type: string; text?: string; source?: unknown }> };
+      };
+      expect(message.message.content[0]?.text).toContain(
+        "<image>attached: crop framed on the pointed element"
+      );
+      expect(message.message.content[1]).toEqual({
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: Buffer.from("png-bytes").toString("base64") }
+      });
+
+      // Imported once, when the run has ended.
+      expect(startProcess).toHaveBeenCalledTimes(1);
       expect(startProcess).toHaveBeenCalledWith(
         join(localAppData, "Microsoft", "WindowsApps", "claude-desktop.exe"),
         ["--startup", `claude://resume?session=${sessionId}`],
@@ -420,7 +443,7 @@ describe("agent command lines", () => {
     expect(buildAgentArguments("claude-code", input)).toEqual([
       "--add-dir",
       "C:\\tmp\\h",
-      "Read the task brief in C:\\tmp\\h\\task.md and carry it out."
+      "Read the task brief in C:\\tmp\\h\\task.md and carry it out. The attached screenshot is C:\\tmp\\h\\screen.png."
     ]);
   });
 
