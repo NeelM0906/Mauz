@@ -44,7 +44,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
 
 ## Phases
 
-- [ ] **Phase 0: baseline and defect tests**
+- [x] **Phase 0: baseline and defect tests** (done 2026-11-10; see "Phase 0" in Notes)
   - Install dependencies. Run typecheck, tests and lint. Record the commands that work in "Notes".
     Fix only the items that prevent a green baseline.
   - For each of the 5 defects in the "Probable defects" table, write a test that shows the defect.
@@ -77,6 +77,73 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
 ## Notes
 
 _(Sessions add text here: baseline commands, defect confirmations, skipped items, wrong audit findings.)_
+
+### Phase 0 (2026-11-10, base `926e10b`)
+
+**Baseline.** No fix was needed. On Windows, `pnpm` is not on PATH, so use `corepack pnpm`. The root
+scripts `pnpm test` and `pnpm typecheck` call `pnpm -r`, so call the recursive form directly:
+
+| Step      | Command                                                    | Result                                       |
+| --------- | ---------------------------------------------------------- | -------------------------------------------- |
+| Install   | `corepack pnpm install`                                    | OK                                           |
+| Typecheck | `corepack pnpm -r typecheck`                               | OK, 3 packages                               |
+| Tests     | `corepack pnpm -r test`                                    | api 46 passed; desktop 172 passed, 5 skipped |
+| Lint      | `corepack pnpm exec prettier --check --end-of-line auto .` | OK                                           |
+
+`corepack pnpm lint` fails on 130 files on Windows only: this checkout has `core.autocrlf=true`, so the
+files have CRLF line endings, and Prettier expects LF. With `--end-of-line auto` every file passes. The
+committed files have LF. This is a local setting, not a repo problem.
+
+**Defects.** The 5 skipped tests fail today for the stated reason. This was checked by running them
+without `.skip`. The fix that removes each `.skip` must make the test pass.
+
+| Defect                     | Status after Phase 0 | Evidence                                                       |
+| -------------------------- | -------------------- | -------------------------------------------------------------- |
+| `.env` key hidden          | Confirmed by test    | `SettingsService.test.ts` "known defects" (skipped)            |
+| Late Ask answer            | Confirmed by reading | Manual steps below; the renderer has no DOM test setup         |
+| CLI path for Ask only      | Confirmed by tests   | `TaskAgentLauncher.test.ts` "known defects": 3 tests (skipped) |
+| Credential list differs    | Confirmed by test    | `TaskAgentLauncher.test.ts` "known defects" (skipped)          |
+| Stale task agent from tray | Confirmed by reading | Manual steps below; status was "Reported"                      |
+
+- **`.env` test and row 1.** The test builds the start order by hand: `SettingsService`, then
+  `createMauzApiServer()`, which loads `.env`. Row 1 deletes `createMauzApiServer` and fixes the order
+  inside `bootstrap()`, which a test cannot run. So row 1 must rewrite or delete this test (for example,
+  call the exported `loadLocalEnv()` before `new SettingsService()`), and the owner checks the fix with
+  the smoke step "Ask with the key only in `.env`".
+- **CLI-path tests and row 3.** The tests check `listAgents()`. `launch()` calls the same
+  `findExecutable(agent.command)`, so row 3 must fix that function, not `listAgents()` alone.
+- **Credential list.** Mauz never sets `ANTHROPIC_AUTH_TOKEN` itself (`applyRuntimeEnvironment` sets
+  only `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`). So today Send to agent passes on a token that came
+  from the user's own environment. Row 3 removes it, as the Ask CLI providers do.
+
+**Manual steps: late Ask answer** (`LensPanel.tsx` `submitQuestion`)
+
+1. Select Claude Code or Codex as the Ask provider, so that an answer takes several seconds.
+2. Open Mauz, choose Ask, and ask a long question, for example "Explain this in 300 words".
+3. While the answer streams, click the X button ("Close Mauz"). Escape does not work while the question
+   field has focus.
+4. Open Mauz again and choose Ask. Do not ask anything.
+5. Wait until the first answer would be complete.
+6. Expected: the panel stays empty. Defect: the first answer appears. If you ask a second question
+   during step 5, the first answer appears and the loading state ends before the second answer comes.
+
+Cause: the old `LensPanel` is unmounted, but its `submitQuestion` still calls `setAskAnswer` and
+`setAskLoading(false)` on the global store with no request check.
+
+**Manual steps: stale task agent from the tray** (`App.tsx` `onOpenSettings`, `SettingsPanel.tsx`)
+
+1. In Settings, set Task agent to Claude Code and save.
+2. Open Mauz with a shake or the hotkey. The menu loads settings into the store.
+3. Choose Send to agent, pick Codex, and send a task. The main process saves `taskAgent: "codex"`
+   (`registerIpcHandlers.ts`, the task launch handler).
+4. Open Settings from the tray.
+5. Expected: Task agent shows Codex. Defect: it shows Claude Code, and Save writes Claude Code back.
+
+Cause: `onOpenSettings` calls `reset()`, which keeps `settings`. `SettingsPanel` reloads only when
+`settings` is `null`. The menu's own Settings button is not affected, because `handleSettings` reloads.
+
+**Skipped in Phase 0:** none of the plan items. Not done: a test that loads the real `bootstrap()`
+(it needs Electron).
 
 ---
 
