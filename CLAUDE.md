@@ -89,7 +89,6 @@ Answer text streams back through an in-process callback (`ask:delta`), not throu
 
 - Only Ask uses the loopback HTTP server. All other calls into `apps/api` are direct function imports.
 - `.env` is loaded inside `createMauzApiServer`, after `SettingsService` has read the environment.
-- `packages/shared/src/types.ts` repeats by hand the types that `schemas.ts` defines. They can go out of step.
 - CLI discovery and environment cleaning exist in two places with different results:
   `apps/api/src/providers/cliCommand.ts` and `apps/desktop/src/main/agent/TaskAgentLauncher.ts`.
 - Names: Ask is also called "lens" and "answer". Dictate is also called "talk" and "pushToTalk".

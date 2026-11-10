@@ -69,12 +69,16 @@ export const AiProvidersStatusResponseSchema = z.object({
 
 export const SubscriptionProviderIdSchema = z.enum(["claude-code", "codex"]);
 
+/** Progress of connecting a subscription from inside Mauz (install the CLI if needed, then sign in). */
 export const SubscriptionConnectStateSchema = z.object({
   connectId: z.string().min(1).max(128),
   providerId: SubscriptionProviderIdSchema,
   phase: z.enum(["installing", "starting", "waiting", "connected", "failed", "cancelled"]),
+  /** Sign-in page to open in the browser. */
   url: z.string().url().max(2000).nullable(),
+  /** One-time code to enter on the sign-in page (device sign-in). */
   userCode: z.string().max(64).nullable(),
+  /** The sign-in page may show a code that has to be pasted back into Mauz. */
   acceptsPastedCode: z.boolean(),
   message: z.string().max(500).nullable()
 });
@@ -124,11 +128,16 @@ export const MauzSettingsSchema = z.object({
   openAiAuthDisconnected: z.boolean(),
   openAiCredentialSource: OpenAiCredentialSourceSchema,
   askModel: ModelNameSchema,
+  /** Executable names (Windows) or bundle ids (macOS) Mauz never captures. */
   captureBlockedApps: CaptureBlockedAppsSchema,
+  /** Sites (example.com, *bank*) whose pages Mauz never reads or screenshots. */
   captureBlockedSites: CaptureBlockedAppsSchema,
   apiKeyConfigured: z.boolean(),
+  /** The coding agent Send to agent hands tasks to; "auto" picks the first one installed. */
   taskAgent: TaskAgentPreferenceSchema,
+  /** Folder an agent starts in when none was picked; empty means the home folder. */
   taskFolder: FolderPathSchema,
+  /** The folder last used with each agent. */
   taskAgentFolders: z.partialRecord(TaskAgentIdSchema, FolderPathSchema),
   aiProvider: AiProviderPreferenceSchema,
   anthropicKeyConfigured: z.boolean()
@@ -170,14 +179,19 @@ export const MacInputAgentEventSchema = z.discriminatedUnion("type", [
 const MAX_TARGET_TEXT_CHARS = 4_000;
 const MAX_TARGET_VALUE_CHARS = 2_000;
 
+/** Something on screen read from the app itself (UI Automation, Accessibility, or a browser). */
 export const PointerTargetElementSchema = z.object({
+  /** Control type, e.g. "Button", "Text", "Hyperlink", "Edit", "ListItem". */
   role: z.string().min(1).max(80),
   name: WindowTextSchema.optional(),
+  /** Never read from password fields. */
   value: z.string().max(MAX_TARGET_VALUE_CHARS).optional(),
+  /** Paragraph at the pointer for the element; descendant text for a container. */
   text: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
   bounds: BoundsSchema.optional()
 });
 
+/** The element under the pointer, the group around it, and the window it belongs to. */
 export const PointerTargetSchema = z.object({
   source: z.enum(["windows-uia", "macos-ax", "browser"]),
   element: PointerTargetElementSchema,
@@ -194,7 +208,12 @@ export const PointerTargetSchema = z.object({
 });
 
 export const CursorCropFocusSchema = z.object({
+  /**
+   * "element": framed on the pointed element or its group; "pointer-area": a fixed area around
+   * the pointer.
+   */
   kind: z.enum(["element", "pointer-area"]),
+  /** Pointer position in the crop's pixels. */
   pointer: CursorPositionSchema
 });
 
@@ -206,6 +225,7 @@ const MAX_PAGE_TEXT_CHARS = 8_000;
 const MAX_URL_CHARS = 2_000;
 const ProductFieldSchema = z.string().max(300).optional();
 
+/** Structured product data a shop page publishes for search engines (schema.org, Open Graph). */
 export const BrowserProductSchema = z.object({
   name: ProductFieldSchema,
   brand: ProductFieldSchema,
@@ -224,11 +244,14 @@ export const BrowserProductSchema = z.object({
   seller: ProductFieldSchema
 });
 
+/** The page under the pointer, read by the Mauz browser extension. */
 export const BrowserPageSchema = z.object({
+  /** "Google Chrome", "Microsoft Edge", ... */
   browser: z.string().min(1).max(80),
   url: z.string().min(1).max(MAX_URL_CHARS),
   title: WindowTextSchema.optional(),
   selection: UserTextSchema.optional(),
+  /** The element under the pointer. */
   element: z
     .object({
       tag: z.string().min(1).max(40),
@@ -238,7 +261,9 @@ export const BrowserPageSchema = z.object({
       alt: WindowTextSchema.optional()
     })
     .optional(),
+  /** Text of the card or section around the pointed element. */
   around: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
+  /** Main text of the page. */
   text: z.string().max(MAX_PAGE_TEXT_CHARS).optional(),
   product: BrowserProductSchema.optional()
 });
@@ -269,8 +294,10 @@ export const PointerContextSchema = z.object({
   target: PointerTargetSchema.optional(),
   cursorCrop: ScreenshotPayloadSchema.optional(),
   cursorCropFocus: CursorCropFocusSchema.optional(),
+  /** Text recognized in the cursor crop (Windows OCR) when the app exposed none. */
   ocrText: z.string().max(MAX_TARGET_TEXT_CHARS).optional(),
   page: BrowserPageSchema.optional(),
+  /** Image of the window under the pointer; sent only when there is no cursor crop. */
   screenshot: ScreenshotPayloadSchema.optional()
 });
 
@@ -302,6 +329,7 @@ export const MauzDesktopContextSchema = z.object({
   pointer: PointerContextSchema.optional(),
   screenshot: ScreenshotPayloadSchema.optional(),
   screenshotError: PermissionErrorSchema.optional(),
+  /** The app is on the user's never-capture list; no pixels, text, or window title were collected. */
   captureBlocked: CaptureBlockedSchema.optional()
 });
 
@@ -321,21 +349,26 @@ export const MauzLensResizeRequestSchema = z.object({
   expanded: z.boolean()
 });
 
+export const TaskAgentStatusSchema = z.object({
+  id: TaskAgentIdSchema,
+  label: z.string().min(1).max(80),
+  installed: z.boolean()
+});
+
 export const TaskAgentsResponseSchema = z.object({
-  agents: z.array(
-    z.object({
-      id: TaskAgentIdSchema,
-      label: z.string().min(1).max(80),
-      installed: z.boolean()
-    })
-  ),
+  agents: z.array(TaskAgentStatusSchema),
+  /** The agent Send to agent uses: the setting, or the first installed one for "auto". */
   selectedAgentId: TaskAgentIdSchema.nullable()
 });
 
 export const TaskFoldersRequestSchema = z.object({ agentId: TaskAgentIdSchema });
 
+export const TaskFolderSchema = z.object({ path: FolderPathSchema.min(1), name: z.string().max(260) });
+
 export const TaskFoldersResponseSchema = z.object({
-  folders: z.array(z.object({ path: FolderPathSchema.min(1), name: z.string().max(260) })).max(100),
+  /** Folders the agent has worked in, most recent first. */
+  folders: z.array(TaskFolderSchema).max(100),
+  /** The folder to preselect: the last one used with this agent, or the default work folder. */
   selectedPath: FolderPathSchema
 });
 

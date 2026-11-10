@@ -1,368 +1,107 @@
-export type Platform = "darwin" | "win32" | "linux";
+import type { z } from "zod";
+import type {
+  AiProviderIdSchema,
+  AiProviderKindSchema,
+  AiProviderPreferenceSchema,
+  AiProvidersStatusRequestSchema,
+  AiProvidersStatusResponseSchema,
+  AiProviderStatusSchema,
+  AskAnswerDeltaSchema,
+  AskMauzRequestSchema,
+  AskMauzResponseSchema,
+  BoundsSchema,
+  BrowserPageSchema,
+  BrowserProductSchema,
+  CaptureBlockedSchema,
+  CursorCropFocusSchema,
+  MauzDesktopContextSchema,
+  MauzLensResizeRequestSchema,
+  MauzSettingsSchema,
+  MauzSettingsUpdateSchema,
+  MouseMoveSampleSchema,
+  OpenAiCredentialSourceSchema,
+  PermissionErrorSchema,
+  PlatformSchema,
+  PointerContextSchema,
+  PointerTargetElementSchema,
+  PointerTargetSchema,
+  ScreenshotPayloadSchema,
+  ShakeSensitivitySchema,
+  SubscriptionCancelRequestSchema,
+  SubscriptionCodeRequestSchema,
+  SubscriptionConnectRequestSchema,
+  SubscriptionConnectStateSchema,
+  SubscriptionDisconnectRequestSchema,
+  SubscriptionProviderIdSchema,
+  TalkTranscribeRequestSchema,
+  TalkTranscribeResponseSchema,
+  TaskAgentIdSchema,
+  TaskAgentPreferenceSchema,
+  TaskAgentsResponseSchema,
+  TaskAgentStatusSchema,
+  TaskFolderSchema,
+  TaskFoldersRequestSchema,
+  TaskFoldersResponseSchema,
+  TaskSendRequestSchema,
+  TaskSendResponseSchema
+} from "./schemas";
 
-export type ScreenshotPayload = {
-  mimeType: "image/jpeg" | "image/png";
-  base64: string;
-  width: number;
-  height: number;
-};
+export type Platform = z.infer<typeof PlatformSchema>;
+export type ScreenshotPayload = z.infer<typeof ScreenshotPayloadSchema>;
+export type Bounds = z.infer<typeof BoundsSchema>;
+export type PointerTargetElement = z.infer<typeof PointerTargetElementSchema>;
+export type PointerTarget = z.infer<typeof PointerTargetSchema>;
+export type PointerTargetSource = PointerTarget["source"];
+export type CursorCropFocus = z.infer<typeof CursorCropFocusSchema>;
+export type CaptureBlocked = z.infer<typeof CaptureBlockedSchema>;
+export type BrowserProduct = z.infer<typeof BrowserProductSchema>;
+export type BrowserPage = z.infer<typeof BrowserPageSchema>;
+export type PointerContext = z.infer<typeof PointerContextSchema>;
+export type MauzDesktopContext = z.infer<typeof MauzDesktopContextSchema>;
 
-export type Bounds = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
+export type AskMauzRequest = z.infer<typeof AskMauzRequestSchema>;
+export type AskAnswerDelta = z.infer<typeof AskAnswerDeltaSchema>;
+export type AskMauzResponse = z.infer<typeof AskMauzResponseSchema>;
 
-/** Something on screen read from the app itself (UI Automation, Accessibility, or a browser). */
-export type PointerTargetElement = {
-  /** Control type, e.g. "Button", "Text", "Hyperlink", "Edit", "ListItem". */
-  role: string;
-  name?: string | undefined;
-  /** Never read from password fields. */
-  value?: string | undefined;
-  /** Paragraph at the pointer for the element; descendant text for a container. */
-  text?: string | undefined;
-  bounds?: Bounds | undefined;
-};
+export type AiProviderId = z.infer<typeof AiProviderIdSchema>;
+export type AiProviderPreference = z.infer<typeof AiProviderPreferenceSchema>;
+export type AiProviderKind = z.infer<typeof AiProviderKindSchema>;
+export type AiProviderStatus = z.infer<typeof AiProviderStatusSchema>;
+export type AiProvidersStatusResponse = z.infer<typeof AiProvidersStatusResponseSchema>;
+export type AiProvidersStatusRequest = NonNullable<z.infer<typeof AiProvidersStatusRequestSchema>>;
 
-export type PointerTargetSource = "windows-uia" | "macos-ax" | "browser";
+export type SubscriptionProviderId = z.infer<typeof SubscriptionProviderIdSchema>;
+export type SubscriptionConnectState = z.infer<typeof SubscriptionConnectStateSchema>;
+export type SubscriptionConnectPhase = SubscriptionConnectState["phase"];
+export type SubscriptionConnectRequest = z.infer<typeof SubscriptionConnectRequestSchema>;
+export type SubscriptionCodeRequest = z.infer<typeof SubscriptionCodeRequestSchema>;
+export type SubscriptionCancelRequest = z.infer<typeof SubscriptionCancelRequestSchema>;
+export type SubscriptionDisconnectRequest = z.infer<typeof SubscriptionDisconnectRequestSchema>;
 
-/** The element under the pointer, the group around it, and the window it belongs to. */
-export type PointerTarget = {
-  source: PointerTargetSource;
-  element: PointerTargetElement;
-  container?: PointerTargetElement | undefined;
-  window?:
-    | {
-        title?: string | undefined;
-        appName?: string | undefined;
-        executable?: string | undefined;
-        processId?: number | undefined;
-        bounds?: Bounds | undefined;
-      }
-    | undefined;
-};
+export type TalkTranscribeRequest = z.infer<typeof TalkTranscribeRequestSchema>;
+export type TalkTranscribeResponse = z.infer<typeof TalkTranscribeResponseSchema>;
+export type TalkTranscriptionEngine = TalkTranscribeResponse["engine"];
 
-export type CursorCropFocus = {
-  /**
-   * "element": framed on the pointed element or its group; "pointer-area": a fixed area around
-   * the pointer.
-   */
-  kind: "element" | "pointer-area";
-  /** Pointer position in the crop's pixels. */
-  pointer: {
-    x: number;
-    y: number;
-  };
-};
+export type PermissionError = z.infer<typeof PermissionErrorSchema>;
+export type ShakeSensitivity = z.infer<typeof ShakeSensitivitySchema>;
+export type OpenAiCredentialSource = z.infer<typeof OpenAiCredentialSourceSchema>;
+export type MauzSettings = z.infer<typeof MauzSettingsSchema>;
+export type MauzSettingsUpdate = z.infer<typeof MauzSettingsUpdateSchema>;
+export type MauzLensResizeRequest = z.infer<typeof MauzLensResizeRequestSchema>;
+export type MouseMoveSample = z.infer<typeof MouseMoveSampleSchema>;
 
-export type CaptureBlocked = {
-  appName: string;
-};
-
-/** Structured product data a shop page publishes for search engines (schema.org, Open Graph). */
-export type BrowserProduct = {
-  name?: string | undefined;
-  brand?: string | undefined;
-  sku?: string | undefined;
-  gtin?: string | undefined;
-  color?: string | undefined;
-  size?: string | undefined;
-  material?: string | undefined;
-  price?: string | undefined;
-  priceCurrency?: string | undefined;
-  lowPrice?: string | undefined;
-  highPrice?: string | undefined;
-  availability?: string | undefined;
-  rating?: string | undefined;
-  reviewCount?: string | undefined;
-  seller?: string | undefined;
-};
-
-/** The page under the pointer, read by the Mauz browser extension. */
-export type BrowserPage = {
-  /** "Google Chrome", "Microsoft Edge", ... */
-  browser: string;
-  url: string;
-  title?: string | undefined;
-  selection?: string | undefined;
-  /** The element under the pointer. */
-  element?:
-    | {
-        tag: string;
-        role?: string | undefined;
-        text?: string | undefined;
-        href?: string | undefined;
-        alt?: string | undefined;
-      }
-    | undefined;
-  /** Text of the card or section around the pointed element. */
-  around?: string | undefined;
-  /** Main text of the page. */
-  text?: string | undefined;
-  product?: BrowserProduct | undefined;
-};
-
-export type PointerContext = {
-  cursor: {
-    x: number;
-    y: number;
-  };
-  display?:
-    | {
-        id?: string | undefined;
-        scaleFactor?: number | undefined;
-        bounds?: Bounds | undefined;
-      }
-    | undefined;
-  activeApp?:
-    | {
-        name?: string | undefined;
-        bundleId?: string | undefined;
-        processId?: number | undefined;
-      }
-    | undefined;
-  activeWindow?:
-    | {
-        title?: string | undefined;
-        bounds?: Bounds | undefined;
-      }
-    | undefined;
-  selectedText?: string | undefined;
-  target?: PointerTarget | undefined;
-  cursorCrop?: ScreenshotPayload | undefined;
-  cursorCropFocus?: CursorCropFocus | undefined;
-  /** Text recognized in the cursor crop (Windows OCR) when the app exposed none. */
-  ocrText?: string | undefined;
-  page?: BrowserPage | undefined;
-  /** Image of the window under the pointer; sent only when there is no cursor crop. */
-  screenshot?: ScreenshotPayload | undefined;
-};
-
-export type MauzDesktopContext = {
-  timestamp: string;
-  platform: Platform;
-  activeApp?:
-    | {
-        name?: string | undefined;
-        bundleId?: string | undefined;
-        processId?: number | undefined;
-      }
-    | undefined;
-  activeWindow?:
-    | {
-        title?: string | undefined;
-        bounds?:
-          | {
-              x: number;
-              y: number;
-              width: number;
-              height: number;
-            }
-          | undefined;
-      }
-    | undefined;
-  cursor: {
-    x: number;
-    y: number;
-  };
-  selectedText?: string | undefined;
-  pointer?: PointerContext | undefined;
-  screenshot?: ScreenshotPayload | undefined;
-  screenshotError?: PermissionError | undefined;
-  /** The app is on the user's never-capture list; no pixels, text, or window title were collected. */
-  captureBlocked?: CaptureBlocked | undefined;
-};
-
-export type AskMauzRequest = {
-  question: string;
-  context: MauzDesktopContext;
-  requestId?: string | undefined;
-};
-
-export type AskAnswerDelta = {
-  requestId: string;
-  text: string;
-};
-
-export type AiProviderId = "claude-code" | "codex" | "anthropic" | "openai";
-export type AiProviderPreference = "auto" | AiProviderId;
-export type AiProviderKind = "subscription" | "api-key";
-
-export type AiProviderStatus = {
-  id: AiProviderId;
-  label: string;
-  kind: AiProviderKind;
-  available: boolean;
-  detail: string;
-  model: string;
-};
-
-export type AiProvidersStatusResponse = {
-  preference: AiProviderPreference;
-  activeProviderId: AiProviderId | null;
-  providers: AiProviderStatus[];
-};
-
-export type SubscriptionProviderId = "claude-code" | "codex";
-
-export type SubscriptionConnectPhase =
-  | "installing"
-  | "starting"
-  | "waiting"
-  | "connected"
-  | "failed"
-  | "cancelled";
-
-/** Progress of connecting a subscription from inside Mauz (install the CLI if needed, then sign in). */
-export type SubscriptionConnectState = {
-  connectId: string;
-  providerId: SubscriptionProviderId;
-  phase: SubscriptionConnectPhase;
-  /** Sign-in page to open in the browser. */
-  url: string | null;
-  /** One-time code to enter on the sign-in page (device sign-in). */
-  userCode: string | null;
-  /** The sign-in page may show a code that has to be pasted back into Mauz. */
-  acceptsPastedCode: boolean;
-  message: string | null;
-};
-
-export type SubscriptionConnectRequest = {
-  providerId: SubscriptionProviderId;
-};
-
-export type SubscriptionCodeRequest = {
-  connectId: string;
-  code: string;
-};
-
-export type SubscriptionCancelRequest = {
-  connectId: string;
-};
-
-export type SubscriptionDisconnectRequest = {
-  providerId: SubscriptionProviderId;
-};
-
-export type AiProvidersStatusRequest = {
-  refresh?: boolean | undefined;
-};
-
-export type TalkTranscribeRequest = {
-  audioBase64: string;
-  mimeType: "audio/wav";
-};
-
-export type TalkTranscriptionEngine = "openai" | "windows";
-
-export type TalkTranscribeResponse = {
-  text: string;
-  engine: TalkTranscriptionEngine;
-};
-
-export type AskMauzResponse = {
-  answer: string;
-  model: string;
-  usage?: unknown | undefined;
-};
-
-export type PermissionError = {
-  permission: "accessibility" | "screen-recording" | "microphone" | "unknown";
-  message: string;
-};
-
-export type ShakeSensitivity = "relaxed" | "normal" | "strict";
-
-export type OpenAiCredentialSource = "none" | "environment" | "saved";
-
-export type MauzSettings = {
-  nativeShakeEnabled: boolean;
-  devHotkeyEnabled: boolean;
-  shakeSensitivity: ShakeSensitivity;
-  openAiAuthDisconnected: boolean;
-  openAiCredentialSource: OpenAiCredentialSource;
-  askModel: string;
-  /** Executable names (Windows) or bundle ids (macOS) Mauz never captures. */
-  captureBlockedApps: string[];
-  /** Sites (example.com, *bank*) whose pages Mauz never reads or screenshots. */
-  captureBlockedSites: string[];
-  apiKeyConfigured: boolean;
-  /** The coding agent Send to agent hands tasks to; "auto" picks the first one installed. */
-  taskAgent: TaskAgentPreference;
-  /** Folder an agent starts in when none was picked; empty means the home folder. */
-  taskFolder: string;
-  /** The folder last used with each agent. */
-  taskAgentFolders: Partial<Record<TaskAgentId, string>>;
-  aiProvider: AiProviderPreference;
-  anthropicKeyConfigured: boolean;
-};
-
-export type MauzSettingsUpdate = Partial<
-  Omit<MauzSettings, "apiKeyConfigured" | "openAiCredentialSource" | "anthropicKeyConfigured">
-> & {
-  openAiApiKey?: string | null | undefined;
-  clearOpenAiApiKey?: boolean | undefined;
-  anthropicApiKey?: string | null | undefined;
-  clearAnthropicApiKey?: boolean | undefined;
-};
+export type TaskAgentId = z.infer<typeof TaskAgentIdSchema>;
+export type TaskAgentPreference = z.infer<typeof TaskAgentPreferenceSchema>;
+export type TaskAgentStatus = z.infer<typeof TaskAgentStatusSchema>;
+export type TaskAgentsResponse = z.infer<typeof TaskAgentsResponseSchema>;
+export type TaskFolder = z.infer<typeof TaskFolderSchema>;
+export type TaskFoldersRequest = z.infer<typeof TaskFoldersRequestSchema>;
+export type TaskFoldersResponse = z.infer<typeof TaskFoldersResponseSchema>;
+export type TaskSendRequest = z.infer<typeof TaskSendRequestSchema>;
+export type TaskSendResponse = z.infer<typeof TaskSendResponseSchema>;
 
 export type MauzSettingsOpenOptions = {
   resizePopover?: boolean | undefined;
-};
-
-export type MauzLensResizeRequest = {
-  expanded: boolean;
-};
-
-export type MouseMoveSample = {
-  x: number;
-  y: number;
-  ts: number;
-  buttons?: number | undefined;
-};
-
-export type TaskAgentId = "hermes" | "claude-code" | "codex";
-export type TaskAgentPreference = "auto" | TaskAgentId;
-
-export type TaskAgentStatus = {
-  id: TaskAgentId;
-  label: string;
-  installed: boolean;
-};
-
-export type TaskAgentsResponse = {
-  agents: TaskAgentStatus[];
-  /** The agent Send to agent uses: the setting, or the first installed one for "auto". */
-  selectedAgentId: TaskAgentId | null;
-};
-
-export type TaskFolder = {
-  path: string;
-  name: string;
-};
-
-export type TaskFoldersRequest = {
-  agentId: TaskAgentId;
-};
-
-export type TaskFoldersResponse = {
-  /** Folders the agent has worked in, most recent first. */
-  folders: TaskFolder[];
-  /** The folder to preselect: the last one used with this agent, or the default work folder. */
-  selectedPath: string;
-};
-
-export type TaskSendRequest = {
-  agentId: TaskAgentId;
-  folder: string;
-  task: string;
-  context: MauzDesktopContext;
-};
-
-export type TaskSendResponse = {
-  agentLabel: string;
 };
 
 export type BrowserExtensionStatus = {
