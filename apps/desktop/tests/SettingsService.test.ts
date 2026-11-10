@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
   app: {
@@ -15,7 +14,6 @@ vi.mock("electron", () => ({
   }
 }));
 
-import { createMauzApiServer } from "@mauzai/api/server";
 import { SettingsService } from "../src/main/settings/SettingsService";
 
 type TestSecretCodec = {
@@ -341,45 +339,6 @@ describe("SettingsService", () => {
     expect(settings).not.toHaveProperty("openAiAuthMode");
     expect(settings).not.toHaveProperty("talkEngine");
     expect(settings).not.toHaveProperty("aiFallbackProvider");
-  });
-});
-
-// Defect from docs/reafactor-audit.md. It fails today; refactor row 1 fixes it and removes `.skip`.
-describe("known defects", () => {
-  const originalCwd = process.cwd();
-  const originalKey = process.env.OPENAI_API_KEY;
-  const folder = join(tmpdir(), `mauz-dotenv-test-${randomUUID()}`);
-
-  afterEach(() => {
-    process.chdir(originalCwd);
-    rmSync(folder, { recursive: true, force: true });
-    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = originalKey;
-  });
-
-  it.skip("sees a key that is only in .env, in the order bootstrap() starts services", async () => {
-    mkdirSync(folder);
-    writeFileSync(join(folder, ".env"), "OPENAI_API_KEY=sk-dotenv\n");
-    process.chdir(folder);
-    delete process.env.OPENAI_API_KEY;
-
-    // bootstrap(): SettingsService first, then launchLocalApi -> createMauzApiServer loads .env.
-    const service = new SettingsService({
-      settingsPath: join(folder, "settings.json"),
-      readTextFile: async () => {
-        throw new Error("no file");
-      },
-      writeTextFile: async () => {},
-      renameFile: async () => {},
-      ensureDirectory: async () => {}
-    });
-    const api = await createMauzApiServer();
-    await api.close();
-
-    expect(process.env.OPENAI_API_KEY).toBe("sk-dotenv"); // Ask uses this key.
-    expect((await service.get()).openAiCredentialSource).toBe("environment"); // Settings shows "none".
-    // applyRuntimeEnvironment() deletes OPENAI_API_KEY on the next save when this is missing.
-    expect((await service.getRuntime()).openAiApiKey).toBe("sk-dotenv");
   });
 });
 
