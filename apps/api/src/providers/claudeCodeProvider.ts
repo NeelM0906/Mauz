@@ -4,10 +4,13 @@ import { join } from "node:path";
 import { AiProviderError } from "../errors";
 import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from "./cliCommand";
 import {
+  describeCliFailure,
   killQuietly,
-  onLines,
   parseJsonLine,
+  runAndCollect,
   spawnCliProcess,
+  toCliError,
+  type AnswerCli,
   type ChildProcessLike,
   type SpawnLike
 } from "./processRunner";
@@ -16,6 +19,11 @@ import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "
 export const DEFAULT_CLAUDE_CODE_MODEL = "sonnet";
 export const DEFAULT_CLAUDE_CODE_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 120_000;
+const CLAUDE_CLI: AnswerCli = {
+  label: "Claude Code",
+  signInKeywords: ["/login", "not logged in", "invalid api key", "authentication"],
+  signInMessage: "Claude Code isn't signed in. Open a terminal, run `claude`, sign in, then try again."
+};
 /** A pre-started CLI is only reused while it is fresh; an idle one is stopped to free memory. */
 const WARM_PROCESS_MAX_IDLE_MS = 3 * 60_000;
 
@@ -212,33 +220,21 @@ export class ClaudeCodeProvider implements AnswerProvider {
     warm.idleTimer = setTimeout(() => this.discardWarm(), WARM_PROCESS_MAX_IDLE_MS);
   }
 
-  private runTurn(
+  private async runTurn(
     child: ChildProcessLike,
     prompt: AnswerPrompt,
     options: AnswerOptions
   ): Promise<AnswerResult> {
-    return new Promise((resolve, reject) => {
-      let streamedText = "";
-      let resultText: string | null = null;
-      let resultError: string | null = null;
-      let stderr = "";
-      let settled = false;
+    let streamedText = "";
+    // Written by the line callback; the casts stop TypeScript from narrowing them to null.
+    let resultText = null as string | null;
+    let resultError = null as string | null;
 
-      const finish = (callback: () => void): void => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timer);
-        callback();
-      };
-      const timer = setTimeout(() => {
-        killQuietly(child);
-        finish(() => reject(new AiProviderError(this.id, "Claude Code did not answer in time. Try again.")));
-      }, this.answerTimeoutMs);
-
-      onLines(child.stdout, (line) => {
+    // runAndCollect settles on "close", after stdout is fully drained, so the result line has been read.
+    const output = await runAndCollect(child, {
+      stdinText: `${JSON.stringify(buildUserMessage(prompt))}\n`,
+      timeoutMs: this.answerTimeoutMs,
+      onStdoutLine: (line) => {
         const event = parseJsonLine(line);
 
         if (event === null) {
@@ -260,37 +256,20 @@ export class ClaudeCodeProvider implements AnswerProvider {
             resultText = event.result;
           }
         }
-      });
-      child.stderr?.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
-      });
-      child.once("error", (error) => {
-        finish(() =>
-          reject(
-            new AiProviderError(this.id, `Mauz could not start Claude Code: ${error.message}`, {
-              cause: error
-            })
-          )
-        );
-      });
-      // "close" fires after stdout is fully drained, so the final result line has been parsed.
-      child.once("close", (code) => {
-        const text = (resultText ?? streamedText).trim();
-
-        if (resultError === null && text.length > 0) {
-          finish(() => resolve({ text }));
-          return;
-        }
-
-        const message = describeClaudeFailure(resultError, stderr, code);
-        finish(() => reject(new AiProviderError(this.id, message)));
-      });
-
-      child.stdin?.on("error", () => {
-        // A failed launch surfaces through the exit handler.
-      });
-      child.stdin?.end(`${JSON.stringify(buildUserMessage(prompt))}\n`);
+      }
+    }).catch((error: unknown) => {
+      throw toCliError(this.id, CLAUDE_CLI.label, error);
     });
+    const text = (resultText ?? streamedText).trim();
+
+    if (resultError === null && text.length > 0) {
+      return { text };
+    }
+
+    throw new AiProviderError(
+      this.id,
+      describeCliFailure(CLAUDE_CLI, resultError ?? output.stderr, output.exitCode)
+    );
   }
 }
 
@@ -330,34 +309,6 @@ function getTextDelta(event: Record<string, unknown>): string | null {
   const delta = streamEvent.delta as Record<string, unknown> | undefined;
 
   return delta?.type === "text_delta" && typeof delta.text === "string" ? delta.text : null;
-}
-
-function describeClaudeFailure(resultError: string | null, stderr: string, code: number | null): string {
-  const detail = (resultError ?? stderr).replace(/\s+/g, " ").trim();
-  const normalized = detail.toLowerCase();
-
-  if (
-    normalized.includes("/login") ||
-    normalized.includes("not logged in") ||
-    normalized.includes("invalid api key") ||
-    normalized.includes("authentication")
-  ) {
-    return "Claude Code isn't signed in. Open a terminal, run `claude`, sign in, then try again.";
-  }
-
-  if (normalized.includes("usage limit") || normalized.includes("rate limit")) {
-    return `Claude Code reported a usage limit: ${truncate(detail)}`;
-  }
-
-  if (detail.length > 0) {
-    return `Claude Code could not answer: ${truncate(detail)}`;
-  }
-
-  return `Claude Code exited without an answer (code ${code ?? "unknown"}).`;
-}
-
-function truncate(value: string): string {
-  return value.length <= 240 ? value : `${value.slice(0, 237)}...`;
 }
 
 function isRunning(child: ChildProcessLike): boolean {

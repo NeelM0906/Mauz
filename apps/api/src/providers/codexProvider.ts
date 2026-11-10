@@ -3,11 +3,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AiProviderError } from "../errors";
 import { buildCliEnvironment, resolveCliCommand } from "./cliCommand";
-import { ProcessTimeoutError, parseJsonLine, runAndCollect, spawnCliProcess } from "./processRunner";
+import {
+  describeCliFailure,
+  parseJsonLine,
+  runAndCollect,
+  spawnCliProcess,
+  toCliError,
+  type AnswerCli
+} from "./processRunner";
 import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
 
 export const DEFAULT_CODEX_REASONING_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 180_000;
+const CODEX_CLI: AnswerCli = {
+  label: "Codex",
+  signInKeywords: ["login", "not logged in", "401"],
+  signInMessage: "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+};
 
 export type CodexProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
@@ -73,7 +85,7 @@ export class CodexProvider implements AnswerProvider {
         stdinText: buildCodexPrompt(prompt),
         timeoutMs: ANSWER_TIMEOUT_MS
       }).catch((error: unknown) => {
-        throw toCodexError(this.id, error);
+        throw toCliError(this.id, CODEX_CLI.label, error);
       });
       const parsed = parseCodexOutput(output.stdout);
 
@@ -82,10 +94,8 @@ export class CodexProvider implements AnswerProvider {
         return { text: parsed.text };
       }
 
-      throw new AiProviderError(
-        this.id,
-        describeCodexFailure(parsed.error ?? output.stderr, output.exitCode)
-      );
+      const detail = (parsed.error ?? output.stderr).replace(/Reading prompt from stdin\.\.\./g, "");
+      throw new AiProviderError(this.id, describeCliFailure(CODEX_CLI, detail, output.exitCode));
     } finally {
       await rm(workingDirectory, { recursive: true, force: true }).catch(() => {});
     }
@@ -157,44 +167,4 @@ function readCodexErrorMessage(event: Record<string, unknown>): string | undefin
   const nested = event.error as Record<string, unknown> | undefined;
 
   return typeof nested?.message === "string" ? nested.message : undefined;
-}
-
-function describeCodexFailure(detail: string, exitCode: number | null): string {
-  const normalizedDetail = detail
-    .replace(/Reading prompt from stdin\.\.\./g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const lowered = normalizedDetail.toLowerCase();
-
-  if (lowered.includes("login") || lowered.includes("not logged in") || lowered.includes("401")) {
-    return "Codex isn't signed in. Open a terminal, run `codex login`, then try again.";
-  }
-
-  if (lowered.includes("usage limit") || lowered.includes("rate limit")) {
-    return `Codex reported a usage limit: ${truncate(normalizedDetail)}`;
-  }
-
-  if (normalizedDetail.length > 0) {
-    return `Codex could not answer: ${truncate(normalizedDetail)}`;
-  }
-
-  return `Codex exited without an answer (code ${exitCode ?? "unknown"}).`;
-}
-
-function toCodexError(providerId: string, error: unknown): AiProviderError {
-  if (error instanceof AiProviderError) {
-    return error;
-  }
-
-  if (error instanceof ProcessTimeoutError) {
-    return new AiProviderError(providerId, "Codex did not answer in time. Try again.", { cause: error });
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-
-  return new AiProviderError(providerId, `Mauz could not start Codex: ${message}`, { cause: error });
-}
-
-function truncate(value: string): string {
-  return value.length <= 240 ? value : `${value.slice(0, 237)}...`;
 }

@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
+import { AiProviderError } from "../errors";
 
 export type ChildProcessLike = {
   stdin: Writable | null;
@@ -38,6 +39,8 @@ export type CollectedOutput = {
 export type RunCollectOptions = {
   stdinText?: string | undefined;
   timeoutMs: number;
+  /** Called for each complete stdout line as it arrives; stdout is still collected. */
+  onStdoutLine?: ((line: string) => void) | undefined;
 };
 
 export class ProcessTimeoutError extends Error {
@@ -73,6 +76,9 @@ export function runAndCollect(child: ChildProcessLike, options: RunCollectOption
     child.stdout?.on("data", (chunk: Buffer) => {
       stdout += stdoutDecoder.write(chunk);
     });
+    if (options.onStdoutLine !== undefined) {
+      onLines(child.stdout, options.onStdoutLine);
+    }
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += stderrDecoder.write(chunk);
     });
@@ -94,7 +100,7 @@ export function runAndCollect(child: ChildProcessLike, options: RunCollectOption
 }
 
 /** Calls `onLine` for each complete line written to the stream. */
-export function onLines(stream: Readable | null, onLine: (line: string) => void): void {
+function onLines(stream: Readable | null, onLine: (line: string) => void): void {
   if (stream === null) {
     return;
   }
@@ -137,6 +143,52 @@ export function parseJsonLine(line: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/** What an answer CLI is called and how its "signed out" errors read. */
+export type AnswerCli = {
+  label: string;
+  signInKeywords: readonly string[];
+  signInMessage: string;
+};
+
+/** A message for the user from a CLI's error text, or from its exit code when it printed nothing. */
+export function describeCliFailure(cli: AnswerCli, detail: string, exitCode: number | null): string {
+  const normalized = detail.replace(/\s+/g, " ").trim();
+  const lowered = normalized.toLowerCase();
+
+  if (cli.signInKeywords.some((keyword) => lowered.includes(keyword))) {
+    return cli.signInMessage;
+  }
+
+  if (lowered.includes("usage limit") || lowered.includes("rate limit")) {
+    return `${cli.label} reported a usage limit: ${truncate(normalized)}`;
+  }
+
+  if (normalized.length > 0) {
+    return `${cli.label} could not answer: ${truncate(normalized)}`;
+  }
+
+  return `${cli.label} exited without an answer (code ${exitCode ?? "unknown"}).`;
+}
+
+/** Turns a `runAndCollect` rejection (timeout or start failure) into a message for the user. */
+export function toCliError(providerId: string, label: string, error: unknown): AiProviderError {
+  if (error instanceof AiProviderError) {
+    return error;
+  }
+
+  if (error instanceof ProcessTimeoutError) {
+    return new AiProviderError(providerId, `${label} did not answer in time. Try again.`, { cause: error });
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+
+  return new AiProviderError(providerId, `Mauz could not start ${label}: ${message}`, { cause: error });
+}
+
+function truncate(value: string): string {
+  return value.length <= 240 ? value : `${value.slice(0, 237)}...`;
 }
 
 export function killQuietly(child: ChildProcessLike): void {

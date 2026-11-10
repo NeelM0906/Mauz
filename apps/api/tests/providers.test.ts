@@ -291,6 +291,55 @@ describe("ClaudeCodeProvider", () => {
     await expect(provider.answer(PROMPT)).rejects.toThrow(/isn't signed in/);
   });
 
+  it("stops a silent CLI after the timeout", async () => {
+    const child = createFakeChild(() => ({ stdoutLines: [] }));
+    child.stdin!.removeAllListeners("end");
+    const provider = new ClaudeCodeProvider({
+      spawn: () => child,
+      resolveCommand: () => ({ command: "claude", args: [] }),
+      env: () => ({}),
+      makeWorkingDirectory: () => "/tmp",
+      answerTimeoutMs: 10
+    });
+
+    await expect(provider.answer(PROMPT)).rejects.toThrow("Claude Code did not answer in time. Try again.");
+    expect(child.killed).toBe(true);
+  });
+
+  it("reports a start error, stderr, and an empty exit", async () => {
+    const answerWith = (child: ChildProcessLike) =>
+      new ClaudeCodeProvider({
+        spawn: () => child,
+        resolveCommand: () => ({ command: "claude", args: [] }),
+        env: () => ({}),
+        makeWorkingDirectory: () => "/tmp"
+      }).answer(PROMPT);
+    const notStarted = {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      exitCode: null,
+      killed: false,
+      kill: () => true,
+      once(event: string, listener: (error: Error) => void) {
+        if (event === "error") {
+          setImmediate(() => listener(new Error("spawn claude ENOENT")));
+        }
+        return notStarted;
+      }
+    } as unknown as ChildProcessLike;
+
+    await expect(answerWith(notStarted)).rejects.toThrow(
+      "Mauz could not start Claude Code: spawn claude ENOENT"
+    );
+    await expect(
+      answerWith(createFakeChild(() => ({ stdoutLines: [], stderr: "Rate limit reached\n", exitCode: 1 })))
+    ).rejects.toThrow("Claude Code reported a usage limit: Rate limit reached");
+    await expect(answerWith(createFakeChild(() => ({ stdoutLines: [], exitCode: 2 })))).rejects.toThrow(
+      "Claude Code exited without an answer (code 2)."
+    );
+  });
+
   it("reports a missing CLI as a provider error", async () => {
     const provider = new ClaudeCodeProvider({ resolveCommand: () => null, env: () => ({}) });
 
