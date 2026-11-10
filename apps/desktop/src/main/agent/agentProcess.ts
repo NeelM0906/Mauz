@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { win32 } from "node:path";
+import { promisify } from "node:util";
 import { buildCliEnvironment } from "@mauzai/api/server";
 import type { TaskAgentId } from "@mauzai/shared";
 
@@ -166,21 +167,21 @@ export function startHiddenProcess(
 }
 
 /** The package folder name holds the version, so ask Windows where the Codex app lives. */
-export function findCodexAppExecutable(): Promise<string | null> {
-  return new Promise((resolve) => {
-    execFile(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", "(Get-AppxPackage -Name OpenAI.Codex).InstallLocation"],
-      { windowsHide: true, timeout: 15_000 },
-      (error, stdout) => {
-        const location = error === null ? stdout.trim().split(/\r?\n/)[0]?.trim() : undefined;
-        const executable =
-          location === undefined || location.length === 0
-            ? null
-            : win32.join(location, "app", "resources", "codex.exe");
+export async function findCodexAppExecutable(): Promise<string | null> {
+  const location = await promisify(execFile)(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", "(Get-AppxPackage -Name OpenAI.Codex).InstallLocation"],
+    { windowsHide: true, timeout: 15_000 }
+  ).then(
+    ({ stdout }) => stdout.trim().split(/\r?\n/)[0]?.trim(),
+    () => undefined
+  );
 
-        resolve(executable !== null && existsSync(executable) ? executable : null);
-      }
-    );
-  });
+  if (location === undefined || location.length === 0) {
+    return null;
+  }
+
+  const executable = win32.join(location, "app", "resources", "codex.exe");
+
+  return existsSync(executable) ? executable : null;
 }

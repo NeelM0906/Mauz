@@ -4,6 +4,7 @@ import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { BrowserPageSchema, isBlockedSite, type BrowserPage } from "@mauzai/shared";
 import type { BrowserPageReader, BrowserPageResult } from "./ContextCollector";
 
@@ -469,10 +470,8 @@ async function writeTextFileWithDirectory(path: string, contents: string): Promi
   await writeFile(path, contents, "utf8");
 }
 
-function runRegCommand(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile("reg.exe", args, { windowsHide: true }, (error) => (error === null ? resolve() : reject(error)));
-  });
+async function runRegCommand(args: string[]): Promise<void> {
+  await promisify(execFile)("reg.exe", args, { windowsHide: true });
 }
 
 function withoutEmptyFields(page: BrowserPage): BrowserPage {
