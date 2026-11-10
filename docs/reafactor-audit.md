@@ -267,9 +267,9 @@ Left: `shutdownResources()` stays `async` (reason above).
 
 ### Phase 3 (2026-11-10, base `3404208`)
 
-Rows 5, 4, 7, 24 and 21 are done, one commit each. Row 6 is not started: its plan goes to the owner for
-approval first. The end-of-phase review is not done yet, and the phase is not ticked. Gates after each row:
-typecheck, tests, lint. After row 21: api 49 passed, desktop 176 passed; `corepack pnpm -r build` passes.
+Rows 5, 4, 7, 24, 21 and 6 are done, one commit each. The owner approved the row 6 plan before it was
+done. The end-of-phase review is not done yet, and the phase is not ticked. Gates after each row:
+typecheck, tests, lint. After row 6: api 49 passed, desktop 178 passed; `corepack pnpm -r build` passes.
 The renderer has no DOM test setup, so the renderer changes were checked by typecheck and by reading.
 
 **Row 5.** The finding is correct. `askAnswer`, `askError`, `askLoading`, their three setters, and the
@@ -325,16 +325,39 @@ had no test, so `providers.test.ts` has two new tests.
 - Accepted: if Settings is open with unsaved edits and the user opens Settings from the tray again, the
   edits are replaced by the saved settings.
 
+**Row 6.** Status was Reported. The finding is correct: 16 `useState`, 6 effects, eight jobs, and two
+API-key blocks that differed only in label, placeholder, field names and message. Done as the approved
+plan says:
+
+- `lib/settingsUpdate.ts`: `buildSettingsUpdate(draft, keyDrafts, blockedText)` builds the Save payload
+  (same fields and rules as before), with `parseAppList`, `formatAppList` and the draft types. New
+  `settingsUpdate.test.ts` checks it.
+- `components/AiProviders.tsx`: the `useAiProviders()` hook (status, loading, sign-in states, sign-in,
+  cancel, sign-out, refresh) and `AiProviderList` (the cards and "Check again").
+- `components/SettingsSections.tsx`: `ApiKeyField` (used twice, driven by the `API_KEY_FIELDS` table in
+  `SettingsPanel`), `TaskAgentSection` (loads the agent list), `ActivationSection`, `NeverCaptureSection`,
+  `BrowserExtensionSection` (loads the extension status), `ToggleButton`.
+- State merges: the four key-draft variables are one `ApiKeyDrafts` record; the two block-list texts are one
+  object; the provider busy flag and error are one object. The load effect and the `[settings]` sync
+  effect are one effect. After Save, the new settings value resets the drafts through that effect.
+- Kept as approved: `settings` stays in the store and `SettingsPanel` reloads when it is `null` (the tray
+  fix from row 21); the OpenAI field still sets `openAiAuthDisconnected` to `false` (row 14 removes it).
+  UI text, CSS and the payload are unchanged. A script checked that every UI string in the old file is in
+  the new files.
+
+Two changes in behaviour, both approved by the owner:
+
+- A settings reload now clears the Anthropic key draft too. Before, only the OpenAI draft was cleared.
+- When loading settings fails, the loading screen shows the error. Before, it stayed on "Loading
+  settings..." and the error was never shown.
+
 **Problems found in other rows (not fixed):**
 
-- Row 6: `SettingsPanel` shows "Loading settings..." for ever when loading fails, because
-  `settingsMessage` is not shown while `draft` is `null`. The `[settings]` effect and `loadSettings` clear
-  the OpenAI key draft but not the Anthropic draft.
-- Row 14: the OpenAI key field's `onChange` still sets `openAiAuthDisconnected` to `false`. The two key
-  blocks can only become one after row 14, or the merged component must keep that line.
+- Row 14: the OpenAI key field's `onChange` still sets `openAiAuthDisconnected` to `false`
+  (`SettingsPanel.tsx`, marked with a comment). Remove that line with the field.
 - Section 4: the `error instanceof Error ? error.message : "..."` pattern is still used in the renderer.
 
-**Skipped in Phase 3:** row 6 (plan only, waiting for approval).
+**Skipped in Phase 3:** nothing from rows 5, 4, 7, 24, 21 and 6.
 
 ---
 
