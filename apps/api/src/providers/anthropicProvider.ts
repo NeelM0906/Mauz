@@ -91,33 +91,23 @@ export class AnthropicApiProvider implements AnswerProvider {
   }
 }
 
+// Checked before the generic APIError, which all of these extend.
+const ANTHROPIC_ERROR_MESSAGES: ReadonlyArray<[abstract new (...args: never[]) => Error, string]> = [
+  [Anthropic.AuthenticationError, "Anthropic rejected the API key. Check it in Settings."],
+  [Anthropic.PermissionDeniedError, "This Anthropic API key cannot use the selected model."],
+  [Anthropic.RateLimitError, "Anthropic rate limit reached. Try again shortly."],
+  [Anthropic.APIConnectionError, "Mauz could not reach the Anthropic API. Check your connection."]
+];
+
 function toAnthropicError(providerId: string, error: unknown): Error {
   if (error instanceof AiProviderError || error instanceof NoAiProviderError) {
     return error;
   }
 
-  if (error instanceof Anthropic.AuthenticationError) {
-    return new AiProviderError(providerId, "Anthropic rejected the API key. Check it in Settings.", {
-      cause: error
-    });
-  }
+  const known = ANTHROPIC_ERROR_MESSAGES.find(([type]) => error instanceof type);
 
-  if (error instanceof Anthropic.PermissionDeniedError) {
-    return new AiProviderError(providerId, "This Anthropic API key cannot use the selected model.", {
-      cause: error
-    });
-  }
-
-  if (error instanceof Anthropic.RateLimitError) {
-    return new AiProviderError(providerId, "Anthropic rate limit reached. Try again shortly.", {
-      cause: error
-    });
-  }
-
-  if (error instanceof Anthropic.APIConnectionError) {
-    return new AiProviderError(providerId, "Mauz could not reach the Anthropic API. Check your connection.", {
-      cause: error
-    });
+  if (known !== undefined) {
+    return new AiProviderError(providerId, known[1], { cause: error });
   }
 
   if (error instanceof Anthropic.APIError) {

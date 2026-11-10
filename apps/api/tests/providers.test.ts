@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { AiProviderStatus, AskMauzRequest } from "@mauzai/shared";
 import { AiProviderError, NoAiProviderError } from "../src/errors";
@@ -8,6 +9,7 @@ import { ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
 import { buildCliEnvironment, getCliSearchDirectories, resolveCliCommand } from "../src/providers/cliCommand";
 import { parseCodexOutput } from "../src/providers/codexProvider";
 import type { ChildProcessLike, SpawnLike } from "../src/providers/processRunner";
+import { AnthropicApiProvider } from "../src/providers/anthropicProvider";
 import { AnswerProviderRegistry, pickProvider } from "../src/providers/registry";
 import type { AnswerPrompt, AnswerProvider } from "../src/providers/types";
 
@@ -429,5 +431,40 @@ describe("askMauz provider routing", () => {
     expect(prompt.images).toHaveLength(1);
     expect(prompt.images[0]?.label).toMatch(/crop centered on the pointer/);
     expect(prompt.userText).toContain("<question>\nWhat is this?\n</question>");
+  });
+});
+
+describe("AnthropicApiProvider errors", () => {
+  function providerThatThrows(error: unknown): AnthropicApiProvider {
+    return new AnthropicApiProvider({
+      env: () => ({ ANTHROPIC_API_KEY: "sk-ant-test" }),
+      createClient: () =>
+        ({
+          beta: {
+            messages: {
+              stream: () => {
+                throw error;
+              }
+            }
+          }
+        }) as unknown as Pick<Anthropic, "beta">
+    });
+  }
+
+  it("maps known SDK errors to friendly messages", async () => {
+    await expect(
+      providerThatThrows(new Anthropic.AuthenticationError(401, undefined, "bad key", new Headers())).answer(
+        PROMPT
+      )
+    ).rejects.toThrow("Anthropic rejected the API key. Check it in Settings.");
+    await expect(
+      providerThatThrows(new Anthropic.APIConnectionError({ message: "offline" })).answer(PROMPT)
+    ).rejects.toThrow("Mauz could not reach the Anthropic API. Check your connection.");
+  });
+
+  it("falls back to the status for other API errors", async () => {
+    await expect(
+      providerThatThrows(new Anthropic.APIError(500, undefined, "boom", new Headers())).answer(PROMPT)
+    ).rejects.toThrow("Anthropic API error (500).");
   });
 });

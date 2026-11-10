@@ -7,8 +7,16 @@ import { goBackToMenu } from "./components/PanelHeader";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TaskPanel } from "./components/TaskPanel";
 import { mauz } from "./lib/mauzClient";
-import { useMauzStore } from "./state/useMauzStore";
+import { useMauzStore, type MauzMode } from "./state/useMauzStore";
 import "./styles.css";
+
+const PANELS: Record<MauzMode, React.ComponentType> = {
+  menu: MauzMenu,
+  lens: LensPanel,
+  task: TaskPanel,
+  dictate: DictatePanel,
+  settings: SettingsPanel
+};
 
 function App(): React.JSX.Element {
   const mode = useMauzStore((state) => state.mode);
@@ -59,23 +67,8 @@ function App(): React.JSX.Element {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  if (mode === "lens") {
-    return <LensPanel />;
-  }
-
-  if (mode === "task") {
-    return <TaskPanel />;
-  }
-
-  if (mode === "dictate") {
-    return <DictatePanel />;
-  }
-
-  if (mode === "settings") {
-    return <SettingsPanel />;
-  }
-
-  return <MauzMenu />;
+  const Panel = PANELS[mode];
+  return <Panel />;
 }
 
 const rootElement = document.getElementById("root");

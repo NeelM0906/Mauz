@@ -9,6 +9,15 @@ type DictateState = "starting" | "listening" | "transcribing" | "ready" | "error
 
 const MIN_RECORDING_MS = 350;
 
+const READY_TEXT = "Edit the text if needed, then pick where it goes.";
+const STATUS_TEXT: Record<DictateState, string> = {
+  starting: "Opening the microphone...",
+  listening: "Listening. Press Stop or Space when you're done.",
+  transcribing: "Turning your words into text...",
+  ready: READY_TEXT,
+  error: READY_TEXT
+};
+
 /**
  * Dictate: speech becomes text, which the user then sends to Ask or to their agent. The
  * screen context was captured when the dial opened, so both use what was under the pointer.
@@ -185,7 +194,7 @@ export function DictatePanel(): React.JSX.Element {
         ) : (
           <Mic aria-hidden="true" size={18} />
         )}
-        <span>{error ?? getStatusText(state)}</span>
+        <span>{error ?? STATUS_TEXT[state]}</span>
         {listening ? (
           <button type="button" className="danger-button" onClick={() => void stopListening()}>
             <Square aria-hidden="true" size={13} />
@@ -225,17 +234,4 @@ export function DictatePanel(): React.JSX.Element {
       </div>
     </section>
   );
-}
-
-function getStatusText(state: DictateState): string {
-  switch (state) {
-    case "starting":
-      return "Opening the microphone...";
-    case "listening":
-      return "Listening. Press Stop or Space when you're done.";
-    case "transcribing":
-      return "Turning your words into text...";
-    default:
-      return "Edit the text if needed, then pick where it goes.";
-  }
 }
