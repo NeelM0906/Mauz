@@ -163,6 +163,17 @@ describe("resolveCliCommand", () => {
     expect(resolved?.command).toBe("/Users/me/.local/bin/claude");
   });
 
+  it("uses MAUZ_CODEX_PATH when it is set", () => {
+    const resolved = resolveCliCommand("codex", {
+      platform: "darwin",
+      env: { PATH: "/usr/bin", MAUZ_CODEX_PATH: " /opt/tools/codex " },
+      homeDirectory: "/Users/me",
+      pathExists: (path) => path === "/opt/tools/codex"
+    });
+
+    expect(resolved).toEqual({ command: "/opt/tools/codex", args: [] });
+  });
+
   it("returns null when the CLI is not installed", () => {
     expect(
       resolveCliCommand("codex", { platform: "linux", env: { PATH: "/usr/bin" }, pathExists: () => false })
@@ -171,11 +182,16 @@ describe("resolveCliCommand", () => {
 });
 
 describe("buildCliEnvironment", () => {
-  it("removes Mauz internals and requested credentials", () => {
-    const env = buildCliEnvironment(
-      { PATH: "/bin", MAUZ_LOCAL_API_TOKEN: "secret", ANTHROPIC_API_KEY: "sk-ant", HOME: "/home/me" },
-      ["ANTHROPIC_API_KEY"]
-    );
+  it("removes Mauz internals and every API credential", () => {
+    const env = buildCliEnvironment({
+      PATH: "/bin",
+      MAUZ_LOCAL_API_TOKEN: "secret",
+      ELECTRON_RUN_AS_NODE: "1",
+      ANTHROPIC_API_KEY: "sk-ant",
+      ANTHROPIC_AUTH_TOKEN: "token",
+      openai_api_key: "sk",
+      HOME: "/home/me"
+    });
 
     expect(env).toEqual({ PATH: "/bin", HOME: "/home/me" });
   });

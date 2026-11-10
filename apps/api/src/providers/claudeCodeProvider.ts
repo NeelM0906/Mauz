@@ -18,7 +18,6 @@ export const DEFAULT_CLAUDE_CODE_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 120_000;
 /** A pre-started CLI is only reused while it is fresh; an idle one is stopped to free memory. */
 const WARM_PROCESS_MAX_IDLE_MS = 3 * 60_000;
-const CREDENTIAL_ENV_KEYS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"] as const;
 
 export type ClaudeCodeProviderOptions = {
   spawn?: SpawnLike;
@@ -64,7 +63,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     this.resolveCommand =
       options.resolveCommand ??
       (() =>
-        resolveCliCommand(this.readEnv().MAUZ_CLAUDE_CODE_PATH?.trim() || "claude", {
+        resolveCliCommand("claude", {
           env: this.readEnv(),
           fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
         }));
@@ -163,7 +162,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
       "dontAsk"
     ];
     // Strip API keys so the CLI answers on the user's subscription, never a key Mauz holds.
-    const env = { ...buildCliEnvironment(this.readEnv(), CREDENTIAL_ENV_KEYS), ...command.env };
+    const env = { ...buildCliEnvironment(this.readEnv()), ...command.env };
 
     return {
       key: JSON.stringify([command.command, args]),

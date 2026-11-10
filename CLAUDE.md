@@ -79,7 +79,10 @@ Answer text streams back through an in-process callback (`ask:delta`), not throu
 - Platform code is selected with `process.platform`. Windows code is in `context/WindowsContextHelper.ts`.
   macOS code is in JXA strings (`ActiveWindowService.ts`, `SelectedTextService.ts`) and the Swift helper.
 - Child processes must not inherit Mauz credentials. Use `buildCliEnvironment` (API) or
-  `buildAgentEnvironment` (desktop).
+  `buildAgentEnvironment` (desktop, which calls `buildCliEnvironment`).
+- CLI search folders and the `MAUZ_*_PATH` overrides are in `cliCommand.ts` only. `TaskAgentLauncher`
+  uses them through `@mauzai/api/server`, but keeps Windows `.cmd` shims as they are (it starts the
+  agent through a terminal or `cmd.exe`); Ask resolves them to `node <script>`.
 - A new IPC call needs changes in: `MauzBridge` and `IPC_CHANNELS` (shared), the request schema,
   preload, `mauzClient.ts` (wrapper and preview bridge), `HANDLED_IPC_CHANNELS`, and the handler.
 - Services accept injected dependencies in an options object. Tests use these to replace
@@ -89,7 +92,5 @@ Answer text streams back through an in-process callback (`ask:delta`), not throu
 
 - Only Ask uses the loopback HTTP server. All other calls into `apps/api` are direct function imports.
 - `.env` is loaded inside `createMauzApiServer`, after `SettingsService` has read the environment.
-- CLI discovery and environment cleaning exist in two places with different results:
-  `apps/api/src/providers/cliCommand.ts` and `apps/desktop/src/main/agent/TaskAgentLauncher.ts`.
 - Names: Ask is also called "lens" and "answer". Dictate is also called "talk" and "pushToTalk".
   `apps/api/src/openai/askMauz.ts` is not specific to OpenAI.

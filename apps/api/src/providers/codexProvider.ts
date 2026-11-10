@@ -15,7 +15,6 @@ import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "
 
 export const DEFAULT_CODEX_REASONING_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 180_000;
-const CREDENTIAL_ENV_KEYS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] as const;
 
 export type CodexProviderOptions = {
   spawn?: SpawnLike;
@@ -48,7 +47,7 @@ export class CodexProvider implements AnswerProvider {
     this.resolveCommand =
       options.resolveCommand ??
       (() =>
-        resolveCliCommand(this.readEnv().MAUZ_CODEX_PATH?.trim() || "codex", {
+        resolveCliCommand("codex", {
           env: this.readEnv(),
           fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
         }));
@@ -97,7 +96,7 @@ export class CodexProvider implements AnswerProvider {
       ];
       const child = this.spawnProcess(command.command, args, {
         cwd: workingDirectory,
-        env: { ...buildCliEnvironment(this.readEnv(), CREDENTIAL_ENV_KEYS), ...command.env }
+        env: { ...buildCliEnvironment(this.readEnv()), ...command.env }
       });
       const output = await runAndCollect(child, {
         stdinText: buildCodexPrompt(prompt),

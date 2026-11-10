@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { posix, win32 } from "node:path";
+import { applyCliPathOverride, buildCliEnvironment, getCliSearchDirectories } from "@mauzai/api/server";
 import {
   buildTaskBrief,
   getContextImage,
@@ -302,12 +303,22 @@ export class TaskAgentLauncher {
     return { agentLabel: agent.label };
   }
 
+  /**
+   * The same folders and MAUZ_*_PATH overrides as Ask. Unlike Ask, a Windows `.cmd` shim is
+   * returned as it is: the agent starts through a terminal or cmd.exe, which can run it.
+   */
   findExecutable(command: string): string | null {
+    const name = applyCliPathOverride(command, this.env);
+
+    if (this.path.isAbsolute(name)) {
+      return this.pathExists(name) ? name : null;
+    }
+
     const extensions = this.platform === "win32" ? [".exe", ".cmd", ".bat"] : [""];
 
-    for (const directory of this.searchDirectories()) {
+    for (const directory of getCliSearchDirectories(this.platform, this.env, this.home)) {
       for (const extension of extensions) {
-        const candidate = this.path.join(directory, `${command}${extension}`);
+        const candidate = this.path.join(directory, `${name}${extension}`);
 
         if (this.pathExists(candidate)) {
           return candidate;
@@ -316,34 +327,6 @@ export class TaskAgentLauncher {
     }
 
     return null;
-  }
-
-  private searchDirectories(): string[] {
-    const separator = this.platform === "win32" ? ";" : ":";
-    const pathValue = this.env.PATH ?? this.env.Path ?? "";
-    const fromPath = pathValue
-      .split(separator)
-      .map((entry) => entry.trim().replace(/^"(.*)"$/, "$1"))
-      .filter((entry) => entry.length > 0);
-    const join = this.path.join;
-    // GUI launches (Start menu, Finder) can miss the shell's PATH additions.
-    const extra =
-      this.platform === "win32"
-        ? [
-            join(this.home, ".local", "bin"),
-            ...(this.env.APPDATA === undefined ? [] : [join(this.env.APPDATA, "npm")]),
-            ...(this.env.LOCALAPPDATA === undefined ? [] : [join(this.env.LOCALAPPDATA, "hermes", "bin")])
-          ]
-        : [
-            join(this.home, ".local", "bin"),
-            join(this.home, ".npm-global", "bin"),
-            join(this.home, ".hermes", "bin"),
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin"
-          ];
-
-    return [...fromPath, ...extra];
   }
 
   /** Claude Code lists every folder it has opened in ~/.claude.json. */
@@ -745,9 +728,6 @@ export function buildShellLauncher(launch: { folder: string; executable: string;
   ].join("\n");
 }
 
-/** Variables Mauz sets from its own settings (applyRuntimeEnvironment); agents use their own. */
-const MAUZ_RUNTIME_VARIABLES = new Set(["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_ASK_MODEL"]);
-
 /**
  * Set by a Claude Code (or T3 Code) session that started Mauz. Inherited, they make the agent's
  * run a child of that session instead of a session of its own.
@@ -755,22 +735,16 @@ const MAUZ_RUNTIME_VARIABLES = new Set(["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "
 const PARENT_SESSION_VARIABLE =
   /^(CLAUDECODE|CLAUDE_PID|CLAUDE_AGENT_SDK_VERSION|CLAUDE_CODE_(ENTRYPOINT|EXECPATH|SESSION_.*|CHILD_SESSION|MESSAGING_.*)|T3CODE_.*)$/i;
 
-/** The agent must not inherit Mauz's own secrets, Electron's run-as-Node switch, or a parent agent session. */
+/**
+ * What Ask's CLIs do not get (buildCliEnvironment), plus Mauz's Ask model setting and a parent
+ * agent session.
+ */
 export function buildAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const result: NodeJS.ProcessEnv = { ...env };
-
-  for (const key of Object.keys(result)) {
-    if (
-      key.startsWith("MAUZ_") ||
-      key === "ELECTRON_RUN_AS_NODE" ||
-      MAUZ_RUNTIME_VARIABLES.has(key.toUpperCase()) ||
-      PARENT_SESSION_VARIABLE.test(key)
-    ) {
-      delete result[key];
-    }
-  }
-
-  return result;
+  return Object.fromEntries(
+    Object.entries(buildCliEnvironment(env)).filter(
+      ([key]) => key.toUpperCase() !== "OPENAI_ASK_MODEL" && !PARENT_SESSION_VARIABLE.test(key)
+    )
+  );
 }
 
 function startDetached(command: string, args: string[], options: StartProcessOptions): Promise<void> {

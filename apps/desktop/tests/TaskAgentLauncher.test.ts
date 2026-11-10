@@ -507,9 +507,9 @@ describe("agent command lines", () => {
   });
 });
 
-// Defects from docs/reafactor-audit.md. Each fails today; refactor row 3 fixes them and removes `.skip`.
+// Defects from docs/reafactor-audit.md, fixed by refactor row 3.
 describe("known defects", () => {
-  it.skip("finds Claude Code at MAUZ_CLAUDE_CODE_PATH, as Ask does", () => {
+  it("finds Claude Code at MAUZ_CLAUDE_CODE_PATH, as Ask does", () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
       env: { PATH: "/usr/bin", MAUZ_CLAUDE_CODE_PATH: "/opt/tools/claude" },
@@ -520,7 +520,7 @@ describe("known defects", () => {
     expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
   });
 
-  it.skip("finds Codex at MAUZ_CODEX_PATH, as Ask does", () => {
+  it("finds Codex at MAUZ_CODEX_PATH, as Ask does", () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
       env: { PATH: "/usr/bin", MAUZ_CODEX_PATH: "/opt/tools/codex" },
@@ -531,7 +531,7 @@ describe("known defects", () => {
     expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
   });
 
-  it.skip("finds Claude Code in ~/.claude/local, as Ask does", () => {
+  it("finds Claude Code in ~/.claude/local, as Ask does", () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
       env: { PATH: "/usr/bin" },
@@ -542,7 +542,7 @@ describe("known defects", () => {
     expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
   });
 
-  it.skip("drops ANTHROPIC_AUTH_TOKEN, as the Ask CLI providers do", () => {
+  it("drops ANTHROPIC_AUTH_TOKEN, as the Ask CLI providers do", () => {
     expect(buildAgentEnvironment({ PATH: "p", ANTHROPIC_AUTH_TOKEN: "token" })).toEqual({ PATH: "p" });
   });
 });

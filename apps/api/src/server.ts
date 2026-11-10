@@ -11,6 +11,7 @@ import { registerHealthzRoute } from "./routes/healthz";
 
 export type { AnswerStreamHooks } from "./routes/ask";
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
+export { applyCliPathOverride, buildCliEnvironment, getCliSearchDirectories } from "./providers/cliCommand";
 
 /** Detects which AI providers (API keys, Claude Code, Codex) can answer right now. */
 export function getAiProvidersStatus(

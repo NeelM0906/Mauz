@@ -175,18 +175,14 @@ export class AnswerProviderRegistry {
   private async detectClaudeCode(): Promise<ProviderDetection> {
     const env = this.readEnv();
     const model = env.MAUZ_CLAUDE_CODE_MODEL?.trim() || DEFAULT_CLAUDE_CODE_MODEL;
-    const command = this.resolveCommand(env.MAUZ_CLAUDE_CODE_PATH?.trim() || "claude", env);
+    const command = this.resolveCommand("claude", env);
 
     if (command === null) {
       return { available: false, detail: "Claude Code is not installed.", model };
     }
 
     try {
-      const output = await this.runStatusCommand(
-        command,
-        ["auth", "status"],
-        ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
-      );
+      const output = await this.runStatusCommand(command, ["auth", "status"]);
       const status = parseJsonLine(output.stdout.trim());
 
       if (status?.loggedIn === true) {
@@ -203,14 +199,14 @@ export class AnswerProviderRegistry {
   private async detectCodex(): Promise<ProviderDetection> {
     const env = this.readEnv();
     const model = env.MAUZ_CODEX_MODEL?.trim() || "default";
-    const command = this.resolveCommand(env.MAUZ_CODEX_PATH?.trim() || "codex", env);
+    const command = this.resolveCommand("codex", env);
 
     if (command === null) {
       return { available: false, detail: "Codex is not installed.", model };
     }
 
     try {
-      const output = await this.runStatusCommand(command, ["login", "status"], ["OPENAI_API_KEY"]);
+      const output = await this.runStatusCommand(command, ["login", "status"]);
       const statusText = `${output.stdout}\n${output.stderr}`.trim();
       const loggedIn = /logged in/i.test(statusText) && !/not logged in/i.test(statusText);
 
@@ -231,12 +227,11 @@ export class AnswerProviderRegistry {
 
   private async runStatusCommand(
     command: ResolvedCliCommand,
-    subcommand: string[],
-    removeEnvKeys: readonly string[]
+    subcommand: string[]
   ): Promise<{ stdout: string; stderr: string }> {
     const child = this.spawnProcess(command.command, [...command.args, ...subcommand], {
       cwd: tmpdir(),
-      env: { ...buildCliEnvironment(this.readEnv(), removeEnvKeys), ...command.env }
+      env: { ...buildCliEnvironment(this.readEnv()), ...command.env }
     });
 
     return runAndCollect(child, { timeoutMs: CLI_STATUS_TIMEOUT_MS });
