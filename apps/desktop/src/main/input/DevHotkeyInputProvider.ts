@@ -18,11 +18,7 @@ export class DevHotkeyInputProvider implements InputProvider {
 
     globalShortcut.unregister(this.accelerator);
     this.registered = globalShortcut.register(this.accelerator, () => {
-      const cursor = screen.getCursorScreenPoint();
-      this.callbacks.onActivation({
-        source: "dev-hotkey",
-        cursor
-      });
+      this.callbacks.onActivation({ cursor: screen.getCursorScreenPoint() });
     });
 
     if (!this.registered) {

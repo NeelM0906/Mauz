@@ -35,7 +35,7 @@ type AgentDefinition = {
 };
 
 /** In "auto" order: the first installed agent is the default. */
-export const TASK_AGENTS: readonly AgentDefinition[] = [
+const TASK_AGENTS: readonly AgentDefinition[] = [
   { id: "hermes", label: "Hermes", command: "hermes" },
   { id: "claude-code", label: "Claude Code", command: "claude" },
   { id: "codex", label: "Codex", command: "codex" }
@@ -74,7 +74,7 @@ type DesktopHandoff = {
   handoffDirectory: string;
 };
 
-export type TaskAgentLauncherOptions = {
+type TaskAgentLauncherOptions = {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
   homeDirectory?: string;
@@ -91,19 +91,19 @@ export type TaskAgentLauncherOptions = {
   sleep?: (milliseconds: number) => Promise<void>;
 };
 
-export type StartProcessOptions = {
+type StartProcessOptions = {
   env: NodeJS.ProcessEnv;
   windowsVerbatimArguments?: boolean;
 };
 
-export type StartHiddenOptions = {
+type StartHiddenOptions = {
   env: NodeJS.ProcessEnv;
   cwd: string;
   logPath: string;
   stdinPath?: string;
 };
 
-export type LaunchTaskRequest = {
+type LaunchTaskRequest = {
   agentId: TaskAgentId;
   folder: string;
   task: string;

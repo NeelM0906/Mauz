@@ -9,7 +9,7 @@ export type ResolvedCliCommand = {
   env?: Record<string, string> | undefined;
 };
 
-export type CliResolutionOptions = {
+type CliResolutionOptions = {
   platform?: NodeJS.Platform | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   homeDirectory?: string | undefined;

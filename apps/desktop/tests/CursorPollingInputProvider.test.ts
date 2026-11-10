@@ -65,7 +65,6 @@ describe("CursorPollingInputProvider", () => {
     harness.runTicks(60);
 
     expect(harness.activations).toHaveLength(1);
-    expect(harness.activations[0]?.source).toBe("mouse-shake");
   });
 
   it("does not activate while the pointer is still", () => {

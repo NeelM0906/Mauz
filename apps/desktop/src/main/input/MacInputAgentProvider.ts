@@ -26,7 +26,7 @@ type ShakeDetectorLike = {
   reset(): void;
 };
 
-export type MacInputAgentProviderOptions = {
+type MacInputAgentProviderOptions = {
   helperPath: string;
   platform?: NodeJS.Platform;
   pathExists?: (path: string) => boolean;
@@ -247,7 +247,6 @@ export class MacInputAgentProvider implements InputProvider {
 
     if (result.activated) {
       this.callbacks.onActivation({
-        source: "mouse-shake",
         cursor: {
           x: parsedEvent.data.x,
           y: parsedEvent.data.y

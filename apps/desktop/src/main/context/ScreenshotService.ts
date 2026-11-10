@@ -100,12 +100,6 @@ const JPEG_QUALITY = 80;
 export class ScreenshotService {
   constructor(private readonly deps?: ScreenshotServiceDeps) {}
 
-  async captureDisplayNear(point: Point): Promise<ScreenshotPayload> {
-    const { source } = await this.captureSourceNear(point);
-
-    return encodeImage(fitWithin(source.thumbnail, MAX_OVERVIEW_SIZE));
-  }
-
   /**
    * Crops the screen around what the pointer is on: the pointed element when its bounds are
    * known and reasonably sized, otherwise a fixed area around the pointer. Crops stay inside

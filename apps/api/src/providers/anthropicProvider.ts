@@ -7,7 +7,7 @@ const MAX_OUTPUT_TOKENS = 16_000;
 
 type AnthropicClientLike = Pick<Anthropic, "beta">;
 
-export type AnthropicApiProviderOptions = {
+type AnthropicApiProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
   createClient?: (apiKey: string) => AnthropicClientLike;
 };

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { TalkTranscribeRequest, TalkTranscribeResponse } from "@mauzai/shared";
 import type { WindowsContextHelper } from "../context/WindowsContextHelper";
 
-export type TalkTranscriberOptions = {
+type TalkTranscriberOptions = {
   getWindowsHelper: () => Pick<WindowsContextHelper, "transcribeWav"> | null;
   hasOpenAiKey: () => boolean;
   transcribeWithOpenAi: (wavAudio: Buffer) => Promise<string>;

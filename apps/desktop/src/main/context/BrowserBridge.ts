@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { BrowserPageSchema, isBlockedSite, type BrowserPage } from "@mauzai/shared";
 import type { BrowserPageReader, BrowserPageResult } from "./ContextCollector";
 
-export const BROWSER_HOST_NAME = "ai.mauz.browser";
+const BROWSER_HOST_NAME = "ai.mauz.browser";
 /** Fixed by the "key" in browser-extension/extension/manifest.json. */
 export const BROWSER_EXTENSION_ID = "lnahcdbpmfglahakbckmgbfgbclaaiog";
 
@@ -283,7 +283,7 @@ export function chooseSnapshot(snapshots: readonly SnapshotResult[]): BrowserPag
 }
 
 /** HMAC of a nonce with the shared secret; the role keeps the two directions distinct. */
-export function signNonce(token: string, role: "mauz" | "host", nonce: string): string {
+function signNonce(token: string, role: "mauz" | "host", nonce: string): string {
   return createHmac("sha256", token).update(`${role}:${nonce}`).digest("hex");
 }
 

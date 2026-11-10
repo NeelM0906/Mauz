@@ -16,15 +16,15 @@ struct PermissionErrorEvent: Encodable {
 }
 
 let encoder = JSONEncoder()
-let output = EventOutput(socketPath: getSocketPath())
 
 func emit<T: Encodable>(_ event: T) {
     guard let data = try? encoder.encode(event) else {
         return
     }
 
-    output.write(data)
-    output.write(Data([0x0a]))
+    FileHandle.standardOutput.write(data)
+    FileHandle.standardOutput.write(Data([0x0a]))
+    fflush(stdout)
 }
 
 func emitPermissionError() {
@@ -105,78 +105,3 @@ parentWatchdog.setEventHandler {
 parentWatchdog.resume()
 
 CFRunLoopRun()
-
-final class EventOutput {
-    private let fileHandle: FileHandle
-    private let usesStdout: Bool
-
-    init(socketPath: String?) {
-        if let socketPath, let socketHandle = connectUnixSocket(path: socketPath) {
-            self.fileHandle = socketHandle
-            self.usesStdout = false
-        } else {
-            self.fileHandle = .standardOutput
-            self.usesStdout = true
-        }
-    }
-
-    func write(_ data: Data) {
-        fileHandle.write(data)
-
-        if usesStdout {
-            fflush(stdout)
-        }
-    }
-}
-
-func getSocketPath() -> String? {
-    let arguments = CommandLine.arguments
-
-    for index in arguments.indices where arguments[index] == "--socket" {
-        let valueIndex = arguments.index(after: index)
-
-        if valueIndex < arguments.endIndex {
-            return arguments[valueIndex]
-        }
-    }
-
-    return nil
-}
-
-func connectUnixSocket(path: String) -> FileHandle? {
-    let fileDescriptor = socket(AF_UNIX, SOCK_STREAM, 0)
-
-    guard fileDescriptor >= 0 else {
-        return nil
-    }
-
-    var address = sockaddr_un()
-    address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-    address.sun_family = sa_family_t(AF_UNIX)
-
-    let pathBytes = Array(path.utf8)
-    let maxPathLength = MemoryLayout.size(ofValue: address.sun_path)
-
-    guard pathBytes.count < maxPathLength else {
-        close(fileDescriptor)
-        return nil
-    }
-
-    withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-        buffer.copyBytes(from: pathBytes)
-        buffer[pathBytes.count] = 0
-    }
-
-    let connected = withUnsafePointer(to: &address) { pointer in
-        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-            connect(fileDescriptor, socketAddress, socklen_t(MemoryLayout<sockaddr_un>.size))
-        }
-    }
-
-    guard connected == 0 else {
-        close(fileDescriptor)
-        return nil
-    }
-
-    return FileHandle(fileDescriptor: fileDescriptor, closeOnDealloc: true)
-}

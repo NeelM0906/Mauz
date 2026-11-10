@@ -30,7 +30,7 @@ const SETTINGS_FILE_NAME = "mauz-settings.json";
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
 
 /** Password managers: never screenshot or read their windows. Executables (Windows) and bundle ids (macOS). */
-export const DEFAULT_CAPTURE_BLOCKED_APPS = [
+const DEFAULT_CAPTURE_BLOCKED_APPS = [
   "1Password.exe",
   "Bitwarden.exe",
   "KeePass.exe",

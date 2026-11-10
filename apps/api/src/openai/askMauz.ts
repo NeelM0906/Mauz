@@ -8,7 +8,7 @@ import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
 import { getDefaultAnswerProviderRegistry, type AnswerProviderRegistry } from "../providers/registry";
 import type { AnswerImage, AnswerPrompt } from "../providers/types";
 
-export type AskMauzOptions = {
+type AskMauzOptions = {
   registry?: Pick<AnswerProviderRegistry, "resolve">;
   onText?: (textSoFar: string) => void;
 };

@@ -1,9 +1,6 @@
 import type { PermissionError } from "@mauzai/shared";
 
-export type ActivationSource = "dev-hotkey" | "mouse-shake";
-
 export type ActivationEvent = {
-  source: ActivationSource;
   cursor: {
     x: number;
     y: number;

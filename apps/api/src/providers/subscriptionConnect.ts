@@ -49,7 +49,7 @@ const DEVICE_CODE_PATTERN = /\b[A-Z0-9]{4}-[A-Z0-9]{4,5}\b/;
 // eslint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\u001b\[[0-9;]*[A-Za-z]/g;
 
-export type SubscriptionConnectorOptions = {
+type SubscriptionConnectorOptions = {
   env?: () => NodeJS.ProcessEnv;
   spawn?: SpawnLike;
   resolveCommand: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;

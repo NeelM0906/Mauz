@@ -19,7 +19,7 @@ import type { AnswerProvider, ProviderDetection } from "./types";
  * Auto order, used only when the default is "auto" and several providers are ready: a key
  * the user added on purpose wins, then the subscriptions they are already signed in to.
  */
-export const AUTO_PROVIDER_ORDER: readonly AiProviderId[] = ["anthropic", "openai", "claude-code", "codex"];
+const AUTO_PROVIDER_ORDER: readonly AiProviderId[] = ["anthropic", "openai", "claude-code", "codex"];
 
 const PROVIDER_LABELS: Record<AiProviderId, string> = {
   "claude-code": "Claude Code subscription",
@@ -31,7 +31,7 @@ const PROVIDER_LABELS: Record<AiProviderId, string> = {
 const CLI_DETECTION_TTL_MS = 5 * 60_000;
 const CLI_STATUS_TIMEOUT_MS = 15_000;
 
-export type AnswerProviderRegistryOptions = {
+type AnswerProviderRegistryOptions = {
   env?: () => NodeJS.ProcessEnv;
   spawn?: SpawnLike;
   resolveCommand?: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;

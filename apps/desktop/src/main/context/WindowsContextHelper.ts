@@ -32,7 +32,7 @@ const identityConverter: WindowsCoordinateConverter = {
   toDipRect: (rect) => rect
 };
 
-export type WindowsActiveWindow = {
+type WindowsActiveWindow = {
   title?: string | undefined;
   processName?: string | undefined;
   executable?: string | undefined;

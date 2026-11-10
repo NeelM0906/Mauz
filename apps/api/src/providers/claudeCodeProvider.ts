@@ -17,7 +17,7 @@ import {
 import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
 
 export const DEFAULT_CLAUDE_CODE_MODEL = "sonnet";
-export const DEFAULT_CLAUDE_CODE_EFFORT = "low";
+const DEFAULT_CLAUDE_CODE_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 120_000;
 export const CLAUDE_CLI: AnswerCli = {
   label: "Claude Code",
@@ -27,7 +27,7 @@ export const CLAUDE_CLI: AnswerCli = {
 /** A pre-started CLI is only reused while it is fresh; an idle one is stopped to free memory. */
 const WARM_PROCESS_MAX_IDLE_MS = 3 * 60_000;
 
-export type ClaudeCodeProviderOptions = {
+type ClaudeCodeProviderOptions = {
   spawn?: SpawnLike;
   resolveCommand?: () => ResolvedCliCommand | null;
   env?: () => NodeJS.ProcessEnv;

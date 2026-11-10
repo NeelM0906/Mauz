@@ -14,7 +14,7 @@ export type ChildProcessLike = {
   once(event: "error", listener: (error: Error) => void): unknown;
 };
 
-export type SpawnOptions = {
+type SpawnOptions = {
   cwd: string;
   env: NodeJS.ProcessEnv;
 };
@@ -30,20 +30,20 @@ export const spawnCliProcess: SpawnLike = (command, args, options) =>
     windowsHide: true
   });
 
-export type CollectedOutput = {
+type CollectedOutput = {
   stdout: string;
   stderr: string;
   exitCode: number | null;
 };
 
-export type RunCollectOptions = {
+type RunCollectOptions = {
   stdinText?: string | undefined;
   timeoutMs: number;
   /** Called for each complete stdout line as it arrives; stdout is still collected. */
   onStdoutLine?: ((line: string) => void) | undefined;
 };
 
-export class ProcessTimeoutError extends Error {
+class ProcessTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`The command did not finish within ${Math.round(timeoutMs / 1000)} seconds.`);
     this.name = "ProcessTimeoutError";

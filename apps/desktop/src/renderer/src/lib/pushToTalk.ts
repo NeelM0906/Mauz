@@ -1,6 +1,6 @@
 const SPEECH_SAMPLE_RATE = 16_000;
 
-export type RecordedSpeech = {
+type RecordedSpeech = {
   base64: string;
   durationMs: number;
 };

@@ -8,7 +8,7 @@ const DEFAULT_ASK_MAX_OUTPUT_TOKENS = 700;
 
 type OpenAiClientLike = Pick<OpenAI, "responses">;
 
-export type OpenAiApiProviderOptions = {
+type OpenAiApiProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
   createClient?: (apiKey: string) => OpenAiClientLike;
 };

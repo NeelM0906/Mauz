@@ -4,7 +4,7 @@ import { IPC_CHANNELS, MAUZ_ASK_PANEL_SIZE, MAUZ_POPUP_SIZE, MAUZ_SETTINGS_PANEL
 import { getClampedPopoverPosition, type Point, type Size } from "./PopoverPosition";
 import { hardenRendererWindow } from "./WindowSecurity";
 
-export type HideReason = "blur" | "explicit";
+type HideReason = "blur" | "explicit";
 
 type PopoverWindowControllerOptions = {
   preloadPath: string;

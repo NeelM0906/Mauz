@@ -103,7 +103,6 @@ describe("MacInputAgentProvider", () => {
     child.stdout.write('{"type":"mouse_move","x":321,"y":654,"ts":1710000000000}\n');
 
     expect(callbacks.onActivation).toHaveBeenCalledWith({
-      source: "mouse-shake",
       cursor: {
         x: 321,
         y: 654

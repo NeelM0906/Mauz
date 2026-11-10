@@ -13,7 +13,7 @@ import {
 } from "./processRunner";
 import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
 
-export const DEFAULT_CODEX_REASONING_EFFORT = "low";
+const DEFAULT_CODEX_REASONING_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 180_000;
 const CODEX_CLI: AnswerCli = {
   label: "Codex",
@@ -21,7 +21,7 @@ const CODEX_CLI: AnswerCli = {
   signInMessage: "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
 };
 
-export type CodexProviderOptions = {
+type CodexProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
 };
 

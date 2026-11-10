@@ -11,7 +11,7 @@ type ShakeDetectorLike = {
   reset(): void;
 };
 
-export type CursorPollingInputProviderOptions = {
+type CursorPollingInputProviderOptions = {
   readCursor: () => Point;
   detector?: ShakeDetectorLike;
   now?: () => number;
@@ -111,7 +111,7 @@ export class CursorPollingInputProvider implements InputProvider {
     const result = this.detector.push({ x: point.x, y: point.y, ts });
 
     if (result.activated) {
-      this.callbacks.onActivation({ source: "mouse-shake", cursor: { x: point.x, y: point.y } });
+      this.callbacks.onActivation({ cursor: { x: point.x, y: point.y } });
     }
   }
 }

@@ -8,14 +8,14 @@ export type Size = {
   height: number;
 };
 
-export type WorkArea = {
+type WorkArea = {
   x: number;
   y: number;
   width: number;
   height: number;
 };
 
-export type PopoverPositionOptions = {
+type PopoverPositionOptions = {
   cursorOffset: number;
   screenMargin: number;
 };
