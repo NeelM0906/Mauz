@@ -23,13 +23,12 @@ type TestSecretCodec = {
 };
 
 describe("SettingsService", () => {
-  it("defaults Task agent settings and generates a stable installId", async () => {
+  it("defaults Task agent settings", async () => {
     const service = createService();
     const runtime = await service.getRuntime();
     expect(runtime.taskAgent).toBe("auto");
     expect(runtime.taskFolder).toBe("");
     expect(runtime.taskAgentFolders).toEqual({});
-    expect(runtime.installId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("defaults the never-capture list to common password managers", async () => {
@@ -58,15 +57,6 @@ describe("SettingsService", () => {
     });
 
     expect(settings.captureBlockedApps).toEqual(["Signal.exe", "com.agilebits.onepassword7"]);
-  });
-
-  it("persists installId across loads once written", async () => {
-    const files = new Map<string, string>();
-    const service = createServiceWithFiles(files);
-    const first = (await service.getRuntime()).installId;
-    await service.update({ askModel: "gpt-5.4-mini" }); // forces a write
-    const service2 = createServiceWithFiles(files);
-    expect((await service2.getRuntime()).installId).toBe(first);
   });
 
   it("updates the task agent, default folder, and last folder per agent", async () => {
@@ -212,49 +202,43 @@ describe("SettingsService", () => {
     expect(writes.at(-1)).not.toContain("sk-new");
   });
 
-  it("can disconnect and reconnect launch environment credentials at runtime", async () => {
-    const { service } = createSettingsService({
-      environmentApiKey: "sk-env",
-      settingsJson: JSON.stringify(DEFAULT_SETTINGS)
-    });
-
-    await expect(service.get()).resolves.toMatchObject({
-      apiKeyConfigured: true,
-      openAiCredentialSource: "environment"
-    });
-    await expect(service.update({ openAiAuthDisconnected: true })).resolves.toMatchObject({
-      apiKeyConfigured: false,
-      openAiAuthDisconnected: true,
-      openAiCredentialSource: "none"
-    });
-    await expect(service.getRuntime()).resolves.not.toHaveProperty("openAiApiKey");
-    await expect(service.update({ openAiAuthDisconnected: false })).resolves.toMatchObject({
-      apiKeyConfigured: true,
-      openAiAuthDisconnected: false,
-      openAiCredentialSource: "environment"
-    });
-    await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiApiKey: "sk-env"
-    });
-  });
-
-  it("re-enables OpenAI auth when saving a replacement API key", async () => {
-    const { service } = createSettingsService({
-      settingsJson: JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        openAiAuthDisconnected: true
-      }),
+  it("stores and clears the Anthropic key encrypted", async () => {
+    const { service, writes } = createSettingsService({
+      settingsJson: JSON.stringify(DEFAULT_SETTINGS),
       secretCodec: createTestSecretCodec()
     });
 
-    await expect(service.update({ openAiApiKey: "sk-relogin" })).resolves.toMatchObject({
-      apiKeyConfigured: true,
-      openAiAuthDisconnected: false,
-      openAiCredentialSource: "saved"
+    await service.update({ anthropicApiKey: " sk-ant-new " });
+    expect(JSON.parse(writes.at(-1)!).encryptedAnthropicApiKey).toBe(
+      createTestSecretCodec().encrypt("sk-ant-new")
+    );
+    await expect(service.getRuntime()).resolves.toMatchObject({ anthropicApiKey: "sk-ant-new" });
+
+    await service.update({ clearAnthropicApiKey: true });
+    expect(writes.at(-1)).not.toContain("encryptedAnthropicApiKey");
+  });
+
+  it("refuses to save a key when secure storage is unavailable", async () => {
+    const { service } = createSettingsService({ settingsJson: JSON.stringify(DEFAULT_SETTINGS) });
+
+    await expect(service.update({ openAiApiKey: "sk-new" })).rejects.toThrow(
+      "Mauz could not save the OpenAI API key securely on this computer."
+    );
+    await expect(service.update({ anthropicApiKey: "sk-ant-new" })).rejects.toThrow(
+      "Mauz could not save the Anthropic API key securely on this computer."
+    );
+  });
+
+  it("loads an old file with openAiAuthDisconnected and uses the environment key", async () => {
+    const { service } = createSettingsService({
+      environmentApiKey: "sk-env",
+      settingsJson: JSON.stringify({ ...DEFAULT_SETTINGS, openAiAuthDisconnected: true })
     });
-    await expect(service.getRuntime()).resolves.toMatchObject({
-      openAiApiKey: "sk-relogin"
-    });
+
+    const settings = await service.get();
+    expect(settings).toMatchObject({ apiKeyConfigured: true, openAiCredentialSource: "environment" });
+    expect(settings).not.toHaveProperty("openAiAuthDisconnected");
+    await expect(service.getRuntime()).resolves.toMatchObject({ openAiApiKey: "sk-env" });
   });
 
   it("clears a saved encrypted API key", async () => {
@@ -278,13 +262,7 @@ describe("SettingsService", () => {
 
   it("serializes concurrent updates so neither change is lost", async () => {
     const files = new Map<string, string>();
-    files.set(
-      SHARED_SETTINGS_PATH,
-      JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        installId: "aabbccdd-1122-3344-5566-778899aabbcc"
-      })
-    );
+    files.set(SHARED_SETTINGS_PATH, JSON.stringify(DEFAULT_SETTINGS));
 
     const service = createServiceWithFiles(files);
 
@@ -299,26 +277,18 @@ describe("SettingsService", () => {
     expect(runtime.taskAgent).toBe("codex");
   });
 
-  it("preserves installId from a settings file with malformed JSON", async () => {
-    const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
-    const { service } = createSettingsService({
-      settingsJson: `not valid json but "installId": "${knownId}" is in here`
-    });
-    const runtime = await service.getRuntime();
-    expect(runtime.installId).toBe(knownId);
-  });
-
-  it("preserves installId when stored settings contain a legacy backendPreset field", async () => {
-    const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
+  it("loads an old settings file that still has installId and a legacy backendPreset", async () => {
     const { service } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        installId: knownId,
+        askModel: "gpt-5.5",
+        installId: "aabbccdd-1122-3344-5566-778899aabbcc",
         backendPreset: "not-a-valid-preset"
       })
     });
     const runtime = await service.getRuntime();
-    expect(runtime.installId).toBe(knownId);
+    expect(runtime.askModel).toBe("gpt-5.5");
+    expect(runtime).not.toHaveProperty("installId");
   });
 
   it("loads settings saved by older versions and drops removed fields", async () => {
@@ -419,7 +389,6 @@ const DEFAULT_SETTINGS = {
   nativeShakeEnabled: true,
   devHotkeyEnabled: true,
   shakeSensitivity: "normal",
-  openAiAuthDisconnected: false,
   askModel: "gpt-5.4-mini",
   captureBlockedApps: [],
   captureBlockedSites: []

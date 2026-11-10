@@ -1,25 +1,19 @@
 import type { PermissionError } from "@mauzai/shared";
 
-export type ActivationSource = "dev-hotkey" | "mouse-shake";
-
 export type ActivationEvent = {
-  source: ActivationSource;
   cursor: {
     x: number;
     y: number;
   };
 };
 
-export type InputProviderEvents = {
-  activated: ActivationEvent;
-  permissionError: PermissionError;
+/** What a provider calls when it activates or fails. `index.ts` is the only subscriber. */
+export type InputProviderCallbacks = {
+  onActivation(event: ActivationEvent): void;
+  onPermissionError(error: PermissionError): void;
 };
-
-export type Unsubscribe = () => void;
 
 export interface InputProvider {
   start(): void;
   stop(): void;
-  onActivation(callback: (event: ActivationEvent) => void): Unsubscribe;
-  onPermissionError(callback: (error: PermissionError) => void): Unsubscribe;
 }

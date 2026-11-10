@@ -1,13 +1,15 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { AiProviderStatus, AskMauzRequest } from "@mauzai/shared";
 import { AiProviderError, NoAiProviderError } from "../src/errors";
 import { askMauz, buildAnswerPrompt } from "../src/openai/askMauz";
-import { ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
-import { buildCliEnvironment, resolveCliCommand } from "../src/providers/cliCommand";
-import { parseCodexOutput } from "../src/providers/codexProvider";
-import type { ChildProcessLike, SpawnLike } from "../src/providers/processRunner";
+import { CLAUDE_CLI, ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
+import { buildCliEnvironment, getCliSearchDirectories, resolveCliCommand } from "../src/providers/cliCommand";
+import { describeCodexFailure, parseCodexOutput } from "../src/providers/codexProvider";
+import { describeCliFailure, type ChildProcessLike, type SpawnLike } from "../src/providers/processRunner";
+import { AnthropicApiProvider } from "../src/providers/anthropicProvider";
 import { AnswerProviderRegistry, pickProvider } from "../src/providers/registry";
 import type { AnswerPrompt, AnswerProvider } from "../src/providers/types";
 
@@ -163,6 +165,17 @@ describe("resolveCliCommand", () => {
     expect(resolved?.command).toBe("/Users/me/.local/bin/claude");
   });
 
+  it("uses MAUZ_CODEX_PATH when it is set", () => {
+    const resolved = resolveCliCommand("codex", {
+      platform: "darwin",
+      env: { PATH: "/usr/bin", MAUZ_CODEX_PATH: " /opt/tools/codex " },
+      homeDirectory: "/Users/me",
+      pathExists: (path) => path === "/opt/tools/codex"
+    });
+
+    expect(resolved).toEqual({ command: "/opt/tools/codex", args: [] });
+  });
+
   it("returns null when the CLI is not installed", () => {
     expect(
       resolveCliCommand("codex", { platform: "linux", env: { PATH: "/usr/bin" }, pathExists: () => false })
@@ -170,19 +183,45 @@ describe("resolveCliCommand", () => {
   });
 });
 
-describe("buildCliEnvironment", () => {
-  it("removes Mauz internals and requested credentials", () => {
-    const env = buildCliEnvironment(
-      { PATH: "/bin", MAUZ_LOCAL_API_TOKEN: "secret", ANTHROPIC_API_KEY: "sk-ant", HOME: "/home/me" },
-      ["ANTHROPIC_API_KEY"]
+describe("getCliSearchDirectories", () => {
+  it("lists each folder once and includes the Hermes folder on Windows", () => {
+    const directories = getCliSearchDirectories(
+      "win32",
+      {
+        PATH: "C:\\Users\\me\\.local\\bin;C:\\tools;C:\\tools",
+        APPDATA: "C:\\Users\\me\\AppData\\Roaming",
+        LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local"
+      },
+      "C:\\Users\\me"
     );
+
+    expect(directories).toEqual([
+      "C:\\Users\\me\\.local\\bin",
+      "C:\\tools",
+      "C:\\Users\\me\\AppData\\Roaming\\npm",
+      "C:\\Users\\me\\AppData\\Local\\hermes\\bin"
+    ]);
+  });
+});
+
+describe("buildCliEnvironment", () => {
+  it("removes Mauz internals and every API credential", () => {
+    const env = buildCliEnvironment({
+      PATH: "/bin",
+      MAUZ_BROWSER_TOKEN: "secret",
+      ELECTRON_RUN_AS_NODE: "1",
+      ANTHROPIC_API_KEY: "sk-ant",
+      ANTHROPIC_AUTH_TOKEN: "token",
+      openai_api_key: "sk",
+      HOME: "/home/me"
+    });
 
     expect(env).toEqual({ PATH: "/bin", HOME: "/home/me" });
   });
 });
 
 describe("ClaudeCodeProvider", () => {
-  it("sends images over stream-json, streams text, and reports the model", async () => {
+  it("sends images over stream-json and streams text", async () => {
     const children: FakeChild[] = [];
     const spawn: SpawnLike = vi.fn(() => {
       const child = createFakeChild(() => ({ stdoutLines: claudeSuccessLines("It is a chart.") }));
@@ -199,7 +238,7 @@ describe("ClaudeCodeProvider", () => {
 
     const result = await provider.answer(PROMPT, { onText: (text) => updates.push(text) });
 
-    expect(result).toMatchObject({ text: "It is a chart.", model: "claude-sonnet-5-5" });
+    expect(result).toEqual({ text: "It is a chart." });
     expect(updates).toEqual(["It i", "It is a chart."]);
     const [, args, options] = (spawn as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(args).toEqual(expect.arrayContaining(["-p", "--tools", "", "--no-session-persistence"]));
@@ -252,6 +291,55 @@ describe("ClaudeCodeProvider", () => {
     await expect(provider.answer(PROMPT)).rejects.toThrow(/isn't signed in/);
   });
 
+  it("stops a silent CLI after the timeout", async () => {
+    const child = createFakeChild(() => ({ stdoutLines: [] }));
+    child.stdin!.removeAllListeners("end");
+    const provider = new ClaudeCodeProvider({
+      spawn: () => child,
+      resolveCommand: () => ({ command: "claude", args: [] }),
+      env: () => ({}),
+      makeWorkingDirectory: () => "/tmp",
+      answerTimeoutMs: 10
+    });
+
+    await expect(provider.answer(PROMPT)).rejects.toThrow("Claude Code did not answer in time. Try again.");
+    expect(child.killed).toBe(true);
+  });
+
+  it("reports a start error, stderr, and an empty exit", async () => {
+    const answerWith = (child: ChildProcessLike) =>
+      new ClaudeCodeProvider({
+        spawn: () => child,
+        resolveCommand: () => ({ command: "claude", args: [] }),
+        env: () => ({}),
+        makeWorkingDirectory: () => "/tmp"
+      }).answer(PROMPT);
+    const notStarted = {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      exitCode: null,
+      killed: false,
+      kill: () => true,
+      once(event: string, listener: (error: Error) => void) {
+        if (event === "error") {
+          setImmediate(() => listener(new Error("spawn claude ENOENT")));
+        }
+        return notStarted;
+      }
+    } as unknown as ChildProcessLike;
+
+    await expect(answerWith(notStarted)).rejects.toThrow(
+      "Mauz could not start Claude Code: spawn claude ENOENT"
+    );
+    await expect(
+      answerWith(createFakeChild(() => ({ stdoutLines: [], stderr: "Rate limit reached\n", exitCode: 1 })))
+    ).rejects.toThrow("Claude Code reported a usage limit: Rate limit reached");
+    await expect(answerWith(createFakeChild(() => ({ stdoutLines: [], exitCode: 2 })))).rejects.toThrow(
+      "Claude Code exited without an answer (code 2)."
+    );
+  });
+
   it("reports a missing CLI as a provider error", async () => {
     const provider = new ClaudeCodeProvider({ resolveCommand: () => null, env: () => ({}) });
 
@@ -259,8 +347,52 @@ describe("ClaudeCodeProvider", () => {
   });
 });
 
+describe("CLI failure text", () => {
+  const long = "x".repeat(300);
+
+  it.each([
+    [
+      "Reading prompt from stdin...\nError: not logged in",
+      1,
+      "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+    ],
+    [
+      "Please run codex login",
+      1,
+      "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+    ],
+    [
+      "HTTP 401 Unauthorized",
+      1,
+      "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+    ],
+    ["You hit your usage limit.", 1, "Codex reported a usage limit: You hit your usage limit."],
+    ["Rate limit   reached\n", 1, "Codex reported a usage limit: Rate limit reached"],
+    ["Something  broke\n\nbadly", 1, "Codex could not answer: Something broke badly"],
+    [long, 1, `Codex could not answer: ${"x".repeat(237)}...`],
+    ["Reading prompt from stdin...", 2, "Codex exited without an answer (code 2)."],
+    ["   ", null, "Codex exited without an answer (code unknown)."]
+  ])("Codex: %j (exit %s)", (detail, exitCode, expected) => {
+    expect(describeCodexFailure(detail, exitCode)).toBe(expected);
+  });
+
+  const signIn = "Claude Code isn't signed in. Open a terminal, run `claude`, sign in, then try again.";
+
+  it.each([
+    ["Invalid API key · Please run /login", 1, signIn],
+    ["Not logged in", 1, signIn],
+    ["authentication failed", 1, signIn],
+    ["Usage limit reached", 1, "Claude Code reported a usage limit: Usage limit reached"],
+    ["Something  broke", 1, "Claude Code could not answer: Something broke"],
+    ["Please run codex login", 1, "Claude Code could not answer: Please run codex login"],
+    ["", 3, "Claude Code exited without an answer (code 3)."]
+  ])("Claude Code: %j (exit %s)", (detail, exitCode, expected) => {
+    expect(describeCliFailure(CLAUDE_CLI, detail, exitCode)).toBe(expected);
+  });
+});
+
 describe("parseCodexOutput", () => {
-  it("reads the final agent message and usage from JSONL events", () => {
+  it("reads the final agent message from JSONL events", () => {
     const parsed = parseCodexOutput(
       [
         JSON.stringify({ type: "thread.started", thread_id: "t1" }),
@@ -269,7 +401,7 @@ describe("parseCodexOutput", () => {
       ].join("\n")
     );
 
-    expect(parsed).toEqual({ text: "It says 4817.", error: undefined, usage: { output_tokens: 6 } });
+    expect(parsed).toEqual({ text: "It says 4817.", error: undefined });
   });
 
   it("captures turn failures", () => {
@@ -287,7 +419,6 @@ describe("pickProvider", () => {
     (["anthropic", "openai", "claude-code", "codex"] as const).map((id) => ({
       id,
       label: id,
-      kind: id === "anthropic" || id === "openai" ? "api-key" : "subscription",
       available: available[id] === true,
       detail: "",
       model: "m"
@@ -336,6 +467,19 @@ describe("AnswerProviderRegistry", () => {
     expect(status.providers.find((provider) => provider.id === "codex")?.available).toBe(true);
   });
 
+  it.each([
+    [" codex ", "codex"],
+    ["foo", "auto"],
+    [undefined, "auto"]
+  ])("reads MAUZ_AI_PROVIDER %j as %s", async (value, expected) => {
+    const registry = createRegistry(value === undefined ? {} : { MAUZ_AI_PROVIDER: value }, {
+      claude: JSON.stringify({ loggedIn: false }),
+      codex: "Not logged in"
+    });
+
+    await expect(registry.getStatus()).resolves.toMatchObject({ preference: expected });
+  });
+
   it("explains when the selected provider is not ready", async () => {
     const registry = createRegistry(
       { MAUZ_AI_PROVIDER: "anthropic" },
@@ -373,7 +517,7 @@ describe("askMauz provider routing", () => {
   it("answers through the resolved provider and streams text", async () => {
     const answer = vi.fn<AnswerProvider["answer"]>(async (_prompt, options) => {
       options?.onText?.("Partial");
-      return { text: "Final answer", model: "claude-sonnet-5-5" };
+      return { text: "Final answer" };
     });
     const onText = vi.fn();
 
@@ -382,7 +526,7 @@ describe("askMauz provider routing", () => {
       onText
     });
 
-    expect(response).toEqual({ answer: "Final answer", model: "claude-sonnet-5-5" });
+    expect(response).toEqual({ answer: "Final answer" });
     expect(onText).toHaveBeenCalledWith("Partial");
   });
 
@@ -392,5 +536,40 @@ describe("askMauz provider routing", () => {
     expect(prompt.images).toHaveLength(1);
     expect(prompt.images[0]?.label).toMatch(/crop centered on the pointer/);
     expect(prompt.userText).toContain("<question>\nWhat is this?\n</question>");
+  });
+});
+
+describe("AnthropicApiProvider errors", () => {
+  function providerThatThrows(error: unknown): AnthropicApiProvider {
+    return new AnthropicApiProvider({
+      env: () => ({ ANTHROPIC_API_KEY: "sk-ant-test" }),
+      createClient: () =>
+        ({
+          beta: {
+            messages: {
+              stream: () => {
+                throw error;
+              }
+            }
+          }
+        }) as unknown as Pick<Anthropic, "beta">
+    });
+  }
+
+  it("maps known SDK errors to friendly messages", async () => {
+    await expect(
+      providerThatThrows(new Anthropic.AuthenticationError(401, undefined, "bad key", new Headers())).answer(
+        PROMPT
+      )
+    ).rejects.toThrow("Anthropic rejected the API key. Check it in Settings.");
+    await expect(
+      providerThatThrows(new Anthropic.APIConnectionError({ message: "offline" })).answer(PROMPT)
+    ).rejects.toThrow("Mauz could not reach the Anthropic API. Check your connection.");
+  });
+
+  it("falls back to the status for other API errors", async () => {
+    await expect(
+      providerThatThrows(new Anthropic.APIError(500, undefined, "boom", new Headers())).answer(PROMPT)
+    ).rejects.toThrow("Anthropic API error (500).");
   });
 });

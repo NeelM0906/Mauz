@@ -1,20 +1,28 @@
-import { ArrowLeft, BriefcaseBusiness, LoaderCircle, Mic, ScanSearch, Square, X } from "lucide-react";
+import { BriefcaseBusiness, LoaderCircle, Mic, ScanSearch, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { recordingToWav } from "@renderer/lib/pushToTalk";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
-import { BrandLogo } from "./BrandLogo";
+import { PanelHeader } from "./PanelHeader";
 
 type DictateState = "starting" | "listening" | "transcribing" | "ready" | "error";
 
 const MIN_RECORDING_MS = 350;
+
+const READY_TEXT = "Edit the text if needed, then pick where it goes.";
+const STATUS_TEXT: Record<DictateState, string> = {
+  starting: "Opening the microphone...",
+  listening: "Listening. Press Stop or Space when you're done.",
+  transcribing: "Turning your words into text...",
+  ready: READY_TEXT,
+  error: READY_TEXT
+};
 
 /**
  * Dictate: speech becomes text, which the user then sends to Ask or to their agent. The
  * screen context was captured when the dial opened, so both use what was under the pointer.
  */
 export function DictatePanel(): React.JSX.Element {
-  const backToMenu = useMauzStore((state) => state.backToMenu);
   const setDictation = useMauzStore((state) => state.setDictation);
   const setMode = useMauzStore((state) => state.setMode);
   const [state, setState] = useState<DictateState>("starting");
@@ -111,7 +119,7 @@ export function DictatePanel(): React.JSX.Element {
         return;
       }
 
-      const transcription = await mauzClient.transcribeTalk({
+      const transcription = await mauz().talk.transcribe({
         audioBase64: audio.base64,
         mimeType: "audio/wav"
       });
@@ -142,7 +150,7 @@ export function DictatePanel(): React.JSX.Element {
     return abandonRecording;
   }, [abandonRecording, startListening]);
 
-  useEffect(() => mauzClient.onPopoverHidden(abandonRecording), [abandonRecording]);
+  useEffect(() => mauz().menu.onHidden(abandonRecording), [abandonRecording]);
 
   useEffect(() => {
     // Space stops listening, like a dictation key; it types normally in the text box.
@@ -168,46 +176,17 @@ export function DictatePanel(): React.JSX.Element {
     setMode(target === "ask" ? "lens" : "task");
   };
 
-  const handleBack = async (): Promise<void> => {
-    abandonRecording();
-    await mauzClient.showMenu();
-    backToMenu();
-  };
-
   const listening = state === "listening" || state === "starting";
   const busy = state === "transcribing";
   const canSend = !listening && !busy && text.trim().length > 0;
 
   return (
     <section className="lens-panel lens-task-panel dictate-panel" aria-label="Dictate">
-      <header className="lens-header lens-task-header">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back to Mauz menu"
-          onClick={() => void handleBack()}
-        >
-          <ArrowLeft aria-hidden="true" size={16} />
-        </button>
-        <div className="panel-title">
-          <BrandLogo className="panel-title-logo" />
-          <div>
-            <h1 tabIndex={-1}>Dictate</h1>
-            <p>Speak, then send it to Ask or your agent.</p>
-          </div>
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => {
-            abandonRecording();
-            void mauzClient.close();
-          }}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
-      </header>
+      <PanelHeader
+        title="Dictate"
+        subtitle="Speak, then send it to Ask or your agent."
+        onLeave={abandonRecording}
+      />
 
       <div className="dictate-status" data-state={state} role="status" aria-live="polite">
         {busy ? (
@@ -215,7 +194,7 @@ export function DictatePanel(): React.JSX.Element {
         ) : (
           <Mic aria-hidden="true" size={18} />
         )}
-        <span>{error ?? getStatusText(state)}</span>
+        <span>{error ?? STATUS_TEXT[state]}</span>
         {listening ? (
           <button type="button" className="danger-button" onClick={() => void stopListening()}>
             <Square aria-hidden="true" size={13} />
@@ -255,17 +234,4 @@ export function DictatePanel(): React.JSX.Element {
       </div>
     </section>
   );
-}
-
-function getStatusText(state: DictateState): string {
-  switch (state) {
-    case "starting":
-      return "Opening the microphone...";
-    case "listening":
-      return "Listening. Press Stop or Space when you're done.";
-    case "transcribing":
-      return "Turning your words into text...";
-    default:
-      return "Edit the text if needed, then pick where it goes.";
-  }
 }

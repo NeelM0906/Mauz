@@ -1,11 +1,9 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import { fileURLToPath } from "node:url";
-import { MacInputAgentEventSchema, type PermissionError } from "@mauzai/shared";
+import { MacInputAgentEventSchema } from "@mauzai/shared";
 import type { Readable } from "node:stream";
-import type { ActivationEvent, InputProvider, Unsubscribe } from "./InputProvider";
+import type { InputProvider, InputProviderCallbacks } from "./InputProvider";
 import { ShakeDetector, type ShakeDetectorResult } from "./ShakeDetector";
 
 type ChildProcessLike = {
@@ -28,8 +26,8 @@ type ShakeDetectorLike = {
   reset(): void;
 };
 
-export type MacInputAgentProviderOptions = {
-  helperPath?: string;
+type MacInputAgentProviderOptions = {
+  helperPath: string;
   platform?: NodeJS.Platform;
   pathExists?: (path: string) => boolean;
   spawn?: SpawnLike;
@@ -48,8 +46,6 @@ const DEFAULT_RESTART_DELAY_MS = 750;
 const DEFAULT_PERMISSION_RETRY_DELAY_MS = 15_000;
 
 export class MacInputAgentProvider implements InputProvider {
-  private readonly activationListeners = new Set<(event: ActivationEvent) => void>();
-  private readonly permissionListeners = new Set<(error: PermissionError) => void>();
   private readonly detector: ShakeDetectorLike;
   private readonly maxRestarts: number;
   private readonly restartDelayMs: number;
@@ -66,7 +62,10 @@ export class MacInputAgentProvider implements InputProvider {
   private permissionFailure = false;
   private permissionRetryTimer: NodeJS.Timeout | null = null;
 
-  constructor(options: MacInputAgentProviderOptions = {}) {
+  constructor(
+    private readonly callbacks: InputProviderCallbacks,
+    options: MacInputAgentProviderOptions
+  ) {
     this.detector = options.detector ?? new ShakeDetector();
     this.maxRestarts = options.maxRestarts ?? DEFAULT_MAX_RESTARTS;
     this.restartDelayMs = options.restartDelayMs ?? DEFAULT_RESTART_DELAY_MS;
@@ -76,7 +75,7 @@ export class MacInputAgentProvider implements InputProvider {
       options.spawn ??
       ((command, args, opts) => spawn(command, args ?? [], opts?.env !== undefined ? { env: opts.env } : {}));
     this.platform = options.platform ?? process.platform;
-    this.helperPath = options.helperPath ?? findDefaultHelperPath();
+    this.helperPath = options.helperPath;
   }
 
   private readonly helperPath: string;
@@ -96,7 +95,7 @@ export class MacInputAgentProvider implements InputProvider {
     }
 
     if (this.platform !== "darwin") {
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: "unknown",
         message: "Native mouse shake is only available on macOS."
       });
@@ -104,7 +103,7 @@ export class MacInputAgentProvider implements InputProvider {
     }
 
     if (!this.pathExists(this.helperPath)) {
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: "unknown",
         message: HELPER_NOT_FOUND_MESSAGE
       });
@@ -138,20 +137,6 @@ export class MacInputAgentProvider implements InputProvider {
     }
   }
 
-  onActivation(callback: (event: ActivationEvent) => void): Unsubscribe {
-    this.activationListeners.add(callback);
-    return () => {
-      this.activationListeners.delete(callback);
-    };
-  }
-
-  onPermissionError(callback: (error: PermissionError) => void): Unsubscribe {
-    this.permissionListeners.add(callback);
-    return () => {
-      this.permissionListeners.delete(callback);
-    };
-  }
-
   private startExecutableChild(env?: NodeJS.ProcessEnv): void {
     const child = this.spawnHelper(this.helperPath, [], env !== undefined ? { env } : undefined);
     this.child = child;
@@ -166,7 +151,7 @@ export class MacInputAgentProvider implements InputProvider {
       if (this.child === child) {
         this.child = null;
       }
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: "unknown",
         message: `Mauz could not start the native input helper: ${error.message}`
       });
@@ -230,7 +215,7 @@ export class MacInputAgentProvider implements InputProvider {
 
     if (parsedEvent.data.type === "permission_error") {
       this.permissionFailure = true;
-      this.emitPermissionError({
+      this.callbacks.onPermissionError({
         permission: parsedEvent.data.permission,
         message: parsedEvent.data.message || ACCESSIBILITY_PERMISSION_MESSAGE
       });
@@ -238,13 +223,13 @@ export class MacInputAgentProvider implements InputProvider {
       return;
     }
 
-    // Fix 2: Reset restart budget on the first valid sample so two crashes hours apart
+    // Reset restart budget on the first valid sample so two crashes hours apart
     // don't permanently exhaust the lifetime cap.
     if (this.restartAttempts > 0) {
       this.restartAttempts = 0;
     }
 
-    // Fix 3: Clear permission-failure state when a valid sample arrives — the user
+    // Clear permission-failure state when a valid sample arrives — the user
     // must have granted Accessibility while we were retrying.
     if (this.permissionFailure) {
       this.permissionFailure = false;
@@ -261,8 +246,7 @@ export class MacInputAgentProvider implements InputProvider {
     });
 
     if (result.activated) {
-      this.emitActivation({
-        source: "mouse-shake",
+      this.callbacks.onActivation({
         cursor: {
           x: parsedEvent.data.x,
           y: parsedEvent.data.y
@@ -283,7 +267,7 @@ export class MacInputAgentProvider implements InputProvider {
     }, this.restartDelayMs);
   }
 
-  // Fix 3: Retry spawning every permissionRetryDelayMs while in permission-failure state.
+  // Retry spawning every permissionRetryDelayMs while in permission-failure state.
   // Uses MAUZ_AX_PROMPT=0 so the user is not repeatedly prompted — they already saw the
   // prompt on first launch; the retry is purely to pick up a newly granted permission.
   private schedulePermissionRetry(): void {
@@ -298,18 +282,6 @@ export class MacInputAgentProvider implements InputProvider {
       }
     }, this.permissionRetryDelayMs);
   }
-
-  private emitActivation(event: ActivationEvent): void {
-    for (const listener of this.activationListeners) {
-      listener(event);
-    }
-  }
-
-  private emitPermissionError(error: PermissionError): void {
-    for (const listener of this.permissionListeners) {
-      listener(error);
-    }
-  }
 }
 
 function parseJson(line: string): unknown | undefined {
@@ -318,45 +290,4 @@ function parseJson(line: string): unknown | undefined {
   } catch {
     return undefined;
   }
-}
-
-function findDefaultHelperPath(): string {
-  const configuredHelperPath = process.env.MAUZ_INPUT_AGENT_PATH?.trim();
-
-  if (configuredHelperPath && existsSync(configuredHelperPath)) {
-    return configuredHelperPath;
-  }
-
-  const currentFileDir = dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    resolve(
-      dirname(process.execPath),
-      "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(dirname(process.execPath), "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      process.resourcesPath,
-      "app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(process.resourcesPath, "app/native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
-    resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      process.cwd(),
-      "../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(process.cwd(), "../../native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      currentFileDir,
-      "../../../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(currentFileDir, "../../../../native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      currentFileDir,
-      "../../../../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(currentFileDir, "../../../../../native/macos/MauzInputAgent/MauzInputAgent")
-  ];
-
-  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }

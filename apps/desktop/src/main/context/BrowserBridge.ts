@@ -4,10 +4,11 @@ import { chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { BrowserPageSchema, isBlockedSite, type BrowserPage } from "@mauzai/shared";
 import type { BrowserPageReader, BrowserPageResult } from "./ContextCollector";
 
-export const BROWSER_HOST_NAME = "ai.mauz.browser";
+const BROWSER_HOST_NAME = "ai.mauz.browser";
 /** Fixed by the "key" in browser-extension/extension/manifest.json. */
 export const BROWSER_EXTENSION_ID = "lnahcdbpmfglahakbckmgbfgbclaaiog";
 
@@ -283,7 +284,7 @@ export function chooseSnapshot(snapshots: readonly SnapshotResult[]): BrowserPag
 }
 
 /** HMAC of a nonce with the shared secret; the role keeps the two directions distinct. */
-export function signNonce(token: string, role: "mauz" | "host", nonce: string): string {
+function signNonce(token: string, role: "mauz" | "host", nonce: string): string {
   return createHmac("sha256", token).update(`${role}:${nonce}`).digest("hex");
 }
 
@@ -469,10 +470,8 @@ async function writeTextFileWithDirectory(path: string, contents: string): Promi
   await writeFile(path, contents, "utf8");
 }
 
-function runRegCommand(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    execFile("reg.exe", args, { windowsHide: true }, (error) => (error === null ? resolve() : reject(error)));
-  });
+async function runRegCommand(args: string[]): Promise<void> {
+  await promisify(execFile)("reg.exe", args, { windowsHide: true });
 }
 
 function withoutEmptyFields(page: BrowserPage): BrowserPage {

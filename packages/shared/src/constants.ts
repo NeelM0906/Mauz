@@ -13,13 +13,11 @@ export const MAUZ_SETTINGS_PANEL_SIZE = {
   height: 620
 } as const;
 
-export const LOCAL_API_TOKEN_HEADER = "x-mauz-local-token";
-
 export const IPC_CHANNELS = {
   menuShowMenu: "mauz:menu:show-menu",
   menuClose: "mauz:menu:close",
   menuStartAsk: "mauz:menu:start-ask",
-  menuSetLensExpanded: "mauz:menu:set-lens-expanded",
+  menuExpand: "mauz:menu:expand",
   menuHidden: "mauz:menu:hidden",
   settingsOpen: "mauz:settings:open",
   settingsUpdate: "mauz:settings:update",
@@ -43,5 +41,3 @@ export const IPC_CHANNELS = {
   permissionError: "mauz:events:permission-error",
   openSettings: "mauz:events:open-settings"
 } as const;
-
-export const DEFAULT_MAUZ_API_PORT = 47891;

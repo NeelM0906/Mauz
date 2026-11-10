@@ -68,22 +68,6 @@ function createDeps(overrides: Partial<ScreenshotServiceDeps> = {}): ScreenshotS
 }
 
 describe("ScreenshotService", () => {
-  it("returns a JPEG screenshot payload when JPEG encoding is available", async () => {
-    const service = new ScreenshotService(createDeps());
-
-    await expect(
-      service.captureDisplayNear({
-        x: 10,
-        y: 20
-      })
-    ).resolves.toEqual({
-      mimeType: "image/jpeg",
-      base64: Buffer.from("fake-jpeg").toString("base64"),
-      width: 1280,
-      height: 720
-    });
-  });
-
   it("falls back to PNG when JPEG encoding is unavailable", async () => {
     const service = new ScreenshotService(
       createDeps({
@@ -105,12 +89,12 @@ describe("ScreenshotService", () => {
       })
     );
 
-    await expect(
-      service.captureDisplayNear({
-        x: 10,
-        y: 20
-      })
-    ).resolves.toEqual({
+    const context = await service.capturePointerContext({
+      x: 10,
+      y: 20
+    });
+
+    expect(context.screenshot).toEqual({
       mimeType: "image/png",
       base64: Buffer.from("fake-png").toString("base64"),
       width: 1280,
@@ -128,7 +112,7 @@ describe("ScreenshotService", () => {
     );
 
     const error = await service
-      .captureDisplayNear({
+      .capturePointerContext({
         x: 10,
         y: 20
       })
@@ -150,7 +134,7 @@ describe("ScreenshotService", () => {
     );
 
     await expect(
-      service.captureDisplayNear({
+      service.capturePointerContext({
         x: 10,
         y: 20
       })
@@ -179,7 +163,7 @@ describe("ScreenshotService", () => {
     );
 
     await expect(
-      service.captureDisplayNear({
+      service.capturePointerContext({
         x: 10,
         y: 20
       })
@@ -367,7 +351,7 @@ describe("ScreenshotService", () => {
     const getSources = vi.fn(async () => [{ display_id: "7", thumbnail: createThumbnail() }]);
     const service = new ScreenshotService(createDeps({ desktopCapturer: { getSources } }));
 
-    await service.captureDisplayNear({ x: 10, y: 20 });
+    await service.capturePointerContext({ x: 10, y: 20 });
 
     // 2560x1440 DIPs at scale factor 2 is 5120x2880 pixels.
     expect(getSources).toHaveBeenCalledWith({
@@ -380,20 +364,22 @@ describe("ScreenshotService", () => {
     const resize = vi.fn(({ width, height }: { width: number; height: number }) =>
       createThumbnail({ width, height, label: "resized" })
     );
+    // No crop, so the whole screen is returned and downscaled.
+    const { isEmpty, getSize, toJPEG, toPNG } = createThumbnail({ width: 2560, height: 1440 });
     const service = new ScreenshotService(
       createDeps({
         desktopCapturer: {
           getSources: async () => [
-            { display_id: "7", thumbnail: { ...createThumbnail({ width: 2560, height: 1440 }), resize } }
+            { display_id: "7", thumbnail: { isEmpty, getSize, toJPEG, toPNG, resize } }
           ]
         }
       })
     );
 
-    const screenshot = await service.captureDisplayNear({ x: 10, y: 20 });
+    const context = await service.capturePointerContext({ x: 10, y: 20 });
 
     expect(resize).toHaveBeenCalledWith({ width: 1280, height: 720, quality: "good" });
-    expect(screenshot).toMatchObject({ width: 1280, height: 720 });
+    expect(context.screenshot).toMatchObject({ width: 1280, height: 720 });
   });
 
   it("keeps the full screenshot when cursor crop extraction is unavailable", async () => {
@@ -441,7 +427,9 @@ describe("ScreenshotService", () => {
       })
     );
 
-    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(ScreenshotCaptureError);
+    await expect(service.capturePointerContext({ x: 10, y: 20 })).rejects.toBeInstanceOf(
+      ScreenshotCaptureError
+    );
     expect(getSourcesSpy).not.toHaveBeenCalled();
   });
 
@@ -454,7 +442,9 @@ describe("ScreenshotService", () => {
       })
     );
 
-    await expect(service.captureDisplayNear({ x: 10, y: 20 })).rejects.toBeInstanceOf(ScreenshotCaptureError);
+    await expect(service.capturePointerContext({ x: 10, y: 20 })).rejects.toBeInstanceOf(
+      ScreenshotCaptureError
+    );
     expect(getSourcesSpy).not.toHaveBeenCalled();
   });
 
@@ -465,6 +455,6 @@ describe("ScreenshotService", () => {
       })
     );
 
-    await expect(service.captureDisplayNear({ x: 10, y: 20 })).resolves.toBeDefined();
+    await expect(service.capturePointerContext({ x: 10, y: 20 })).resolves.toBeDefined();
   });
 });

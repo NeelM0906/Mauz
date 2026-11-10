@@ -45,7 +45,7 @@ Mauz answers with the provider you have set up:
 
 If only one is set up, Mauz uses it. If several are, **Settings → General AI → Default provider** picks one. Left on **Automatic**, Mauz prefers an API key, then Claude Code, then Codex.
 
-**API keys:** paste them in Settings (stored with Electron safe storage: Keychain on macOS, DPAPI on Windows), or start Mauz with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set. Disconnecting a provider in Settings makes Mauz ignore its key, including one from the environment, until you reconnect.
+**API keys:** paste them in Settings (stored with Electron safe storage: Keychain on macOS, DPAPI on Windows), or start Mauz with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set.
 
 **Subscriptions:** click **Connect** next to Claude Code or Codex in **Settings → General AI**.
 
@@ -63,7 +63,7 @@ MAUZ_CLAUDE_CODE_MODEL=sonnet    # any model or alias the claude CLI accepts
 MAUZ_CODEX_MODEL=                # empty uses Codex's default
 ANTHROPIC_ASK_MODEL=claude-opus-5-5
 OPENAI_ASK_MODEL=gpt-5.4-mini
-MAUZ_CLAUDE_CODE_PATH=           # only if claude/codex are not on PATH
+MAUZ_CLAUDE_CODE_PATH=           # only if claude/codex are not on PATH; Send to agent uses them too
 MAUZ_CODEX_PATH=
 ```
 
@@ -125,14 +125,5 @@ MauzAI is ad-hoc signed, so every rebuild changes its code hash and macOS silent
 pnpm dev          # run the desktop app
 pnpm check        # format, env, secrets, typecheck, test, build
 ```
-
-The desktop app starts its local API with a random internal token. To run the API package alone, set a token first:
-
-```bash
-export MAUZ_LOCAL_API_TOKEN="$(uuidgen)"
-pnpm --filter @mauzai/api dev
-```
-
-`MAUZ_API_ALLOW_UNAUTHENTICATED=true` is only for isolated debugging.
 
 Stop the macOS app without reinstalling with `pnpm stop:mac`.

@@ -1,6 +1,6 @@
 import type { MouseMoveSample, ShakeSensitivity } from "@mauzai/shared";
 
-export type ShakeDetectorConfig = {
+type ShakeDetectorConfig = {
   windowMs: number;
   minReversals: number;
   minAmplitudePx: number;
@@ -12,10 +12,9 @@ export type ShakeDetectorConfig = {
 
 export type ShakeDetectorResult = {
   activated: boolean;
-  reason?: string;
 };
 
-export const DEFAULT_SHAKE_CONFIG: ShakeDetectorConfig = {
+const DEFAULT_SHAKE_CONFIG: ShakeDetectorConfig = {
   windowMs: 1200,
   minReversals: 5,
   minAmplitudePx: 90,
@@ -25,7 +24,7 @@ export const DEFAULT_SHAKE_CONFIG: ShakeDetectorConfig = {
   maxHorizontalToVerticalRatio: 1.25
 };
 
-export const SHAKE_SENSITIVITY_PRESETS = {
+const SHAKE_SENSITIVITY_PRESETS = {
   relaxed: {
     minReversals: 4,
     minAmplitudePx: 70,
@@ -61,7 +60,7 @@ export class ShakeDetector {
 
   push(sample: MouseMoveSample): ShakeDetectorResult {
     if (sample.ts - this.lastActivationAt < this.config.cooldownMs) {
-      return { activated: false, reason: "cooldown" };
+      return { activated: false };
     }
 
     this.samples.push(sample);
@@ -90,7 +89,7 @@ export class ShakeDetector {
 
   private evaluate(): ShakeDetectorResult {
     if (this.samples.length < 3) {
-      return { activated: false, reason: "insufficient-samples" };
+      return { activated: false };
     }
 
     const verticalResult = this.evaluateAxis("y", "x");
@@ -145,19 +144,19 @@ export class ShakeDetector {
     const crossToPrimaryRatio = crossAmplitude / Math.max(primaryAmplitude, 1);
 
     if (primaryAmplitude < this.config.minAmplitudePx) {
-      return { activated: false, reason: "amplitude", primaryAmplitude };
+      return { activated: false, primaryAmplitude };
     }
 
     if (primaryTravel < this.config.minVerticalTravelPx) {
-      return { activated: false, reason: "travel", primaryAmplitude };
+      return { activated: false, primaryAmplitude };
     }
 
     if (reversals < this.config.minReversals) {
-      return { activated: false, reason: "reversals", primaryAmplitude };
+      return { activated: false, primaryAmplitude };
     }
 
     if (crossToPrimaryRatio > this.config.maxHorizontalToVerticalRatio) {
-      return { activated: false, reason: "cross-axis-drift", primaryAmplitude };
+      return { activated: false, primaryAmplitude };
     }
 
     return { activated: true, primaryAmplitude };

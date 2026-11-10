@@ -12,35 +12,31 @@ import {
 
 type SubscriptionCli = {
   label: string;
-  /** Command name, overridable through an environment variable. */
-  command: (env: NodeJS.ProcessEnv) => string;
+  /** Command name; its MAUZ_*_PATH variable can override it (see resolveCliCommand). */
+  command: string;
   npmPackage: string;
   loginArgs: readonly string[];
   logoutArgs: readonly string[];
-  /** Credentials that would make the CLI sign in with a key instead of the subscription. */
-  removeEnvKeys: readonly string[];
   acceptsPastedCode: boolean;
 };
 
 const SUBSCRIPTION_CLIS: Record<SubscriptionProviderId, SubscriptionCli> = {
   "claude-code": {
     label: "Claude Code",
-    command: (env) => env.MAUZ_CLAUDE_CODE_PATH?.trim() || "claude",
+    command: "claude",
     npmPackage: "@anthropic-ai/claude-code",
     loginArgs: ["auth", "login", "--claudeai"],
     logoutArgs: ["auth", "logout"],
-    removeEnvKeys: ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"],
     // Claude Code opens the browser itself; when that fails the page shows a code to paste back.
     acceptsPastedCode: true
   },
   codex: {
     label: "Codex",
-    command: (env) => env.MAUZ_CODEX_PATH?.trim() || "codex",
+    command: "codex",
     npmPackage: "@openai/codex",
     // Device sign-in prints a link and a one-time code, then finishes once the user approves.
     loginArgs: ["login", "--device-auth"],
     logoutArgs: ["logout"],
-    removeEnvKeys: ["OPENAI_API_KEY"],
     acceptsPastedCode: false
   }
 };
@@ -53,7 +49,7 @@ const DEVICE_CODE_PATTERN = /\b[A-Z0-9]{4}-[A-Z0-9]{4,5}\b/;
 // eslint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\u001b\[[0-9;]*[A-Za-z]/g;
 
-export type SubscriptionConnectorOptions = {
+type SubscriptionConnectorOptions = {
   env?: () => NodeJS.ProcessEnv;
   spawn?: SpawnLike;
   resolveCommand: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
@@ -145,13 +141,13 @@ export class SubscriptionConnector {
   async disconnect(providerId: SubscriptionProviderId): Promise<void> {
     const cli = SUBSCRIPTION_CLIS[providerId];
     const env = this.readEnv();
-    const command = this.resolveCommand(cli.command(env), env);
+    const command = this.resolveCommand(cli.command, env);
 
     if (command === null) {
       return;
     }
 
-    const output = await runAndCollect(this.spawnCli(command, cli.logoutArgs, cli.removeEnvKeys), {
+    const output = await runAndCollect(this.spawnCli(command, cli.logoutArgs), {
       timeoutMs: LOGOUT_TIMEOUT_MS
     });
 
@@ -172,7 +168,7 @@ export class SubscriptionConnector {
     const cli = SUBSCRIPTION_CLIS[session.state.providerId];
 
     try {
-      let command = this.resolveCommand(cli.command(this.readEnv()), this.readEnv());
+      let command = this.resolveCommand(cli.command, this.readEnv());
 
       if (command === null) {
         command = await this.install(session, cli);
@@ -209,7 +205,7 @@ export class SubscriptionConnector {
 
     this.update(session, { phase: "installing", message: `Installing ${cli.label}...` });
 
-    const child = this.spawnCli(npm, ["install", "--global", cli.npmPackage], []);
+    const child = this.spawnCli(npm, ["install", "--global", cli.npmPackage]);
     session.child = child;
     const output = await runAndCollect(child, { timeoutMs: INSTALL_TIMEOUT_MS });
     session.child = null;
@@ -224,7 +220,7 @@ export class SubscriptionConnector {
       );
     }
 
-    const command = this.resolveCommand(cli.command(this.readEnv()), this.readEnv());
+    const command = this.resolveCommand(cli.command, this.readEnv());
 
     if (command === null) {
       throw new Error(`${cli.label} was installed, but Mauz cannot find it yet. Restart Mauz and try again.`);
@@ -236,7 +232,7 @@ export class SubscriptionConnector {
   private login(session: ConnectSession, cli: SubscriptionCli, command: ResolvedCliCommand): Promise<void> {
     this.update(session, { phase: "starting", message: `Starting ${cli.label} sign-in...` });
 
-    const child = this.spawnCli(command, cli.loginArgs, cli.removeEnvKeys);
+    const child = this.spawnCli(command, cli.loginArgs);
     session.child = child;
 
     return new Promise((resolve) => {
@@ -303,14 +299,10 @@ export class SubscriptionConnector {
     });
   }
 
-  private spawnCli(
-    command: ResolvedCliCommand,
-    args: readonly string[],
-    removeEnvKeys: readonly string[]
-  ): ChildProcessLike {
+  private spawnCli(command: ResolvedCliCommand, args: readonly string[]): ChildProcessLike {
     return this.spawnProcess(command.command, [...command.args, ...args], {
       cwd: tmpdir(),
-      env: { ...buildCliEnvironment(this.readEnv(), removeEnvKeys), ...command.env }
+      env: { ...buildCliEnvironment(this.readEnv()), ...command.env }
     });
   }
 

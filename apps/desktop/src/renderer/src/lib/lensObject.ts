@@ -1,6 +1,6 @@
 import { describeElement, type MauzDesktopContext, type ScreenshotPayload } from "@mauzai/shared";
 
-export type LensObjectType =
+type LensObjectType =
   | "selected-text"
   | "element"
   | "cursor-area"
@@ -11,13 +11,13 @@ export type LensObjectType =
   | "page";
 
 /** One line of "What Mauz saw": exactly what is sent with a question. */
-export type CaptureDetail = {
+type CaptureDetail = {
   label: string;
   text?: string | undefined;
   image?: ScreenshotPayload | undefined;
 };
 
-export type LensObject = {
+type LensObject = {
   id: string;
   type: LensObjectType;
   label: string;

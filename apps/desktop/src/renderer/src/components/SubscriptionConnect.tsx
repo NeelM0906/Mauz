@@ -1,7 +1,7 @@
 import { ExternalLink, LogIn, LogOut, X } from "lucide-react";
 import { useState } from "react";
 import type { AiProviderStatus, SubscriptionConnectState, SubscriptionProviderId } from "@mauzai/shared";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 
 export function isSubscriptionProvider(id: AiProviderStatus["id"]): id is SubscriptionProviderId {
   return id === "claude-code" || id === "codex";
@@ -72,7 +72,7 @@ export function SubscriptionSignIn({ label, state, onCancel }: SubscriptionSignI
     setCodeError(null);
 
     try {
-      await mauzClient.submitSubscriptionCode(state.connectId, code);
+      await mauz().providers.submitCode({ connectId: state.connectId, code });
       setCodeSent(true);
       setCode("");
     } catch (error) {
@@ -121,7 +121,7 @@ export function SubscriptionSignIn({ label, state, onCancel }: SubscriptionSignI
           <button
             type="button"
             className="provider-action-button"
-            onClick={() => void mauzClient.openSubscriptionConnectPage(state.connectId)}
+            onClick={() => void mauz().providers.openConnectPage({ connectId: state.connectId })}
           >
             <ExternalLink aria-hidden="true" size={11} />
             <span>Open sign-in page</span>

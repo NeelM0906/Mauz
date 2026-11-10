@@ -4,7 +4,6 @@ import {
   AiProvidersStatusResponseSchema,
   AskMauzRequestSchema,
   IPC_CHANNELS,
-  MauzLensResizeRequestSchema,
   MauzSettingsUpdateSchema,
   SubscriptionCancelRequestSchema,
   SubscriptionCodeRequestSchema,
@@ -17,24 +16,22 @@ import {
   TaskFoldersRequestSchema,
   TaskFoldersResponseSchema,
   TaskSendRequestSchema,
-  TaskSendResponseSchema,
   type BrowserExtensionStatus,
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
-import { getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
+import { answerAsk, getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
 import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
-import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
 import type { TalkTranscriber } from "../talk/TalkTranscriber";
-import { submitAskToLocalApi } from "./askApiClient";
+import { isTrustedRendererUrl } from "../windows/WindowSecurity";
 
 type RegisterIpcHandlersOptions = {
+  /** The dev-server URL (`ELECTRON_RENDERER_URL`); without it only `file:` renderers are trusted. */
+  rendererUrl?: string | undefined;
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
-  api: LocalApiHandle;
-  localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
   taskAgents: {
@@ -64,34 +61,24 @@ type RegisterIpcHandlersOptions = {
   };
 };
 
-const HANDLED_IPC_CHANNELS = [
-  IPC_CHANNELS.menuShowMenu,
-  IPC_CHANNELS.menuClose,
-  IPC_CHANNELS.menuStartAsk,
-  IPC_CHANNELS.menuSetLensExpanded,
-  IPC_CHANNELS.settingsOpen,
-  IPC_CHANNELS.settingsUpdate,
-  IPC_CHANNELS.askSubmit,
-  IPC_CHANNELS.taskAgents,
-  IPC_CHANNELS.taskFolders,
-  IPC_CHANNELS.taskPickFolder,
-  IPC_CHANNELS.taskSend,
-  IPC_CHANNELS.providersStatus,
-  IPC_CHANNELS.providersConnect,
-  IPC_CHANNELS.providersConnectCode,
-  IPC_CHANNELS.providersConnectCancel,
-  IPC_CHANNELS.providersConnectOpenPage,
-  IPC_CHANNELS.providersDisconnect,
-  IPC_CHANNELS.talkTranscribe,
-  IPC_CHANNELS.browserStatus,
-  IPC_CHANNELS.browserOpenExtensionFolder
-] as const;
+/**
+ * Returns a function that registers an invoke handler which first rejects untrusted senders. It
+ * replaces a handler from an earlier call, so registering twice does not throw.
+ */
+function createHandle(rendererUrl: string | undefined) {
+  return (channel: string, listener: (event: IpcMainInvokeEvent, payload: unknown) => unknown): void => {
+    ipcMain.removeHandler(channel);
+    ipcMain.handle(channel, async (event, payload: unknown) => {
+      assertTrustedSender(event, rendererUrl);
+      return listener(event, payload);
+    });
+  };
+}
 
 export function registerIpcHandlers({
+  rendererUrl,
   popover,
   contextCollector,
-  api,
-  localApiToken,
   getSettings,
   updateSettings,
   taskAgents,
@@ -101,49 +88,30 @@ export function registerIpcHandlers({
   openExternal,
   browserExtension
 }: RegisterIpcHandlersOptions): void {
-  for (const channel of HANDLED_IPC_CHANNELS) {
-    ipcMain.removeHandler(channel);
-  }
+  const handle = createHandle(rendererUrl);
 
-  ipcMain.handle(IPC_CHANNELS.menuShowMenu, (event) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.menuShowMenu, () => {
     popover.resizeForMenu();
   });
 
-  ipcMain.handle(IPC_CHANNELS.menuClose, (event) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.menuClose, () => {
     contextCollector.discardActivationSnapshot();
     popover.hide();
   });
 
-  ipcMain.handle(IPC_CHANNELS.menuStartAsk, async (event) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.menuStartAsk, async () => {
     return contextCollector.collectForAsk();
   });
-  ipcMain.handle(IPC_CHANNELS.menuSetLensExpanded, (event, payload: unknown) => {
-    assertTrustedSender(event);
-    const request = MauzLensResizeRequestSchema.parse(payload);
-
-    if (request.expanded) {
-      popover.resizeForAsk();
-      return;
-    }
-
-    popover.resizeForMenu();
+  handle(IPC_CHANNELS.menuExpand, () => {
+    popover.resizeForAsk();
   });
 
-  ipcMain.handle(IPC_CHANNELS.settingsOpen, async (event, payload: unknown) => {
-    assertTrustedSender(event);
-
-    if (shouldResizeForSettingsOpen(payload)) {
-      popover.resizeForSettings();
-    }
-
+  handle(IPC_CHANNELS.settingsOpen, async () => {
+    popover.resizeForSettings();
     return getSettings();
   });
 
-  ipcMain.handle(IPC_CHANNELS.settingsUpdate, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.settingsUpdate, async (_event, payload) => {
     const parsedPayload = MauzSettingsUpdateSchema.safeParse(payload);
 
     if (!parsedPayload.success) {
@@ -153,14 +121,23 @@ export function registerIpcHandlers({
     return updateSettings(parsedPayload.data as MauzSettingsUpdate);
   });
 
-  ipcMain.handle(IPC_CHANNELS.askSubmit, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.askSubmit, async (event, payload) => {
     const request = AskMauzRequestSchema.parse(payload);
-    return submitAskToLocalApi(api, localApiToken, request);
+    const { requestId } = request;
+
+    return answerAsk(
+      request,
+      requestId === undefined
+        ? undefined
+        : (text) => {
+            if (!event.sender.isDestroyed()) {
+              event.sender.send(IPC_CHANNELS.askDelta, { requestId, text });
+            }
+          }
+    );
   });
 
-  ipcMain.handle(IPC_CHANNELS.taskAgents, async (event) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.taskAgents, async () => {
     const settings = await getSettings();
     const agents = taskAgents.launcher.listAgents();
 
@@ -170,8 +147,7 @@ export function registerIpcHandlers({
     });
   });
 
-  ipcMain.handle(IPC_CHANNELS.taskFolders, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.taskFolders, async (_event, payload) => {
     const { agentId } = TaskFoldersRequestSchema.parse(payload);
     const settings = await getSettings();
     const launcher = taskAgents.launcher;
@@ -201,15 +177,13 @@ export function registerIpcHandlers({
     });
   });
 
-  ipcMain.handle(IPC_CHANNELS.taskPickFolder, async (event) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.taskPickFolder, async () => {
     return taskAgents.pickFolder();
   });
 
-  ipcMain.handle(IPC_CHANNELS.taskSend, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.taskSend, async (_event, payload) => {
     const request = TaskSendRequestSchema.parse(payload);
-    const result = await taskAgents.launcher.launch(request);
+    await taskAgents.launcher.launch(request);
     const settings = await getSettings();
 
     // The agent picked here becomes the default, so the next task goes to it too.
@@ -217,38 +191,31 @@ export function registerIpcHandlers({
       taskAgent: request.agentId,
       taskAgentFolders: { ...settings.taskAgentFolders, [request.agentId]: request.folder }
     });
-
-    return TaskSendResponseSchema.parse(result);
   });
 
-  ipcMain.handle(IPC_CHANNELS.providersStatus, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.providersStatus, async (_event, payload) => {
     const request = AiProvidersStatusRequestSchema.parse(payload);
     const status = await getProvidersStatus({ refresh: request?.refresh === true });
 
     return AiProvidersStatusResponseSchema.parse(status);
   });
 
-  ipcMain.handle(IPC_CHANNELS.providersConnect, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.providersConnect, async (_event, payload) => {
     const request = SubscriptionConnectRequestSchema.parse(payload);
 
     return SubscriptionConnectStateSchema.parse(requireConnector().connect(request.providerId));
   });
 
-  ipcMain.handle(IPC_CHANNELS.providersConnectCode, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.providersConnectCode, async (_event, payload) => {
     const request = SubscriptionCodeRequestSchema.parse(payload);
     requireConnector().submitCode(request.connectId, request.code);
   });
 
-  ipcMain.handle(IPC_CHANNELS.providersConnectCancel, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.providersConnectCancel, async (_event, payload) => {
     requireConnector().cancel(SubscriptionCancelRequestSchema.parse(payload).connectId);
   });
 
-  ipcMain.handle(IPC_CHANNELS.providersConnectOpenPage, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.providersConnectOpenPage, async (_event, payload) => {
     const state = requireConnector().getState(SubscriptionCancelRequestSchema.parse(payload).connectId);
 
     // Only the sign-in page the CLI printed can be opened, never a URL from the renderer.
@@ -257,8 +224,7 @@ export function registerIpcHandlers({
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.providersDisconnect, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.providersDisconnect, async (_event, payload) => {
     const request = SubscriptionDisconnectRequestSchema.parse(payload);
     await requireConnector().disconnect(request.providerId);
 
@@ -273,8 +239,7 @@ export function registerIpcHandlers({
     return subscriptionConnector;
   }
 
-  ipcMain.handle(IPC_CHANNELS.talkTranscribe, async (event, payload: unknown) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.talkTranscribe, async (_event, payload) => {
     const request = TalkTranscribeRequestSchema.parse(payload);
 
     if (talkTranscriber === undefined) {
@@ -284,59 +249,24 @@ export function registerIpcHandlers({
     return TalkTranscribeResponseSchema.parse(await talkTranscriber.transcribe(request));
   });
 
-  ipcMain.handle(IPC_CHANNELS.browserStatus, (event): BrowserExtensionStatus => {
-    assertTrustedSender(event);
-
+  handle(IPC_CHANNELS.browserStatus, (): BrowserExtensionStatus => {
     return (
       browserExtension?.status() ?? { connectedBrowsers: [], extensionPath: null, hostRegistered: false }
     );
   });
 
-  ipcMain.handle(IPC_CHANNELS.browserOpenExtensionFolder, async (event) => {
-    assertTrustedSender(event);
+  handle(IPC_CHANNELS.browserOpenExtensionFolder, async () => {
     await browserExtension?.openExtensionFolder();
   });
 }
 
-function assertTrustedSender(event: IpcMainInvokeEvent | undefined): void {
+function assertTrustedSender(event: IpcMainInvokeEvent | undefined, rendererUrl: string | undefined): void {
   if (event === undefined) {
     throw new Error("Mauz rejected an IPC request without renderer metadata.");
   }
 
-  const frameUrl = event.senderFrame?.url ?? event.sender.getURL();
-
-  try {
-    if (isTrustedRendererOrigin(new URL(frameUrl))) {
-      return;
-    }
-  } catch {
-    // Fall through to the generic rejection below.
+  // Same rule as navigation: a file: page, or the dev server's exact origin.
+  if (!isTrustedRendererUrl(event.senderFrame?.url ?? event.sender.getURL(), rendererUrl)) {
+    throw new Error("Mauz rejected an IPC request from an untrusted renderer.");
   }
-
-  throw new Error("Mauz rejected an IPC request from an untrusted renderer.");
-}
-
-function isTrustedRendererOrigin(url: URL): boolean {
-  if (url.protocol === "file:") {
-    return true;
-  }
-
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    return false;
-  }
-
-  return (
-    url.hostname === "localhost" ||
-    url.hostname === "127.0.0.1" ||
-    url.hostname === "::1" ||
-    url.hostname === "[::1]"
-  );
-}
-
-function shouldResizeForSettingsOpen(payload: unknown): boolean {
-  if (typeof payload !== "object" || payload === null || !("resizePopover" in payload)) {
-    return true;
-  }
-
-  return payload.resizePopover !== false;
 }

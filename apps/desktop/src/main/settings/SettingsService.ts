@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
@@ -31,7 +30,7 @@ const SETTINGS_FILE_NAME = "mauz-settings.json";
 const DEFAULT_ASK_MODEL = "gpt-5.4-mini";
 
 /** Password managers: never screenshot or read their windows. Executables (Windows) and bundle ids (macOS). */
-export const DEFAULT_CAPTURE_BLOCKED_APPS = [
+const DEFAULT_CAPTURE_BLOCKED_APPS = [
   "1Password.exe",
   "Bitwarden.exe",
   "KeePass.exe",
@@ -54,23 +53,12 @@ type SecretCodec = {
   decrypt(value: string): string;
 };
 
-type ApiKeySettingsUpdate = {
-  openAiApiKey?: string | null | undefined;
-  clearOpenAiApiKey?: boolean | undefined;
-};
-
-type AnthropicKeySettingsUpdate = {
-  anthropicApiKey?: string | null | undefined;
-  clearAnthropicApiKey?: boolean | undefined;
-};
-
 type StoredMauzSettings = Omit<
   MauzSettings,
   "apiKeyConfigured" | "openAiCredentialSource" | "anthropicKeyConfigured"
 > & {
   encryptedOpenAiApiKey?: string | undefined;
   encryptedAnthropicApiKey?: string | undefined;
-  installId: string;
 };
 
 export type MauzRuntimeSettings = Omit<
@@ -129,8 +117,7 @@ export class SettingsService {
       encryptedAnthropicApiKey: _encryptedAnthropicApiKey,
       ...runtimeSettings
     } = stored;
-    const savedApiKey = decryptStoredApiKey(stored, this.secretCodec);
-    const runtimeApiKey = stored.openAiAuthDisconnected ? undefined : (savedApiKey ?? this.environmentApiKey);
+    const runtimeApiKey = decryptStoredApiKey(stored, this.secretCodec) ?? this.environmentApiKey;
     const anthropicApiKey =
       decryptSecret(stored.encryptedAnthropicApiKey, this.secretCodec) ?? this.environmentAnthropicApiKey;
 
@@ -150,7 +137,6 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
       applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
       applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
-      applyDefinedSetting(nextSettings, "openAiAuthDisconnected", parsedUpdate.openAiAuthDisconnected);
       applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
       applyDefinedSetting(
         nextSettings,
@@ -166,8 +152,22 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "taskFolder", parsedUpdate.taskFolder);
       applyDefinedSetting(nextSettings, "taskAgentFolders", parsedUpdate.taskAgentFolders);
       applyDefinedSetting(nextSettings, "aiProvider", parsedUpdate.aiProvider);
-      applyApiKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
-      applyAnthropicKeyUpdate(nextSettings, parsedUpdate, this.secretCodec);
+      applySecretUpdate(
+        nextSettings,
+        "encryptedOpenAiApiKey",
+        "OpenAI",
+        parsedUpdate.openAiApiKey,
+        parsedUpdate.clearOpenAiApiKey,
+        this.secretCodec
+      );
+      applySecretUpdate(
+        nextSettings,
+        "encryptedAnthropicApiKey",
+        "Anthropic",
+        parsedUpdate.anthropicApiKey,
+        parsedUpdate.clearAnthropicApiKey,
+        this.secretCodec
+      );
 
       await this.ensureDirectory(dirname(this.settingsPath));
       const tempPath = `${this.settingsPath}.${process.pid}.${Date.now()}.tmp`;
@@ -206,11 +206,8 @@ export class SettingsService {
       return this.cachedSettings;
     }
 
-    let rawSettings: string | undefined;
-
     try {
-      rawSettings = await this.readTextFile(this.settingsPath);
-      const parsed = JSON.parse(rawSettings) as unknown;
+      const parsed = JSON.parse(await this.readTextFile(this.settingsPath)) as unknown;
       const parsedSettings = parseStoredSettings(parsed);
 
       if (parsedSettings !== null) {
@@ -225,15 +222,8 @@ export class SettingsService {
       // Missing or malformed settings should never prevent Mauz from starting.
     }
 
-    // Attempt to salvage the installId from raw file content so that a transient
-    // read failure or a failed schema migration does not silently rotate the
-    // installation identity and persist a new UUID on the next update().
-    const salvagedInstallId = rawSettings !== undefined ? salvageInstallId(rawSettings) : null;
-    const fallback =
-      salvagedInstallId !== null ? { ...this.defaults, installId: salvagedInstallId } : this.defaults;
-
-    this.cachedSettings = fallback;
-    return fallback;
+    this.cachedSettings = this.defaults;
+    return this.defaults;
   }
 
   private async sanitizeStoredSettings(settings: StoredMauzSettings): Promise<void> {
@@ -256,61 +246,33 @@ function applyDefinedSetting<Key extends keyof StoredMauzSettings>(
   }
 }
 
-function applyApiKeyUpdate(
+/** Clears the saved key on request (or null), then encrypts and saves a typed key. */
+function applySecretUpdate(
   settings: StoredMauzSettings,
-  update: ApiKeySettingsUpdate,
+  field: "encryptedOpenAiApiKey" | "encryptedAnthropicApiKey",
+  label: string,
+  value: string | null | undefined,
+  clear: boolean | undefined,
   secretCodec: SecretCodec
 ): void {
-  if (update.clearOpenAiApiKey === true || update.openAiApiKey === null) {
-    delete settings.encryptedOpenAiApiKey;
+  if (clear === true || value === null) {
+    delete settings[field];
   }
 
-  if (typeof update.openAiApiKey !== "string") {
+  const apiKey = typeof value === "string" ? normalizeApiKey(value) : undefined;
+
+  if (apiKey === undefined) {
     return;
-  }
-
-  const normalizedApiKey = normalizeApiKey(update.openAiApiKey);
-
-  if (normalizedApiKey === undefined) {
-    return;
-  }
-
-  if (!secretCodec.isAvailable()) {
-    throw new Error("Mauz could not save the OpenAI API key securely on this computer.");
   }
 
   try {
-    settings.encryptedOpenAiApiKey = secretCodec.encrypt(normalizedApiKey);
-    settings.openAiAuthDisconnected = false;
+    if (!secretCodec.isAvailable()) {
+      throw new Error("unavailable");
+    }
+
+    settings[field] = secretCodec.encrypt(apiKey);
   } catch {
-    throw new Error("Mauz could not save the OpenAI API key securely on this computer.");
-  }
-}
-
-function applyAnthropicKeyUpdate(
-  settings: StoredMauzSettings,
-  update: AnthropicKeySettingsUpdate,
-  secretCodec: SecretCodec
-): void {
-  if (update.clearAnthropicApiKey === true || update.anthropicApiKey === null) {
-    delete settings.encryptedAnthropicApiKey;
-  }
-
-  const normalizedApiKey =
-    typeof update.anthropicApiKey === "string" ? normalizeApiKey(update.anthropicApiKey) : undefined;
-
-  if (normalizedApiKey === undefined) {
-    return;
-  }
-
-  if (!secretCodec.isAvailable()) {
-    throw new Error("Mauz could not save the Anthropic API key securely on this computer.");
-  }
-
-  try {
-    settings.encryptedAnthropicApiKey = secretCodec.encrypt(normalizedApiKey);
-  } catch {
-    throw new Error("Mauz could not save the Anthropic API key securely on this computer.");
+    throw new Error(`Mauz could not save the ${label} API key securely on this computer.`);
   }
 }
 
@@ -338,15 +300,13 @@ function getDefaultSettings(): StoredMauzSettings {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, true),
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
-    openAiAuthDisconnected: false,
     askModel: process.env.OPENAI_ASK_MODEL?.trim() || DEFAULT_ASK_MODEL,
     captureBlockedApps: [...DEFAULT_CAPTURE_BLOCKED_APPS],
     captureBlockedSites: [...DEFAULT_CAPTURE_BLOCKED_SITES],
     taskAgent: TaskAgentPreferenceSchema.catch("auto").parse(process.env.MAUZ_TASK_AGENT?.trim()),
     taskFolder: "",
     taskAgentFolders: {},
-    aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim()),
-    installId: randomUUID()
+    aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim())
   };
 }
 
@@ -391,7 +351,6 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     nativeShakeEnabled: publicSettings.data.nativeShakeEnabled,
     devHotkeyEnabled: publicSettings.data.devHotkeyEnabled,
     shakeSensitivity: publicSettings.data.shakeSensitivity,
-    openAiAuthDisconnected: publicSettings.data.openAiAuthDisconnected,
     askModel: publicSettings.data.askModel,
     captureBlockedApps: publicSettings.data.captureBlockedApps,
     captureBlockedSites: publicSettings.data.captureBlockedSites,
@@ -399,10 +358,6 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     taskFolder: publicSettings.data.taskFolder,
     taskAgentFolders: publicSettings.data.taskAgentFolders,
     aiProvider: publicSettings.data.aiProvider,
-    installId:
-      typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
-        ? parsedRecord.installId.trim()
-        : defaults.installId,
     ...(encryptedOpenAiApiKey === undefined ? {} : { encryptedOpenAiApiKey }),
     ...(encryptedAnthropicApiKey === undefined ? {} : { encryptedAnthropicApiKey })
   };
@@ -417,7 +372,6 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
 
   return (
     "openAiApiKey" in parsed ||
-    !("installId" in parsed) ||
     // Gateway-era fields: rewrite without them.
     LEGACY_GATEWAY_KEYS.some((key) => key in parsedRecord)
   );
@@ -456,7 +410,6 @@ function toPublicSettings(
     nativeShakeEnabled: settings.nativeShakeEnabled,
     devHotkeyEnabled: settings.devHotkeyEnabled,
     shakeSensitivity: settings.shakeSensitivity,
-    openAiAuthDisconnected: settings.openAiAuthDisconnected,
     openAiCredentialSource,
     askModel: settings.askModel,
     captureBlockedApps: [...settings.captureBlockedApps],
@@ -475,10 +428,6 @@ function getOpenAiCredentialSource(
   environmentApiKey: string | undefined,
   secretCodec: SecretCodec
 ): OpenAiCredentialSource {
-  if (settings.openAiAuthDisconnected) {
-    return "none";
-  }
-
   if (decryptStoredApiKey(settings, secretCodec) !== undefined) {
     return "saved";
   }
@@ -536,11 +485,4 @@ async function ensureDirectoryExists(path: string): Promise<void> {
   await mkdir(path, {
     recursive: true
   });
-}
-
-const INSTALL_ID_PATTERN =
-  /"installId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i;
-
-function salvageInstallId(raw: string): string | null {
-  return INSTALL_ID_PATTERN.exec(raw)?.[1] ?? null;
 }

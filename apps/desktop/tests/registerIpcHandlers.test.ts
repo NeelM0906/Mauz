@@ -9,6 +9,7 @@ vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
 vi.mock("@mauzai/api/server", () => ({
+  answerAsk: vi.fn(),
   getAiProvidersStatus: vi.fn(async () => ({
     preference: "auto",
     activeProviderId: null,
@@ -16,17 +17,18 @@ vi.mock("@mauzai/api/server", () => ({
   }))
 }));
 
+import { answerAsk } from "@mauzai/api/server";
 import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
-import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
 import type { PopoverWindowController } from "../src/main/windows/PopoverWindowController";
+import { isTrustedRendererUrl } from "../src/main/windows/WindowSecurity";
 
 const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuShowMenu,
   IPC_CHANNELS.menuClose,
   IPC_CHANNELS.menuStartAsk,
-  IPC_CHANNELS.menuSetLensExpanded,
+  IPC_CHANNELS.menuExpand,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
   IPC_CHANNELS.askSubmit,
@@ -57,9 +59,11 @@ describe("registerIpcHandlers", () => {
 
     expect(ipcMainMock.removeHandler.mock.calls.map(([channel]) => channel)).toEqual(HANDLED_CHANNELS);
     expect(ipcMainMock.handle.mock.calls.map(([channel]) => channel)).toEqual(HANDLED_CHANNELS);
-    expect(Math.max(...ipcMainMock.removeHandler.mock.invocationCallOrder)).toBeLessThan(
-      Math.min(...ipcMainMock.handle.mock.invocationCallOrder)
-    );
+    HANDLED_CHANNELS.forEach((_channel, index) => {
+      expect(ipcMainMock.removeHandler.mock.invocationCallOrder[index]).toBeLessThan(
+        ipcMainMock.handle.mock.invocationCallOrder[index]!
+      );
+    });
   });
 
   it("can register twice without reusing stale handlers", () => {
@@ -101,23 +105,16 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
   });
 
-  it("resizes Lens only when the popover asks to expand or collapse", async () => {
+  it("grows the popover to the panel size when the menu opens a panel", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
 
-    const handler = getRegisteredHandler(IPC_CHANNELS.menuSetLensExpanded);
+    const handler = getRegisteredHandler(IPC_CHANNELS.menuExpand);
 
-    await handler(createInvokeEvent(), {
-      expanded: true
-    });
+    await handler(createInvokeEvent());
     expect(options.popover.resizeForAsk).toHaveBeenCalledOnce();
     expect(options.popover.resizeForMenu).not.toHaveBeenCalled();
-
-    await handler(createInvokeEvent(), {
-      expanded: false
-    });
-    expect(options.popover.resizeForMenu).toHaveBeenCalledOnce();
   });
 
   it("clears activation context when the popover closes", async () => {
@@ -133,18 +130,16 @@ describe("registerIpcHandlers", () => {
     expect(options.popover.hide).toHaveBeenCalledOnce();
   });
 
-  it("can read settings from the popover without opening the settings panel", async () => {
+  it("sizes the popover for Settings when the renderer opens settings", async () => {
     const options = createOptions();
 
     registerIpcHandlers(options);
 
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await handler(createInvokeEvent(), {
-      resizePopover: false
-    });
+    await handler(createInvokeEvent());
 
-    expect(options.popover.resizeForSettings).not.toHaveBeenCalled();
+    expect(options.popover.resizeForSettings).toHaveBeenCalledOnce();
   });
 
   it("rejects privileged invoke calls without renderer metadata", async () => {
@@ -158,19 +153,49 @@ describe("registerIpcHandlers", () => {
     expect(options.contextCollector.collectForAsk).not.toHaveBeenCalled();
   });
 
-  it("accepts trusted loopback dev renderer origins", async () => {
-    const options = createOptions();
+  it("accepts the dev-server origin", async () => {
+    const options = { ...createOptions(), rendererUrl: "http://[::1]:5173/" };
 
     registerIpcHandlers(options);
 
     const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
 
-    await expect(
-      handler(createInvokeEvent("http://[::1]:5173"), { resizePopover: false })
-    ).resolves.toMatchObject({
+    await expect(handler(createInvokeEvent("http://[::1]:5173"))).resolves.toMatchObject({
       taskAgent: "auto"
     });
     expect(options.getSettings).toHaveBeenCalledOnce();
+  });
+
+  it("still accepts a file: page when a dev server is set, as navigation does", async () => {
+    const options = { ...createOptions(), rendererUrl: "http://localhost:5173/" };
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await expect(handler(createInvokeEvent("file:///renderer"))).resolves.toMatchObject({
+      taskAgent: "auto"
+    });
+    expect(isTrustedRendererUrl("file:///renderer/index.html", options.rendererUrl)).toBe(true);
+  });
+
+  it.each([
+    ["another loopback port", "http://localhost:5173/", "http://localhost:9999"],
+    ["another loopback host", "http://localhost:5173/", "http://127.0.0.1:5173"],
+    ["another protocol", "http://localhost:5173/", "https://localhost:5173"],
+    ["loopback without a dev server", undefined, "http://localhost:5173"]
+  ])("rejects %s, as navigation does", async (_name, rendererUrl, origin) => {
+    const options = { ...createOptions(), rendererUrl };
+
+    registerIpcHandlers(options);
+
+    const handler = getRegisteredHandler(IPC_CHANNELS.settingsOpen);
+
+    await expect(handler(createInvokeEvent(origin))).rejects.toThrow(
+      "Mauz rejected an IPC request from an untrusted renderer."
+    );
+    expect(isTrustedRendererUrl(`${origin}/index.html`, rendererUrl)).toBe(false);
+    expect(options.getSettings).not.toHaveBeenCalled();
   });
 
   it("rejects renderer requests from non-local origins", async () => {
@@ -184,6 +209,66 @@ describe("registerIpcHandlers", () => {
       "Mauz rejected an IPC request from an untrusted renderer."
     );
     expect(options.getSettings).not.toHaveBeenCalled();
+  });
+
+  it("answers Ask in process and sends text updates keyed by requestId", async () => {
+    vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
+      onText?.("partial");
+      return { answer: "done" };
+    });
+    registerIpcHandlers(createOptions());
+    const event = createInvokeEvent();
+    const request = { question: "What is this?", context: createAskContext(), requestId: "req-1" };
+
+    await expect(getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request)).resolves.toEqual({
+      answer: "done"
+    });
+
+    expect(answerAsk).toHaveBeenCalledWith(request, expect.any(Function));
+    expect(event.sender.send).toHaveBeenCalledWith(IPC_CHANNELS.askDelta, {
+      requestId: "req-1",
+      text: "partial"
+    });
+  });
+
+  it("does not send Ask text updates to a destroyed window", async () => {
+    vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
+      onText?.("partial");
+      return { answer: "done" };
+    });
+    registerIpcHandlers(createOptions());
+    const event = createInvokeEvent();
+    event.sender.isDestroyed.mockReturnValue(true);
+
+    await getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, {
+      question: "What is this?",
+      context: createAskContext(),
+      requestId: "req-1"
+    });
+
+    expect(event.sender.send).not.toHaveBeenCalled();
+  });
+
+  it("passes no text callback for an Ask request without a requestId", async () => {
+    vi.mocked(answerAsk).mockResolvedValue({ answer: "done" });
+    registerIpcHandlers(createOptions());
+    const event = createInvokeEvent();
+    const request = { question: "What is this?", context: createAskContext() };
+
+    await getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request);
+
+    expect(answerAsk).toHaveBeenLastCalledWith(request, undefined);
+    expect(event.sender.send).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid Ask payload without calling the provider", async () => {
+    vi.mocked(answerAsk).mockClear();
+    registerIpcHandlers(createOptions());
+
+    await expect(
+      getRegisteredHandler(IPC_CHANNELS.askSubmit)(createInvokeEvent(), { question: "" })
+    ).rejects.toThrow();
+    expect(answerAsk).not.toHaveBeenCalled();
   });
 
   it("passes Task agent settings through to updateSettings without stripping them", async () => {
@@ -211,7 +296,6 @@ describe("registerIpcHandlers", () => {
         {
           id: "claude-code" as const,
           label: "Claude Code subscription",
-          kind: "subscription" as const,
           available: true,
           detail: "Signed in (max plan).",
           model: "sonnet"
@@ -315,7 +399,7 @@ describe("registerIpcHandlers", () => {
     const handler = getRegisteredHandler(IPC_CHANNELS.taskSend);
     const request = { agentId: "hermes", folder: "C:/work/mauz", task: "Fix this", context: createContext() };
 
-    await expect(handler(createInvokeEvent(), request)).resolves.toEqual({ agentLabel: "Hermes" });
+    await expect(handler(createInvokeEvent(), request)).resolves.toBeUndefined();
     expect(options.taskAgents.launcher.launch).toHaveBeenCalledWith(request);
     expect(options.updateSettings).toHaveBeenCalledWith({
       taskAgent: "hermes",
@@ -342,7 +426,7 @@ function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<
   return call[1] as (...args: unknown[]) => Promise<unknown>;
 }
 
-function createInvokeEvent(origin = "file:///renderer"): unknown {
+function createInvokeEvent(origin = "file:///renderer") {
   const url = `${origin}/index.html`;
 
   return {
@@ -350,7 +434,9 @@ function createInvokeEvent(origin = "file:///renderer"): unknown {
       url
     },
     sender: {
-      getURL: () => url
+      getURL: () => url,
+      isDestroyed: vi.fn(() => false),
+      send: vi.fn()
     }
   };
 }
@@ -390,17 +476,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     collectForAsk: vi.fn(),
     discardActivationSnapshot: vi.fn()
   } as unknown as ContextCollector;
-  const api: LocalApiHandle = {
-    baseUrl: "http://127.0.0.1:47891",
-    port: 47891,
-    stop: vi.fn(async () => {})
-  };
 
   return {
     popover,
     contextCollector,
-    api,
-    localApiToken: "test-token",
     taskAgents: {
       launcher: {
         listAgents: vi.fn(() => [
@@ -416,7 +495,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
         toTaskFolder: vi.fn((path: string) => ({ path, name: path.split("/").pop() ?? path })),
         folderKey: vi.fn((path: string) => path.toLowerCase()),
         defaultFolder: vi.fn((configured: string) => configured || "C:/Users/test"),
-        launch: vi.fn(async () => ({ agentLabel: "Hermes" }))
+        launch: vi.fn(async () => {})
       },
       pickFolder: vi.fn(async () => null)
     },
@@ -424,7 +503,6 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       nativeShakeEnabled: false,
       devHotkeyEnabled: true,
       shakeSensitivity: "normal" as const,
-      openAiAuthDisconnected: false,
       openAiCredentialSource: "none" as const,
       askModel: "gpt-5.4-mini",
       captureBlockedApps: [],
@@ -440,7 +518,6 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
       nativeShakeEnabled: update.nativeShakeEnabled ?? false,
       devHotkeyEnabled: update.devHotkeyEnabled ?? true,
       shakeSensitivity: update.shakeSensitivity ?? ("normal" as const),
-      openAiAuthDisconnected: update.openAiAuthDisconnected ?? false,
       openAiCredentialSource: "none" as const,
       askModel: update.askModel ?? "gpt-5.4-mini",
       captureBlockedApps: update.captureBlockedApps ?? [],

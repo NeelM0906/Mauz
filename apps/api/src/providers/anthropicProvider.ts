@@ -7,7 +7,7 @@ const MAX_OUTPUT_TOKENS = 16_000;
 
 type AnthropicClientLike = Pick<Anthropic, "beta">;
 
-export type AnthropicApiProviderOptions = {
+type AnthropicApiProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
   createClient?: (apiKey: string) => AnthropicClientLike;
 };
@@ -46,20 +46,17 @@ export class AnthropicApiProvider implements AnswerProvider {
     content.push({ type: "text", text: prompt.userText });
 
     try {
-      const stream = client.beta.messages.stream(
-        {
-          model,
-          max_tokens: MAX_OUTPUT_TOKENS,
-          // Quick desktop answers: low effort keeps latency down; thinking stays adaptive.
-          output_config: { effort: "low" },
-          // If a safety classifier declines, the API retries on a fallback model in the same call.
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
-          system: prompt.systemPrompt,
-          messages: [{ role: "user", content }]
-        },
-        options.signal === undefined ? undefined : { signal: options.signal }
-      );
+      const stream = client.beta.messages.stream({
+        model,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        // Quick desktop answers: low effort keeps latency down; thinking stays adaptive.
+        output_config: { effort: "low" },
+        // If a safety classifier declines, the API retries on a fallback model in the same call.
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: prompt.systemPrompt,
+        messages: [{ role: "user", content }]
+      });
       let streamedText = "";
 
       for await (const event of stream) {
@@ -84,40 +81,30 @@ export class AnthropicApiProvider implements AnswerProvider {
         throw new AiProviderError(this.id, "Claude returned an empty answer.");
       }
 
-      return { text, model: message.model, usage: message.usage };
+      return { text };
     } catch (error) {
       throw toAnthropicError(this.id, error);
     }
   }
 }
 
+// Checked before the generic APIError, which all of these extend.
+const ANTHROPIC_ERROR_MESSAGES: ReadonlyArray<[abstract new (...args: never[]) => Error, string]> = [
+  [Anthropic.AuthenticationError, "Anthropic rejected the API key. Check it in Settings."],
+  [Anthropic.PermissionDeniedError, "This Anthropic API key cannot use the selected model."],
+  [Anthropic.RateLimitError, "Anthropic rate limit reached. Try again shortly."],
+  [Anthropic.APIConnectionError, "Mauz could not reach the Anthropic API. Check your connection."]
+];
+
 function toAnthropicError(providerId: string, error: unknown): Error {
   if (error instanceof AiProviderError || error instanceof NoAiProviderError) {
     return error;
   }
 
-  if (error instanceof Anthropic.AuthenticationError) {
-    return new AiProviderError(providerId, "Anthropic rejected the API key. Check it in Settings.", {
-      cause: error
-    });
-  }
+  const known = ANTHROPIC_ERROR_MESSAGES.find(([type]) => error instanceof type);
 
-  if (error instanceof Anthropic.PermissionDeniedError) {
-    return new AiProviderError(providerId, "This Anthropic API key cannot use the selected model.", {
-      cause: error
-    });
-  }
-
-  if (error instanceof Anthropic.RateLimitError) {
-    return new AiProviderError(providerId, "Anthropic rate limit reached. Try again shortly.", {
-      cause: error
-    });
-  }
-
-  if (error instanceof Anthropic.APIConnectionError) {
-    return new AiProviderError(providerId, "Mauz could not reach the Anthropic API. Check your connection.", {
-      cause: error
-    });
+  if (known !== undefined) {
+    return new AiProviderError(providerId, known[1], { cause: error });
   }
 
   if (error instanceof Anthropic.APIError) {

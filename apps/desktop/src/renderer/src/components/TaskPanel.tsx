@@ -1,19 +1,19 @@
-import { ArrowLeft, BriefcaseBusiness, FolderOpen, LoaderCircle, Send, X } from "lucide-react";
+import { BriefcaseBusiness, FolderOpen, LoaderCircle, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { TaskAgentId, TaskAgentStatus, TaskFolder } from "@mauzai/shared";
 import { detectLensObject } from "@renderer/lib/lensObject";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { findFolderForEditorWindow } from "@renderer/lib/taskFolders";
 import { useMauzStore } from "@renderer/state/useMauzStore";
-import { BrandLogo } from "./BrandLogo";
 import { CaptureDetails } from "./CaptureDetails";
+import { PanelHeader } from "./PanelHeader";
 
 /**
  * Send to agent: the task and what was on screen go to the user's coding agent, which opens
  * in its own window in the chosen folder. Mauz closes once the agent has started.
  */
 export function TaskPanel(): React.JSX.Element {
-  const { currentContext, backToMenu, dictation, setDictation } = useMauzStore();
+  const { currentContext, dictation, setDictation } = useMauzStore();
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [task, setTask] = useState("");
   const [agents, setAgents] = useState<TaskAgentStatus[] | null>(null);
@@ -33,20 +33,22 @@ export function TaskPanel(): React.JSX.Element {
   useEffect(() => {
     let disposed = false;
 
-    void mauzClient.getTaskAgents().then(
-      (response) => {
-        if (!disposed) {
-          setAgents(response.agents);
-          setAgentId(response.selectedAgentId);
+    void mauz()
+      .task.agents()
+      .then(
+        (response) => {
+          if (!disposed) {
+            setAgents(response.agents);
+            setAgentId(response.selectedAgentId);
+          }
+        },
+        (caught: unknown) => {
+          if (!disposed) {
+            setAgents([]);
+            setError(caught instanceof Error ? caught.message : "Mauz could not look for agents.");
+          }
         }
-      },
-      (caught: unknown) => {
-        if (!disposed) {
-          setAgents([]);
-          setError(caught instanceof Error ? caught.message : "Mauz could not look for agents.");
-        }
-      }
-    );
+      );
 
     return () => {
       disposed = true;
@@ -60,36 +62,33 @@ export function TaskPanel(): React.JSX.Element {
 
     let disposed = false;
 
-    void mauzClient.getTaskFolders(agentId).then(
-      (response) => {
-        if (disposed) {
-          return;
-        }
+    void mauz()
+      .task.folders({ agentId })
+      .then(
+        (response) => {
+          if (disposed) {
+            return;
+          }
 
-        // Pointing at an editor picks the project open in it; otherwise the last folder used.
-        const onScreen = findFolderForEditorWindow(response.folders, currentContext);
-        setFolders(response.folders);
-        setFolder(onScreen?.path ?? response.selectedPath);
-      },
-      () => {
-        if (!disposed) {
-          setFolders([]);
+          // Pointing at an editor picks the project open in it; otherwise the last folder used.
+          const onScreen = findFolderForEditorWindow(response.folders, currentContext);
+          setFolders(response.folders);
+          setFolder(onScreen?.path ?? response.selectedPath);
+        },
+        () => {
+          if (!disposed) {
+            setFolders([]);
+          }
         }
-      }
-    );
+      );
 
     return () => {
       disposed = true;
     };
   }, [agentId, currentContext]);
 
-  const handleBack = async (): Promise<void> => {
-    await mauzClient.showMenu();
-    backToMenu();
-  };
-
   const handleBrowse = async (): Promise<void> => {
-    const picked = await mauzClient.pickTaskFolder();
+    const picked = await mauz().task.pickFolder();
 
     if (picked !== null) {
       setFolders((current) =>
@@ -112,9 +111,9 @@ export function TaskPanel(): React.JSX.Element {
     setError(null);
 
     try {
-      await mauzClient.sendTask({ agentId, folder, task: task.trim(), context: currentContext });
+      await mauz().task.send({ agentId, folder, task: task.trim(), context: currentContext });
       setTask("");
-      await mauzClient.close();
+      await mauz().menu.close();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Mauz could not start the agent.");
     } finally {
@@ -132,31 +131,7 @@ export function TaskPanel(): React.JSX.Element {
 
   return (
     <section className="lens-panel lens-task-panel task-panel" aria-label="Send to agent">
-      <header className="lens-header lens-task-header">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back to Mauz menu"
-          onClick={() => void handleBack()}
-        >
-          <ArrowLeft aria-hidden="true" size={16} />
-        </button>
-        <div className="panel-title">
-          <BrandLogo className="panel-title-logo" />
-          <div>
-            <h1 tabIndex={-1}>Send to agent</h1>
-            <p>{lensObject.label}</p>
-          </div>
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Close Mauz"
-          onClick={() => void mauzClient.close()}
-        >
-          <X aria-hidden="true" size={16} />
-        </button>
-      </header>
+      <PanelHeader title="Send to agent" subtitle={lensObject.label} />
 
       <CaptureDetails context={currentContext} />
 

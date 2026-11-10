@@ -1,6 +1,6 @@
 import { Menu, Tray, nativeImage } from "electron";
 
-export type TrayControllerOptions = {
+type TrayControllerOptions = {
   iconPath: string;
   onOpenMauz: () => void;
   onOpenSettings: () => void;

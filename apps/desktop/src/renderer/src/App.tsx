@@ -3,11 +3,20 @@ import { createRoot } from "react-dom/client";
 import { DictatePanel } from "./components/DictatePanel";
 import { LensPanel } from "./components/LensPanel";
 import { MauzMenu } from "./components/MauzMenu";
+import { goBackToMenu } from "./components/PanelHeader";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TaskPanel } from "./components/TaskPanel";
-import { mauzClient } from "./lib/mauzClient";
-import { useMauzStore } from "./state/useMauzStore";
+import { mauz } from "./lib/mauzClient";
+import { useMauzStore, type MauzMode } from "./state/useMauzStore";
 import "./styles.css";
+
+const PANELS: Record<MauzMode, React.ComponentType> = {
+  menu: MauzMenu,
+  lens: LensPanel,
+  task: TaskPanel,
+  dictate: DictatePanel,
+  settings: SettingsPanel
+};
 
 function App(): React.JSX.Element {
   const mode = useMauzStore((state) => state.mode);
@@ -15,20 +24,20 @@ function App(): React.JSX.Element {
   const setMode = useMauzStore((state) => state.setMode);
 
   React.useEffect(() => {
-    return mauzClient.onActivation(() => {
+    return mauz().events.onActivation(() => {
       reset();
     });
   }, [reset]);
 
   React.useEffect(() => {
-    return mauzClient.onOpenSettings(() => {
+    return mauz().events.onOpenSettings(() => {
       reset();
       setMode("settings");
     });
   }, [reset, setMode]);
 
   React.useEffect(() => {
-    return mauzClient.onPermissionError((error) => {
+    return mauz().events.onPermissionError((error) => {
       useMauzStore.getState().setStatus(error.message);
     });
   }, []);
@@ -48,10 +57,9 @@ function App(): React.JSX.Element {
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
       const state = useMauzStore.getState();
       if (state.mode === "menu") {
-        void mauzClient.close();
+        void mauz().menu.close();
       } else {
-        void mauzClient.showMenu();
-        state.backToMenu();
+        void goBackToMenu();
       }
     };
 
@@ -59,23 +67,8 @@ function App(): React.JSX.Element {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  if (mode === "lens") {
-    return <LensPanel />;
-  }
-
-  if (mode === "task") {
-    return <TaskPanel />;
-  }
-
-  if (mode === "dictate") {
-    return <DictatePanel />;
-  }
-
-  if (mode === "settings") {
-    return <SettingsPanel />;
-  }
-
-  return <MauzMenu />;
+  const Panel = PANELS[mode];
+  return <Panel />;
 }
 
 const rootElement = document.getElementById("root");

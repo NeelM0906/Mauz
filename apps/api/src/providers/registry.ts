@@ -1,10 +1,10 @@
 import { tmpdir } from "node:os";
-import type {
-  AiProviderId,
-  AiProviderKind,
-  AiProviderPreference,
-  AiProviderStatus,
-  AiProvidersStatusResponse
+import {
+  AiProviderPreferenceSchema,
+  type AiProviderId,
+  type AiProviderPreference,
+  type AiProviderStatus,
+  type AiProvidersStatusResponse
 } from "@mauzai/shared";
 import { NoAiProviderError } from "../errors";
 import { AnthropicApiProvider, DEFAULT_ANTHROPIC_ASK_MODEL } from "./anthropicProvider";
@@ -19,7 +19,7 @@ import type { AnswerProvider, ProviderDetection } from "./types";
  * Auto order, used only when the default is "auto" and several providers are ready: a key
  * the user added on purpose wins, then the subscriptions they are already signed in to.
  */
-export const AUTO_PROVIDER_ORDER: readonly AiProviderId[] = ["anthropic", "openai", "claude-code", "codex"];
+const AUTO_PROVIDER_ORDER: readonly AiProviderId[] = ["anthropic", "openai", "claude-code", "codex"];
 
 const PROVIDER_LABELS: Record<AiProviderId, string> = {
   "claude-code": "Claude Code subscription",
@@ -28,22 +28,13 @@ const PROVIDER_LABELS: Record<AiProviderId, string> = {
   openai: "OpenAI API key"
 };
 
-const PROVIDER_KINDS: Record<AiProviderId, AiProviderKind> = {
-  "claude-code": "subscription",
-  codex: "subscription",
-  anthropic: "api-key",
-  openai: "api-key"
-};
-
 const CLI_DETECTION_TTL_MS = 5 * 60_000;
 const CLI_STATUS_TIMEOUT_MS = 15_000;
 
-export type AnswerProviderRegistryOptions = {
+type AnswerProviderRegistryOptions = {
   env?: () => NodeJS.ProcessEnv;
   spawn?: SpawnLike;
   resolveCommand?: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
-  providers?: Partial<Record<AiProviderId, AnswerProvider>>;
-  now?: () => number;
 };
 
 type CliDetectionCache = {
@@ -56,7 +47,6 @@ export class AnswerProviderRegistry {
   private readonly spawnProcess: SpawnLike;
   private readonly resolveCommand: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
   private readonly providers: Record<AiProviderId, AnswerProvider>;
-  private readonly now: () => number;
   private cliDetection: CliDetectionCache | null = null;
   private lastCliDetection: Record<"claude-code" | "codex", ProviderDetection> | null = null;
 
@@ -64,12 +54,11 @@ export class AnswerProviderRegistry {
     this.readEnv = options.env ?? (() => process.env);
     this.spawnProcess = options.spawn ?? spawnCliProcess;
     this.resolveCommand = options.resolveCommand ?? resolveCliCommandForMauz;
-    this.now = options.now ?? Date.now;
     this.providers = {
-      "claude-code": options.providers?.["claude-code"] ?? new ClaudeCodeProvider({ env: this.readEnv }),
-      codex: options.providers?.codex ?? new CodexProvider({ env: this.readEnv }),
-      anthropic: options.providers?.anthropic ?? new AnthropicApiProvider({ env: this.readEnv }),
-      openai: options.providers?.openai ?? new OpenAiApiProvider({ env: this.readEnv })
+      "claude-code": new ClaudeCodeProvider({ env: this.readEnv }),
+      codex: new CodexProvider({ env: this.readEnv }),
+      anthropic: new AnthropicApiProvider({ env: this.readEnv }),
+      openai: new OpenAiApiProvider({ env: this.readEnv })
     };
   }
 
@@ -77,17 +66,7 @@ export class AnswerProviderRegistry {
   async getStatus(options: { refresh?: boolean } = {}): Promise<AiProvidersStatusResponse> {
     const cli = await this.detectCliProviders(options.refresh === true);
     const env = this.readEnv();
-    const detections: Record<AiProviderId, ProviderDetection> = {
-      ...cli,
-      anthropic: detectApiKey(env.ANTHROPIC_API_KEY, env.ANTHROPIC_ASK_MODEL, DEFAULT_ANTHROPIC_ASK_MODEL),
-      openai: detectApiKey(env.OPENAI_API_KEY, env.OPENAI_ASK_MODEL, DEFAULT_OPENAI_ASK_MODEL)
-    };
-    const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
-      id,
-      label: PROVIDER_LABELS[id],
-      kind: PROVIDER_KINDS[id],
-      ...detections[id]
-    }));
+    const providers = listProviders(cli, env);
     const preference = readPreference(env.MAUZ_AI_PROVIDER);
 
     return {
@@ -128,15 +107,7 @@ export class AnswerProviderRegistry {
     }
 
     const env = this.readEnv();
-    const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
-      id,
-      label: PROVIDER_LABELS[id],
-      kind: PROVIDER_KINDS[id],
-      ...(id === "claude-code" || id === "codex"
-        ? cli[id]
-        : detectApiKey(id === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY, undefined, "unused"))
-    }));
-    const active = pickProvider(readPreference(env.MAUZ_AI_PROVIDER), providers);
+    const active = pickProvider(readPreference(env.MAUZ_AI_PROVIDER), listProviders(cli, env));
 
     if (active !== null) {
       this.providers[active.id].prewarm?.(systemPrompt);
@@ -152,7 +123,7 @@ export class AnswerProviderRegistry {
   private detectCliProviders(refresh: boolean): Promise<Record<"claude-code" | "codex", ProviderDetection>> {
     const cached = this.cliDetection;
 
-    if (!refresh && cached !== null && this.now() - cached.detectedAt < CLI_DETECTION_TTL_MS) {
+    if (!refresh && cached !== null && Date.now() - cached.detectedAt < CLI_DETECTION_TTL_MS) {
       return cached.promise;
     }
 
@@ -162,7 +133,7 @@ export class AnswerProviderRegistry {
       return detection;
     });
 
-    this.cliDetection = { detectedAt: this.now(), promise };
+    this.cliDetection = { detectedAt: Date.now(), promise };
     promise.catch(() => {
       if (this.cliDetection?.promise === promise) {
         this.cliDetection = null;
@@ -175,18 +146,14 @@ export class AnswerProviderRegistry {
   private async detectClaudeCode(): Promise<ProviderDetection> {
     const env = this.readEnv();
     const model = env.MAUZ_CLAUDE_CODE_MODEL?.trim() || DEFAULT_CLAUDE_CODE_MODEL;
-    const command = this.resolveCommand(env.MAUZ_CLAUDE_CODE_PATH?.trim() || "claude", env);
+    const command = this.resolveCommand("claude", env);
 
     if (command === null) {
       return { available: false, detail: "Claude Code is not installed.", model };
     }
 
     try {
-      const output = await this.runStatusCommand(
-        command,
-        ["auth", "status"],
-        ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
-      );
+      const output = await this.runStatusCommand(command, ["auth", "status"]);
       const status = parseJsonLine(output.stdout.trim());
 
       if (status?.loggedIn === true) {
@@ -203,14 +170,14 @@ export class AnswerProviderRegistry {
   private async detectCodex(): Promise<ProviderDetection> {
     const env = this.readEnv();
     const model = env.MAUZ_CODEX_MODEL?.trim() || "default";
-    const command = this.resolveCommand(env.MAUZ_CODEX_PATH?.trim() || "codex", env);
+    const command = this.resolveCommand("codex", env);
 
     if (command === null) {
       return { available: false, detail: "Codex is not installed.", model };
     }
 
     try {
-      const output = await this.runStatusCommand(command, ["login", "status"], ["OPENAI_API_KEY"]);
+      const output = await this.runStatusCommand(command, ["login", "status"]);
       const statusText = `${output.stdout}\n${output.stderr}`.trim();
       const loggedIn = /logged in/i.test(statusText) && !/not logged in/i.test(statusText);
 
@@ -231,12 +198,11 @@ export class AnswerProviderRegistry {
 
   private async runStatusCommand(
     command: ResolvedCliCommand,
-    subcommand: string[],
-    removeEnvKeys: readonly string[]
+    subcommand: string[]
   ): Promise<{ stdout: string; stderr: string }> {
     const child = this.spawnProcess(command.command, [...command.args, ...subcommand], {
       cwd: tmpdir(),
-      env: { ...buildCliEnvironment(this.readEnv(), removeEnvKeys), ...command.env }
+      env: { ...buildCliEnvironment(this.readEnv()), ...command.env }
     });
 
     return runAndCollect(child, { timeoutMs: CLI_STATUS_TIMEOUT_MS });
@@ -251,36 +217,35 @@ export function resolveCliCommandForMauz(name: string, env: NodeJS.ProcessEnv): 
   });
 }
 
-/** The selected provider when it is ready; with "auto", the first ready one in AUTO_PROVIDER_ORDER. */
+/** Every provider's status, in AUTO_PROVIDER_ORDER. */
+function listProviders(
+  cli: Record<"claude-code" | "codex", ProviderDetection>,
+  env: NodeJS.ProcessEnv
+): AiProviderStatus[] {
+  const detections: Record<AiProviderId, ProviderDetection> = {
+    ...cli,
+    anthropic: detectApiKey(env.ANTHROPIC_API_KEY, env.ANTHROPIC_ASK_MODEL, DEFAULT_ANTHROPIC_ASK_MODEL),
+    openai: detectApiKey(env.OPENAI_API_KEY, env.OPENAI_ASK_MODEL, DEFAULT_OPENAI_ASK_MODEL)
+  };
+
+  return AUTO_PROVIDER_ORDER.map((id) => ({ id, label: PROVIDER_LABELS[id], ...detections[id] }));
+}
+
+/**
+ * The selected provider when it is ready; with "auto", the first ready one.
+ * `providers` must be in AUTO_PROVIDER_ORDER, as `listProviders` returns them.
+ */
 export function pickProvider(
   preference: AiProviderPreference,
   providers: readonly AiProviderStatus[]
 ): AiProviderStatus | null {
-  if (preference !== "auto") {
-    const selected = providers.find((provider) => provider.id === preference);
-    return selected?.available === true ? selected : null;
-  }
+  const ready = providers.filter((provider) => provider.available);
 
-  for (const id of AUTO_PROVIDER_ORDER) {
-    const provider = providers.find((candidate) => candidate.id === id);
-
-    if (provider?.available === true) {
-      return provider;
-    }
-  }
-
-  return null;
+  return (preference === "auto" ? ready[0] : ready.find((provider) => provider.id === preference)) ?? null;
 }
 
 function readPreference(value: string | undefined): AiProviderPreference {
-  const normalized = value?.trim();
-
-  return normalized === "claude-code" ||
-    normalized === "codex" ||
-    normalized === "anthropic" ||
-    normalized === "openai"
-    ? normalized
-    : "auto";
+  return AiProviderPreferenceSchema.catch("auto").parse(value?.trim());
 }
 
 function detectApiKey(

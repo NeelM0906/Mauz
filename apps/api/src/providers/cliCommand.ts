@@ -9,7 +9,7 @@ export type ResolvedCliCommand = {
   env?: Record<string, string> | undefined;
 };
 
-export type CliResolutionOptions = {
+type CliResolutionOptions = {
   platform?: NodeJS.Platform | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   homeDirectory?: string | undefined;
@@ -21,13 +21,26 @@ export type CliResolutionOptions = {
 
 type PathApi = typeof posix;
 
+/** Variables that point Mauz at a CLI outside the folders it searches. */
+const CLI_PATH_VARIABLES: Readonly<Record<string, string>> = {
+  claude: "MAUZ_CLAUDE_CODE_PATH",
+  codex: "MAUZ_CODEX_PATH"
+};
+
+/** The path set in the CLI's MAUZ_*_PATH variable, or the name itself. */
+export function applyCliPathOverride(name: string, env: NodeJS.ProcessEnv): string {
+  const variable = CLI_PATH_VARIABLES[name];
+
+  return (variable === undefined ? undefined : env[variable]?.trim()) || name;
+}
+
 /**
  * Finds a CLI such as `claude` or `codex` the same way a terminal would, plus the
  * install locations GUI launches miss. On Windows, npm installs `.cmd` shims that
  * cannot be spawned without a shell, so those resolve to `node <entry.js>` instead.
  */
 export function resolveCliCommand(
-  name: string,
+  cliName: string,
   options: CliResolutionOptions = {}
 ): ResolvedCliCommand | null {
   const platform = options.platform ?? process.platform;
@@ -36,6 +49,7 @@ export function resolveCliCommand(
   const pathExists = options.pathExists ?? existsSync;
   const readTextFile = options.readTextFile ?? ((path: string) => readFileSync(path, "utf8"));
   const home = options.homeDirectory ?? homedir();
+  const name = applyCliPathOverride(cliName, env);
 
   if (pathApi.isAbsolute(name)) {
     if (!pathExists(name)) {
@@ -47,7 +61,7 @@ export function resolveCliCommand(
       : { command: name, args: [] };
   }
 
-  const searchDirectories = getSearchDirectories(platform, pathApi, env, home);
+  const searchDirectories = getCliSearchDirectories(platform, env, home);
 
   if (platform !== "win32") {
     return findFirst(searchDirectories, name, pathApi, pathExists);
@@ -74,24 +88,21 @@ export function resolveCliCommand(
   return null;
 }
 
-/** Child processes must not inherit Mauz's own credentials or local API secrets. */
-export function buildCliEnvironment(
-  env: NodeJS.ProcessEnv,
-  removeKeys: readonly string[] = []
-): NodeJS.ProcessEnv {
-  const childEnvironment: NodeJS.ProcessEnv = { ...env };
+/** Keys that would make a CLI bill an API key Mauz holds instead of the user's subscription. */
+const CREDENTIAL_KEYS = new Set(["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]);
 
-  for (const key of Object.keys(childEnvironment)) {
-    if (key.startsWith("MAUZ_") || key === "ELECTRON_RUN_AS_NODE") {
-      delete childEnvironment[key];
-    }
-  }
+/**
+ * Child processes must not inherit Mauz's own settings and secrets, API credentials, or
+ * Electron's run-as-Node switch. Names are compared in upper case, as Windows does.
+ */
+export function buildCliEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => {
+      const name = key.toUpperCase();
 
-  for (const key of removeKeys) {
-    delete childEnvironment[key];
-  }
-
-  return childEnvironment;
+      return !name.startsWith("MAUZ_") && name !== "ELECTRON_RUN_AS_NODE" && !CREDENTIAL_KEYS.has(name);
+    })
+  );
 }
 
 function findFirst(
@@ -164,22 +175,29 @@ function resolveNpmShim(
   return null;
 }
 
-function getSearchDirectories(
+/** PATH, then the install folders that GUI launches (Start menu, Finder) can miss. Ask and Send to agent share it. */
+export function getCliSearchDirectories(
   platform: NodeJS.Platform,
-  pathApi: PathApi,
   env: NodeJS.ProcessEnv,
   home: string
 ): string[] {
+  const pathApi: PathApi = platform === "win32" ? win32 : posix;
   const extraDirectories =
     platform === "win32"
-      ? [pathApi.join(home, ".local", "bin"), ...(env.APPDATA ? [pathApi.join(env.APPDATA, "npm")] : [])]
+      ? [
+          pathApi.join(home, ".local", "bin"),
+          ...(env.APPDATA ? [pathApi.join(env.APPDATA, "npm")] : []),
+          ...(env.LOCALAPPDATA ? [pathApi.join(env.LOCALAPPDATA, "hermes", "bin")] : [])
+        ]
       : [
           pathApi.join(home, ".local", "bin"),
           pathApi.join(home, ".claude", "local"),
           pathApi.join(home, ".npm-global", "bin"),
           pathApi.join(home, ".bun", "bin"),
+          pathApi.join(home, ".hermes", "bin"),
           "/opt/homebrew/bin",
-          "/usr/local/bin"
+          "/usr/local/bin",
+          "/usr/bin"
         ];
 
   return [...new Set([...splitPath(env, pathApi), ...extraDirectories])];

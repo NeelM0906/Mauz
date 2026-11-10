@@ -1,41 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MauzBridge, TaskAgentsResponse } from "@mauzai/shared";
-import { mauzClient } from "../src/renderer/src/lib/mauzClient";
+import { afterEach, describe, expect, it } from "vitest";
+import type { MauzBridge } from "@mauzai/shared";
+import { mauz } from "../src/renderer/src/lib/mauzClient";
 
-describe("mauzClient", () => {
-  beforeEach(() => {
-    (globalThis as unknown as { window: unknown }).window = {
-      location: { protocol: "http:" }
-    };
-  });
-
+describe("mauz", () => {
   afterEach(() => {
-    vi.restoreAllMocks();
     delete (globalThis as unknown as { window?: unknown }).window;
   });
 
-  describe("getTaskAgents", () => {
-    it("returns the bridge result", async () => {
-      const result: TaskAgentsResponse = {
-        agents: [{ id: "claude-code", label: "Claude Code", installed: true }],
-        selectedAgentId: "claude-code"
-      };
-      const agents = vi.fn().mockResolvedValue(result);
-      const bridge: Partial<MauzBridge> = {
-        task: { agents, folders: vi.fn(), pickFolder: vi.fn(), send: vi.fn() }
-      };
+  it("returns the preload bridge", () => {
+    const bridge = {} as MauzBridge;
+    (globalThis as unknown as { window: { mauz: MauzBridge } }).window = { mauz: bridge };
 
-      (globalThis as unknown as { window: { mauz: Partial<MauzBridge> } }).window.mauz = bridge;
+    expect(mauz()).toBe(bridge);
+  });
 
-      await expect(mauzClient.getTaskAgents()).resolves.toEqual(result);
-      expect(agents).toHaveBeenCalledTimes(1);
-    });
+  it("throws when the preload bridge is missing", () => {
+    (globalThis as unknown as { window: object }).window = {};
 
-    it("falls back to the browser preview bridge when the desktop bridge is missing", async () => {
-      const result = await mauzClient.getTaskAgents();
-
-      expect(result.selectedAgentId).toBeNull();
-      expect(result.agents.map((agent) => agent.id)).toEqual(["hermes", "claude-code", "codex"]);
-    });
+    expect(() => mauz()).toThrow("Mauz desktop bridge is unavailable.");
   });
 });

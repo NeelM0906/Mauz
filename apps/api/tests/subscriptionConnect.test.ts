@@ -140,7 +140,7 @@ describe("SubscriptionConnector", () => {
   it("keeps API keys away from the sign-in so the subscription is used", async () => {
     const env: NodeJS.ProcessEnv[] = [];
     const connector = new SubscriptionConnector({
-      env: () => ({ PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-should-not-leak", MAUZ_INSTALL_ID: "x" }),
+      env: () => ({ PATH: "/bin", ANTHROPIC_API_KEY: "sk-ant-should-not-leak", MAUZ_BROWSER_TOKEN: "x" }),
       spawn: (_command, _args, options) => {
         env.push(options.env);
         return createControlledChild();
@@ -154,7 +154,32 @@ describe("SubscriptionConnector", () => {
     await tick();
 
     expect(env[0]?.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(env[0]?.MAUZ_INSTALL_ID).toBeUndefined();
+    expect(env[0]?.MAUZ_BROWSER_TOKEN).toBeUndefined();
+    connector.dispose();
+  });
+
+  it("keeps every API credential away from the Codex sign-in", async () => {
+    const env: NodeJS.ProcessEnv[] = [];
+    const connector = new SubscriptionConnector({
+      env: () => ({
+        PATH: "/bin",
+        OPENAI_API_KEY: "sk",
+        ANTHROPIC_API_KEY: "sk-ant",
+        ANTHROPIC_AUTH_TOKEN: "token"
+      }),
+      spawn: (_command, _args, options) => {
+        env.push(options.env);
+        return createControlledChild();
+      },
+      resolveCommand: (name) => ({ command: name, args: [] }),
+      onAuthChanged: async () => {},
+      onState: () => {}
+    });
+
+    connector.connect("codex");
+    await tick();
+
+    expect(env[0]).toEqual({ PATH: "/bin" });
     connector.dispose();
   });
 

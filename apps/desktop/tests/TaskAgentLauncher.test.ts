@@ -8,10 +8,9 @@ import {
   buildAgentEnvironment,
   buildHiddenStartCommand,
   buildPowerShellLauncher,
-  buildShellLauncher,
-  TaskAgentLauncher,
-  threadTitle
-} from "../src/main/agent/TaskAgentLauncher";
+  buildShellLauncher
+} from "../src/main/agent/agentProcess";
+import { TaskAgentLauncher, threadTitle } from "../src/main/agent/TaskAgentLauncher";
 
 const CONTEXT: MauzDesktopContext = {
   timestamp: "2026-11-04T12:00:00.000Z",
@@ -139,7 +138,7 @@ describe("TaskAgentLauncher", () => {
 
       await expect(
         launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Hermes" });
+      ).resolves.toBeUndefined();
 
       expect(startProcess).toHaveBeenCalledOnce();
       const [command, args, options] = startProcess.mock.calls[0] as unknown as [
@@ -194,7 +193,7 @@ describe("TaskAgentLauncher", () => {
 
       await expect(
         launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Hermes" });
+      ).resolves.toBeUndefined();
 
       expect(startProcess).not.toHaveBeenCalled();
       const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
@@ -256,7 +255,7 @@ describe("TaskAgentLauncher", () => {
 
       await expect(
         launcher.launch({ agentId: "claude-code", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Claude Code" });
+      ).resolves.toBeUndefined();
       await launcher.settled();
 
       const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
@@ -379,7 +378,7 @@ describe("TaskAgentLauncher", () => {
       expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
       await expect(
         launcher.launch({ agentId: "codex", folder, task: "Fix this error\nin the parser", context: CONTEXT })
-      ).resolves.toEqual({ agentLabel: "Codex" });
+      ).resolves.toBeUndefined();
 
       const [executable, request] = queueCodexThread.mock.calls[0] as unknown as [
         string,
@@ -504,5 +503,57 @@ describe("agent command lines", () => {
 
     expect(existsSync(old)).toBe(false);
     expect(existsSync(recent)).toBe(true);
+  });
+});
+
+// Defects from docs/reafactor-audit.md, fixed by refactor row 3.
+describe("known defects", () => {
+  it("finds Claude Code at MAUZ_CLAUDE_CODE_PATH, as Ask does", () => {
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/usr/bin", MAUZ_CLAUDE_CODE_PATH: "/opt/tools/claude" },
+      homeDirectory: "/Users/me",
+      pathExists: (path) => path === "/opt/tools/claude"
+    });
+
+    expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
+  });
+
+  it("finds Codex at MAUZ_CODEX_PATH, as Ask does", () => {
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/usr/bin", MAUZ_CODEX_PATH: "/opt/tools/codex" },
+      homeDirectory: "/Users/me",
+      pathExists: (path) => path === "/opt/tools/codex"
+    });
+
+    expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
+  });
+
+  it("finds Claude Code in ~/.claude/local, as Ask does", () => {
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/usr/bin" },
+      homeDirectory: "/Users/me",
+      pathExists: (path) => path === "/Users/me/.claude/local/claude"
+    });
+
+    expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
+  });
+
+  it("drops ANTHROPIC_AUTH_TOKEN, as the Ask CLI providers do", () => {
+    expect(buildAgentEnvironment({ PATH: "p", ANTHROPIC_AUTH_TOKEN: "token" })).toEqual({ PATH: "p" });
+  });
+
+  it("keeps a Windows .cmd set in MAUZ_CLAUDE_CODE_PATH as it is, for the terminal to run", () => {
+    const shim = "C:\\tools\\claude.cmd";
+    const launcher = new TaskAgentLauncher({
+      platform: "win32",
+      env: { PATH: "C:\\Windows", MAUZ_CLAUDE_CODE_PATH: shim },
+      homeDirectory: "C:\\Users\\me",
+      pathExists: (path) => path === shim
+    });
+
+    expect(launcher.findExecutable("claude")).toBe(shim);
   });
 });

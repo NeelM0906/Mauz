@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { TalkTranscribeRequest, TalkTranscribeResponse } from "@mauzai/shared";
 import type { WindowsContextHelper } from "../context/WindowsContextHelper";
 
-export type TalkTranscriberOptions = {
+type TalkTranscriberOptions = {
   getWindowsHelper: () => Pick<WindowsContextHelper, "transcribeWav"> | null;
   hasOpenAiKey: () => boolean;
   transcribeWithOpenAi: (wavAudio: Buffer) => Promise<string>;
@@ -31,7 +31,7 @@ export class TalkTranscriber {
     const audio = Buffer.from(request.audioBase64, "base64");
 
     if (this.options.hasOpenAiKey()) {
-      return { text: await this.options.transcribeWithOpenAi(audio), engine: "openai" };
+      return { text: await this.options.transcribeWithOpenAi(audio) };
     }
 
     const windowsHelper = this.options.getWindowsHelper();
@@ -41,7 +41,7 @@ export class TalkTranscriber {
       await this.writeTempFile(path, audio);
 
       try {
-        return { text: await windowsHelper.transcribeWav(path), engine: "windows" };
+        return { text: await windowsHelper.transcribeWav(path) };
       } finally {
         await this.removeTempFile(path).catch(() => {});
       }

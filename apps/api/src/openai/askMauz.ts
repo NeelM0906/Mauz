@@ -8,10 +8,9 @@ import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
 import { getDefaultAnswerProviderRegistry, type AnswerProviderRegistry } from "../providers/registry";
 import type { AnswerImage, AnswerPrompt } from "../providers/types";
 
-export type AskMauzOptions = {
+type AskMauzOptions = {
   registry?: Pick<AnswerProviderRegistry, "resolve">;
   onText?: (textSoFar: string) => void;
-  signal?: AbortSignal;
 };
 
 /** Answers with the provider the user configured or signed in to (API key or Claude Code / Codex subscription). */
@@ -22,15 +21,10 @@ export async function askMauz(
   const registry = options.registry ?? getDefaultAnswerProviderRegistry();
   const provider = await registry.resolve();
   const result = await provider.answer(buildAnswerPrompt(request), {
-    onText: options.onText,
-    signal: options.signal
+    onText: options.onText
   });
 
-  return {
-    answer: result.text,
-    model: toModelLabel(result.model),
-    ...(result.usage === undefined ? {} : { usage: result.usage })
-  };
+  return { answer: result.text };
 }
 
 /** Provider-neutral prompt: system prompt, context text, and labeled images in send order. */
@@ -48,15 +42,6 @@ export function buildAnswerPrompt(request: AskMauzRequest): AnswerPrompt {
     userText: buildContextText(request),
     images
   };
-}
-
-function toModelLabel(model: string): string {
-  const label = model
-    .trim()
-    .replace(/[^A-Za-z0-9._:/-]+/g, "-")
-    .slice(0, 128);
-
-  return label.length > 0 ? label : "unknown-model";
 }
 
 export function buildContextText(request: AskMauzRequest): string {

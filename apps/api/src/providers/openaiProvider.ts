@@ -8,7 +8,7 @@ const DEFAULT_ASK_MAX_OUTPUT_TOKENS = 700;
 
 type OpenAiClientLike = Pick<OpenAI, "responses">;
 
-export type OpenAiApiProviderOptions = {
+type OpenAiApiProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
   createClient?: (apiKey: string) => OpenAiClientLike;
 };
@@ -44,18 +44,15 @@ export class OpenAiApiProvider implements AnswerProvider {
       });
     }
 
-    const response = await this.createClient(apiKey).responses.create(
-      {
-        model,
-        store: false,
-        max_output_tokens: readMaxOutputTokens(env.OPENAI_ASK_MAX_OUTPUT_TOKENS),
-        input: [
-          { role: "system", content: prompt.systemPrompt },
-          { role: "user", content }
-        ]
-      },
-      options.signal === undefined ? undefined : { signal: options.signal }
-    );
+    const response = await this.createClient(apiKey).responses.create({
+      model,
+      store: false,
+      max_output_tokens: readMaxOutputTokens(env.OPENAI_ASK_MAX_OUTPUT_TOKENS),
+      input: [
+        { role: "system", content: prompt.systemPrompt },
+        { role: "user", content }
+      ]
+    });
     const text = response.output_text?.trim() ?? "";
 
     if (text.length === 0) {
@@ -64,11 +61,7 @@ export class OpenAiApiProvider implements AnswerProvider {
 
     options.onText?.(text);
 
-    return {
-      text,
-      model,
-      ...(response.usage === undefined ? {} : { usage: response.usage })
-    };
+    return { text };
   }
 }
 

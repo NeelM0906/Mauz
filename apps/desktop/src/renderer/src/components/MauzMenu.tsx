@@ -1,7 +1,7 @@
 import { BriefcaseBusiness, Mic, ScanSearch } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AiProvidersStatusResponse } from "@mauzai/shared";
-import { mauzClient } from "@renderer/lib/mauzClient";
+import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { BrandLogo } from "./BrandLogo";
 
@@ -30,72 +30,36 @@ function bubbleStyle(key: BubbleKey, order: number, size = 52): React.CSSPropert
 }
 
 export function MauzMenu(): React.JSX.Element {
-  const {
-    settings,
-    status,
-    setAskAnswer,
-    setAskError,
-    setAskLoading,
-    setCurrentContext,
-    setMode,
-    setSettings,
-    setStatus
-  } = useMauzStore();
+  const { status, setCurrentContext, setMode, setSettings, setStatus } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<BubbleKey | null>(null);
   const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
 
   useEffect(() => {
     let disposed = false;
 
-    void mauzClient.getProvidersStatus().then(
-      (status) => {
-        if (!disposed) {
-          setProvidersStatus(status);
+    void mauz()
+      .providers.status()
+      .then(
+        (status) => {
+          if (!disposed) {
+            setProvidersStatus(status);
+          }
+        },
+        () => {
+          // The status dot stays neutral; asking still reports a precise error.
         }
-      },
-      () => {
-        // The status dot stays neutral; asking still reports a precise error.
-      }
-    );
+      );
 
     return () => {
       disposed = true;
     };
   }, []);
 
-  useEffect(() => {
-    let disposed = false;
-
-    const loadSettings = async (): Promise<void> => {
-      try {
-        const loadedSettings = await mauzClient.openSettings({
-          resizePopover: false
-        });
-
-        if (!disposed) {
-          setSettings(loadedSettings);
-        }
-      } catch (error) {
-        if (!disposed) {
-          setStatus(error instanceof Error ? error.message : "Mauz settings failed.");
-        }
-      }
-    };
-
-    if (settings === null) {
-      void loadSettings();
-    }
-
-    return () => {
-      disposed = true;
-    };
-  }, [setSettings, setStatus, settings]);
-
   const handleSettings = async (): Promise<void> => {
     setStatus(null);
 
     try {
-      const settings = await mauzClient.openSettings();
+      const settings = await mauz().settings.open();
       setSettings(settings);
       setMode("settings");
     } catch (error) {
@@ -107,14 +71,11 @@ export function MauzMenu(): React.JSX.Element {
   const openPanel = async (bubble: BubbleKey): Promise<void> => {
     setPendingAction(bubble);
     setStatus(null);
-    setAskAnswer(null);
-    setAskError(null);
-    setAskLoading(false);
 
     try {
-      const context = await mauzClient.startAsk();
+      const context = await mauz().menu.startAsk();
       setCurrentContext(context);
-      await mauzClient.setLensExpanded({ expanded: true });
+      await mauz().menu.expand();
       setMode(PANEL_FOR_BUBBLE[bubble]);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
@@ -135,7 +96,7 @@ export function MauzMenu(): React.JSX.Element {
         className="bubble-cluster-backdrop"
         aria-label="Close Mauz"
         tabIndex={-1}
-        onClick={() => void mauzClient.close()}
+        onClick={() => void mauz().menu.close()}
       />
 
       <div className="bubble-cluster">
@@ -177,7 +138,6 @@ export function MauzMenu(): React.JSX.Element {
         <button
           type="button"
           className="bubble"
-          data-accent="agent"
           data-pending={pendingAction === "task" ? "true" : undefined}
           aria-label="Send to agent"
           disabled={pendingAction !== null}

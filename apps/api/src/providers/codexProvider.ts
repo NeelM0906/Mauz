@@ -2,29 +2,27 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AiProviderError } from "../errors";
-import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from "./cliCommand";
+import { buildCliEnvironment, resolveCliCommand } from "./cliCommand";
 import {
-  ProcessAbortedError,
-  ProcessTimeoutError,
+  describeCliFailure,
   parseJsonLine,
   runAndCollect,
   spawnCliProcess,
-  type SpawnLike
+  toCliError,
+  type AnswerCli
 } from "./processRunner";
 import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
 
-export const DEFAULT_CODEX_REASONING_EFFORT = "low";
+const DEFAULT_CODEX_REASONING_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 180_000;
-const CREDENTIAL_ENV_KEYS = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] as const;
+const CODEX_CLI: AnswerCli = {
+  label: "Codex",
+  signInKeywords: ["login", "not logged in", "401"],
+  signInMessage: "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+};
 
-export type CodexProviderOptions = {
-  spawn?: SpawnLike;
-  resolveCommand?: () => ResolvedCliCommand | null;
+type CodexProviderOptions = {
   env?: () => NodeJS.ProcessEnv;
-  model?: () => string | undefined;
-  reasoningEffort?: () => string;
-  makeWorkingDirectory?: () => Promise<string>;
-  answerTimeoutMs?: number;
 };
 
 /**
@@ -34,35 +32,18 @@ export type CodexProviderOptions = {
  */
 export class CodexProvider implements AnswerProvider {
   readonly id = "codex" as const;
-  private readonly spawnProcess: SpawnLike;
-  private readonly resolveCommand: () => ResolvedCliCommand | null;
   private readonly readEnv: () => NodeJS.ProcessEnv;
-  private readonly readModel: () => string | undefined;
-  private readonly readReasoningEffort: () => string;
-  private readonly makeWorkingDirectory: () => Promise<string>;
-  private readonly answerTimeoutMs: number;
 
   constructor(options: CodexProviderOptions = {}) {
-    this.spawnProcess = options.spawn ?? spawnCliProcess;
     this.readEnv = options.env ?? (() => process.env);
-    this.resolveCommand =
-      options.resolveCommand ??
-      (() =>
-        resolveCliCommand(this.readEnv().MAUZ_CODEX_PATH?.trim() || "codex", {
-          env: this.readEnv(),
-          fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
-        }));
-    this.readModel = options.model ?? (() => this.readEnv().MAUZ_CODEX_MODEL?.trim() || undefined);
-    this.readReasoningEffort =
-      options.reasoningEffort ??
-      (() => this.readEnv().MAUZ_CODEX_REASONING_EFFORT?.trim() || DEFAULT_CODEX_REASONING_EFFORT);
-    this.makeWorkingDirectory =
-      options.makeWorkingDirectory ?? (() => mkdtemp(join(tmpdir(), "mauz-codex-")));
-    this.answerTimeoutMs = options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS;
   }
 
   async answer(prompt: AnswerPrompt, options: AnswerOptions = {}): Promise<AnswerResult> {
-    const command = this.resolveCommand();
+    const env = this.readEnv();
+    const command = resolveCliCommand("codex", {
+      env,
+      fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
+    });
 
     if (command === null) {
       throw new AiProviderError(
@@ -71,11 +52,12 @@ export class CodexProvider implements AnswerProvider {
       );
     }
 
-    const workingDirectory = await this.makeWorkingDirectory();
+    const workingDirectory = await mkdtemp(join(tmpdir(), "mauz-codex-"));
 
     try {
       const imagePaths = await writeImages(workingDirectory, prompt);
-      const model = this.readModel();
+      const model = env.MAUZ_CODEX_MODEL?.trim() || undefined;
+      const reasoningEffort = env.MAUZ_CODEX_REASONING_EFFORT?.trim() || DEFAULT_CODEX_REASONING_EFFORT;
       const args = [
         ...command.args,
         "exec",
@@ -90,31 +72,26 @@ export class CodexProvider implements AnswerProvider {
         "--config",
         "features.apps=false",
         "--config",
-        `model_reasoning_effort="${this.readReasoningEffort()}"`,
+        `model_reasoning_effort="${reasoningEffort}"`,
         ...(model === undefined ? [] : ["--model", model]),
         ...imagePaths.flatMap((imagePath) => ["--image", imagePath]),
         "-"
       ];
-      const child = this.spawnProcess(command.command, args, {
+      const child = spawnCliProcess(command.command, args, {
         cwd: workingDirectory,
-        env: { ...buildCliEnvironment(this.readEnv(), CREDENTIAL_ENV_KEYS), ...command.env }
+        env: { ...buildCliEnvironment(env), ...command.env }
       });
       const output = await runAndCollect(child, {
         stdinText: buildCodexPrompt(prompt),
-        timeoutMs: this.answerTimeoutMs,
-        signal: options.signal
+        timeoutMs: ANSWER_TIMEOUT_MS
       }).catch((error: unknown) => {
-        throw toCodexError(this.id, error);
+        throw toCliError(this.id, CODEX_CLI.label, error);
       });
       const parsed = parseCodexOutput(output.stdout);
 
       if (parsed.text.length > 0) {
         options.onText?.(parsed.text);
-        return {
-          text: parsed.text,
-          model: model === undefined ? "codex" : `codex:${model}`,
-          ...(parsed.usage === undefined ? {} : { usage: parsed.usage })
-        };
+        return { text: parsed.text };
       }
 
       throw new AiProviderError(
@@ -159,13 +136,11 @@ function buildCodexPrompt(prompt: AnswerPrompt): string {
 type ParsedCodexOutput = {
   text: string;
   error?: string | undefined;
-  usage?: unknown;
 };
 
 export function parseCodexOutput(stdout: string): ParsedCodexOutput {
   let text = "";
   let error: string | undefined;
-  let usage: unknown;
 
   for (const rawLine of stdout.split(/\r?\n/)) {
     const event = parseJsonLine(rawLine.trim());
@@ -178,14 +153,12 @@ export function parseCodexOutput(stdout: string): ParsedCodexOutput {
 
     if (event.type === "item.completed" && item?.type === "agent_message" && typeof item.text === "string") {
       text = item.text.trim();
-    } else if (event.type === "turn.completed") {
-      usage = event.usage;
     } else if (event.type === "turn.failed" || event.type === "error") {
       error = readCodexErrorMessage(event) ?? error;
     }
   }
 
-  return { text, error, usage };
+  return { text, error };
 }
 
 function readCodexErrorMessage(event: Record<string, unknown>): string | undefined {
@@ -198,46 +171,7 @@ function readCodexErrorMessage(event: Record<string, unknown>): string | undefin
   return typeof nested?.message === "string" ? nested.message : undefined;
 }
 
-function describeCodexFailure(detail: string, exitCode: number | null): string {
-  const normalizedDetail = detail
-    .replace(/Reading prompt from stdin\.\.\./g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const lowered = normalizedDetail.toLowerCase();
-
-  if (lowered.includes("login") || lowered.includes("not logged in") || lowered.includes("401")) {
-    return "Codex isn't signed in. Open a terminal, run `codex login`, then try again.";
-  }
-
-  if (lowered.includes("usage limit") || lowered.includes("rate limit")) {
-    return `Codex reported a usage limit: ${truncate(normalizedDetail)}`;
-  }
-
-  if (normalizedDetail.length > 0) {
-    return `Codex could not answer: ${truncate(normalizedDetail)}`;
-  }
-
-  return `Codex exited without an answer (code ${exitCode ?? "unknown"}).`;
-}
-
-function toCodexError(providerId: string, error: unknown): AiProviderError {
-  if (error instanceof AiProviderError) {
-    return error;
-  }
-
-  if (error instanceof ProcessTimeoutError) {
-    return new AiProviderError(providerId, "Codex did not answer in time. Try again.", { cause: error });
-  }
-
-  if (error instanceof ProcessAbortedError) {
-    return new AiProviderError(providerId, "The Codex request was cancelled.", { cause: error });
-  }
-
-  const message = error instanceof Error ? error.message : String(error);
-
-  return new AiProviderError(providerId, `Mauz could not start Codex: ${message}`, { cause: error });
-}
-
-function truncate(value: string): string {
-  return value.length <= 240 ? value : `${value.slice(0, 237)}...`;
+/** Codex prints "Reading prompt from stdin..." on every run; it is not part of the error. */
+export function describeCodexFailure(detail: string, exitCode: number | null): string {
+  return describeCliFailure(CODEX_CLI, detail.replace(/Reading prompt from stdin\.\.\./g, ""), exitCode);
 }
