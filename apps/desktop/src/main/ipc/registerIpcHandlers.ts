@@ -212,7 +212,9 @@ export function registerIpcHandlers({
     const result = await taskAgents.launcher.launch(request);
     const settings = await getSettings();
 
+    // The agent picked here becomes the default, so the next task goes to it too.
     await updateSettings({
+      taskAgent: request.agentId,
       taskAgentFolders: { ...settings.taskAgentFolders, [request.agentId]: request.folder }
     });
 

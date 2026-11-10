@@ -157,11 +157,10 @@ export function formatScreenBlock(context: MauzDesktopContext, imageNote?: strin
   return ["<screen>", ...sections, "</screen>"].join("\n");
 }
 
-/** What Mauz hands a coding agent for Send to agent: the task, how to read it, and the screen. */
-export function buildTaskBrief(task: string, context: MauzDesktopContext, screenshotPath?: string): string {
+/** What Mauz hands a coding agent for Send to agent: the task, how to read it, and the screen. The screenshot goes with it as an attachment. */
+export function buildTaskBrief(task: string, context: MauzDesktopContext): string {
   const image = getContextImage(context);
-  const imageNote =
-    image === undefined || screenshotPath === undefined ? undefined : `${screenshotPath} (${image.label})`;
+  const imageNote = image === undefined ? undefined : `attached: ${image.label}`;
 
   return [
     "<task>",

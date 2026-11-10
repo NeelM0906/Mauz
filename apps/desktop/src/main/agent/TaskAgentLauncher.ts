@@ -9,6 +9,7 @@ import {
   readdirSync,
   readFileSync,
   readSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync
@@ -43,12 +44,24 @@ const MAX_FOLDERS = 30;
 const MAX_CODEX_SESSIONS = 300;
 const HANDOFF_RETENTION_MS = 24 * 60 * 60 * 1000;
 const HANDOFF_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
-const CLAUDE_TRANSCRIPT_POLL_MS = 1_000;
-const CLAUDE_TRANSCRIPT_POLLS = 120;
+const CLAUDE_POLL_MS = 2_000;
+// Three hours. A longer task still runs to the end, but it is not added to Claude desktop.
+const CLAUDE_POLLS = 3 * 60 * 30;
+const CLAUDE_LOG_TAIL_BYTES = 65_536;
 const MAX_THREAD_TITLE = 60;
 // Windows Store package family names of the desktop apps.
 const CLAUDE_PACKAGE_FAMILY = "Claude_pzs8sxrjxfjjc";
 const CODEX_PACKAGE_FAMILY = "OpenAI.Codex_2p2nqsd0c76g0";
+// The values `claude --permission-mode` accepts. Settings files store "default"; "manual" is its alias.
+const CLAUDE_PERMISSION_MODES = new Set([
+  "acceptEdits",
+  "auto",
+  "bypassPermissions",
+  "default",
+  "dontAsk",
+  "manual",
+  "plan"
+]);
 
 type DesktopHandoff = {
   folder: string;
@@ -56,6 +69,7 @@ type DesktopHandoff = {
   brief: string;
   briefPath: string;
   screenshotPath: string | undefined;
+  image: { base64: string; mimeType: string } | undefined;
   handoffDirectory: string;
 };
 
@@ -121,7 +135,8 @@ export class TaskAgentLauncher {
     this.platform = options.platform ?? process.platform;
     this.env = options.env ?? process.env;
     this.home = options.homeDirectory ?? homedir();
-    this.temp = options.tempDirectory ?? tmpdir();
+    // Windows TEMP is often a short 8.3 path (SAUDAM~1), which Claude Code refuses to read.
+    this.temp = options.tempDirectory ?? realpathSync.native(tmpdir());
     this.pathExists = options.pathExists ?? existsSync;
     this.startProcess = options.startProcess ?? startDetached;
     this.startHidden = options.startHidden ?? startHiddenProcess;
@@ -235,7 +250,8 @@ export class TaskAgentLauncher {
     }
 
     const briefPath = this.path.join(handoffDirectory, "task.md");
-    const brief = buildTaskBrief(request.task, request.context, screenshotPath);
+    // Every agent gets the screenshot attached to the prompt, so the brief only describes it.
+    const brief = buildTaskBrief(request.task, request.context);
     writeFileSync(briefPath, brief, "utf8");
 
     if (hasDesktopApp) {
@@ -245,6 +261,7 @@ export class TaskAgentLauncher {
         brief,
         briefPath,
         screenshotPath,
+        image: image?.payload,
         handoffDirectory
       };
 
@@ -507,12 +524,33 @@ export class TaskAgentLauncher {
   }
 
   /**
-   * Claude: a headless Claude Code run, hidden, then the session is handed to Claude desktop's
-   * Code list with `claude://resume`. `--startup` keeps the app's window hidden: it is the
-   * flag the app uses when it starts at sign-in.
+   * Claude: a headless Claude Code run, hidden, then the finished session is handed to Claude
+   * desktop's Code list with `claude://resume`. `--startup` keeps the app's window hidden: it is
+   * the flag the app uses when it starts at sign-in.
    */
   private async startInClaudeApp(executable: string, handoff: DesktopHandoff): Promise<void> {
     const sessionId = randomUUID();
+    const promptPath = this.path.join(handoff.handoffDirectory, "prompt.jsonl");
+    const logPath = this.path.join(handoff.handoffDirectory, "agent.log");
+    // One user message: the brief with the screenshot attached. It is the session's first message in the app.
+    const message = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: handoff.brief },
+          ...(handoff.image === undefined
+            ? []
+            : [
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: handoff.image.mimeType, data: handoff.image.base64 }
+                }
+              ])
+        ]
+      }
+    };
+    writeFileSync(promptPath, `${JSON.stringify(message)}\n`, "utf8");
 
     await this.startHidden(
       executable,
@@ -520,41 +558,62 @@ export class TaskAgentLauncher {
         "-p",
         "--session-id",
         sessionId,
-        // Headless runs cannot ask, so let it edit files in the folder; other tools stay denied.
         "--permission-mode",
-        "acceptEdits",
-        // The screenshot sits outside the project folder.
-        "--add-dir",
-        handoff.handoffDirectory,
+        this.claudePermissionMode(handoff.folder),
+        "--input-format",
+        "stream-json",
         "--output-format",
-        "json"
+        "stream-json",
+        "--verbose"
       ],
-      {
-        env: buildAgentEnvironment(this.env),
-        cwd: handoff.folder,
-        logPath: this.path.join(handoff.handoffDirectory, "agent.log"),
-        // The brief is the prompt, so it is the session's first message in the app.
-        stdinPath: handoff.briefPath
-      }
+      { env: buildAgentEnvironment(this.env), cwd: handoff.folder, logPath, stdinPath: promptPath }
     );
 
-    const followUp = this.importClaudeSession(sessionId).finally(() => this.followUps.delete(followUp));
+    const followUp = this.importClaudeSession(sessionId, logPath).finally(() =>
+      this.followUps.delete(followUp)
+    );
     this.followUps.add(followUp);
   }
 
-  /** The app can only import the session once Claude Code has written its transcript. */
-  private async importClaudeSession(sessionId: string): Promise<void> {
-    const projectsDirectory = this.path.join(this.home, ".claude", "projects");
-    const transcript = `${sessionId}.jsonl`;
+  /**
+   * The mode the user picked for this folder in Claude desktop, else Claude Code's default mode,
+   * else auto: a headless run cannot ask, so manual mode would deny every command.
+   */
+  claudePermissionMode(folder: string): string {
+    // shortcut: reads Claude desktop's undocumented preference key; update it if the app renames it.
+    const desktopConfig = readJson(
+      this.path.join(
+        this.env.LOCALAPPDATA ?? "",
+        "Claude-Data",
+        CLAUDE_PACKAGE_FAMILY.toLowerCase(),
+        "claude_desktop_config.json"
+      )
+    ) as { preferences?: { epitaxyPrefs?: Record<string, unknown> } } | null;
+    const key = this.folderKey(folder);
+    const desktopMode = Object.entries(desktopConfig?.preferences?.epitaxyPrefs ?? {})
+      .filter(([name]) => name.startsWith("epitaxy-folder-permission-mode-v2."))
+      .flatMap(([, folders]) => Object.entries((folders ?? {}) as Record<string, unknown>))
+      .find(([path]) => this.folderKey(path) === key)?.[1];
+    const cliSettings = readJson(this.path.join(this.home, ".claude", "settings.json")) as {
+      permissions?: { defaultMode?: unknown };
+    } | null;
 
-    for (let attempt = 0; attempt < CLAUDE_TRANSCRIPT_POLLS; attempt += 1) {
-      await this.sleep(CLAUDE_TRANSCRIPT_POLL_MS);
+    return (
+      [desktopMode, cliSettings?.permissions?.defaultMode].find(
+        (mode): mode is string => typeof mode === "string" && CLAUDE_PERMISSION_MODES.has(mode)
+      ) ?? "auto"
+    );
+  }
 
-      const found = listNames(projectsDirectory).some((project) =>
-        this.pathExists(this.path.join(projectsDirectory, project, transcript))
-      );
+  /**
+   * The app reads an imported session once and does not follow later writes, so the session is
+   * imported when the run has ended (its result is the last line of the log) and shows the answer.
+   */
+  private async importClaudeSession(sessionId: string, logPath: string): Promise<void> {
+    for (let attempt = 0; attempt < CLAUDE_POLLS; attempt += 1) {
+      await this.sleep(CLAUDE_POLL_MS);
 
-      if (found) {
+      if (readTail(logPath, CLAUDE_LOG_TAIL_BYTES).includes('"type":"result"')) {
         try {
           await this.startProcess(
             this.path.join(this.env.LOCALAPPDATA ?? "", "Microsoft", "WindowsApps", "claude-desktop.exe"),
@@ -562,7 +621,7 @@ export class TaskAgentLauncher {
             { env: buildAgentEnvironment(this.env) }
           );
         } catch {
-          // The run itself carries on; the session can still be resumed from the CLI.
+          // The work is done either way; the session can still be resumed from the CLI.
         }
 
         return;
@@ -651,8 +710,11 @@ export function buildAgentArguments(
     ];
   }
 
-  // Claude Code may read the brief and screenshot outside the project folder.
-  return ["--add-dir", input.handoffDirectory, prompt];
+  // The Claude Code terminal cannot take an attachment, so it reads the screenshot from the hand-off folder.
+  const screenshot =
+    input.screenshotPath === undefined ? "" : ` The attached screenshot is ${input.screenshotPath}.`;
+
+  return ["--add-dir", input.handoffDirectory, `${prompt}${screenshot}`];
 }
 
 export function buildPowerShellLauncher(launch: {
@@ -686,7 +748,14 @@ export function buildShellLauncher(launch: { folder: string; executable: string;
 /** Variables Mauz sets from its own settings (applyRuntimeEnvironment); agents use their own. */
 const MAUZ_RUNTIME_VARIABLES = new Set(["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_ASK_MODEL"]);
 
-/** The agent must not inherit Mauz's own secrets or Electron's run-as-Node switch. */
+/**
+ * Set by a Claude Code (or T3 Code) session that started Mauz. Inherited, they make the agent's
+ * run a child of that session instead of a session of its own.
+ */
+const PARENT_SESSION_VARIABLE =
+  /^(CLAUDECODE|CLAUDE_PID|CLAUDE_AGENT_SDK_VERSION|CLAUDE_CODE_(ENTRYPOINT|EXECPATH|SESSION_.*|CHILD_SESSION|MESSAGING_.*)|T3CODE_.*)$/i;
+
+/** The agent must not inherit Mauz's own secrets, Electron's run-as-Node switch, or a parent agent session. */
 export function buildAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result: NodeJS.ProcessEnv = { ...env };
 
@@ -694,7 +763,8 @@ export function buildAgentEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv
     if (
       key.startsWith("MAUZ_") ||
       key === "ELECTRON_RUN_AS_NODE" ||
-      MAUZ_RUNTIME_VARIABLES.has(key.toUpperCase())
+      MAUZ_RUNTIME_VARIABLES.has(key.toUpperCase()) ||
+      PARENT_SESSION_VARIABLE.test(key)
     ) {
       delete result[key];
     }
@@ -797,6 +867,35 @@ function listNames(directory: string): string[] {
     return readdirSync(directory);
   } catch {
     return [];
+  }
+}
+
+/** The last `bytes` of a file as text, or "" when it cannot be read. */
+function readTail(path: string, bytes: number): string {
+  let descriptor: number | undefined;
+
+  try {
+    descriptor = openSync(path, "r");
+    const size = statSync(path).size;
+    const length = Math.min(size, bytes);
+    const buffer = Buffer.alloc(length);
+    readSync(descriptor, buffer, 0, length, size - length);
+
+    return buffer.toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    if (descriptor !== undefined) {
+      closeSync(descriptor);
+    }
+  }
+}
+
+function readJson(path: string): unknown {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch {
+    return null;
   }
 }
 
