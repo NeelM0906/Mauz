@@ -52,11 +52,12 @@ const MAX_THREAD_TITLE = 60;
 // Windows Store package family names of the desktop apps.
 const CLAUDE_PACKAGE_FAMILY = "Claude_pzs8sxrjxfjjc";
 const CODEX_PACKAGE_FAMILY = "OpenAI.Codex_2p2nqsd0c76g0";
-// The values `claude --permission-mode` accepts.
+// The values `claude --permission-mode` accepts. Settings files store "default"; "manual" is its alias.
 const CLAUDE_PERMISSION_MODES = new Set([
   "acceptEdits",
   "auto",
   "bypassPermissions",
+  "default",
   "dontAsk",
   "manual",
   "plan"

@@ -321,6 +321,13 @@ describe("TaskAgentLauncher", () => {
       expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("auto");
 
       mkdirSync(join(home, ".claude"));
+      // A user who asks before each action keeps that, rather than falling back to auto.
+      writeFileSync(
+        join(home, ".claude", "settings.json"),
+        JSON.stringify({ permissions: { defaultMode: "default" } })
+      );
+      expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("default");
+
       writeFileSync(
         join(home, ".claude", "settings.json"),
         JSON.stringify({ permissions: { defaultMode: "acceptEdits" } })
