@@ -15,12 +15,10 @@ vi.mock("electron", () => ({
   }
 }));
 
-import { createMauzApiServer } from "@mauzai/api/server";
+import { loadLocalEnv } from "@mauzai/api/server";
 import { SettingsService } from "../src/main/settings/SettingsService";
 
-// Defect from docs/reafactor-audit.md. It fails today. Refactor row 1 removes createMauzApiServer,
-// so row 1 rewrites or deletes this file.
-describe("known defects", () => {
+describe(".env start order", () => {
   const originalCwd = process.cwd();
   const originalEnv = { ...process.env };
   const folder = join(tmpdir(), `mauz-dotenv-test-${randomUUID()}`);
@@ -35,13 +33,14 @@ describe("known defects", () => {
     Object.assign(process.env, originalEnv);
   });
 
-  it.skip("sees a key that is only in .env, in the order bootstrap() starts services", async () => {
+  it("sees a key that is only in .env, in the order bootstrap() starts services", async () => {
     mkdirSync(folder);
     writeFileSync(join(folder, ".env"), "OPENAI_API_KEY=sk-dotenv\n");
     process.chdir(folder);
     delete process.env.OPENAI_API_KEY;
 
-    // bootstrap(): SettingsService first, then launchLocalApi -> createMauzApiServer loads .env.
+    // bootstrap(): loadLocalEnv() first, then SettingsService.
+    loadLocalEnv();
     const service = new SettingsService({
       settingsPath: join(folder, "settings.json"),
       readTextFile: async () => {
@@ -51,12 +50,10 @@ describe("known defects", () => {
       renameFile: async () => {},
       ensureDirectory: async () => {}
     });
-    const api = await createMauzApiServer();
-    await api.close();
 
     expect(process.env.OPENAI_API_KEY).toBe("sk-dotenv"); // Ask uses this key.
-    expect((await service.get()).openAiCredentialSource).toBe("environment"); // Settings shows "none".
-    // applyRuntimeEnvironment() deletes OPENAI_API_KEY on the next save when this is missing.
+    expect((await service.get()).openAiCredentialSource).toBe("environment");
+    // applyRuntimeEnvironment() keeps OPENAI_API_KEY on the next save.
     expect((await service.getRuntime()).openAiApiKey).toBe("sk-dotenv");
   });
 });

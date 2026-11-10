@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, screen, shell } from "electron";
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -17,6 +16,7 @@ import {
   disposeAnswerProviders,
   getAiProvidersStatus,
   hasOpenAiTranscription,
+  loadLocalEnv,
   prewarmAnswerProvider,
   transcribeWithOpenAi,
   type SubscriptionConnector
@@ -37,12 +37,6 @@ import { MacInputAgentProvider } from "./input/MacInputAgentProvider";
 import { getShakeDetectorConfigForSensitivity, ShakeDetector } from "./input/ShakeDetector";
 import { TalkTranscriber } from "./talk/TalkTranscriber";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers";
-import {
-  getConfiguredLocalApiPort,
-  isPortUnavailable,
-  launchLocalApi,
-  type LocalApiHandle
-} from "./server/launchLocalApi";
 import { SettingsService, type MauzRuntimeSettings } from "./settings/SettingsService";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
 import { TrayController } from "./windows/TrayController";
@@ -50,7 +44,6 @@ import { TrayController } from "./windows/TrayController";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let popover: PopoverWindowController | null = null;
-let apiHandle: LocalApiHandle | null = null;
 let contextCollector: ContextCollector | null = null;
 let settingsService: SettingsService | null = null;
 let windowsContextHelper: WindowsContextHelper | null = null;
@@ -70,6 +63,8 @@ type QuitEvent = {
 };
 
 async function bootstrap(): Promise<void> {
+  // Before SettingsService reads the environment, so a key that is only in .env shows in Settings.
+  loadLocalEnv();
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const preloadPath = join(__dirname, "../preload/index.cjs");
   const rendererFile = join(__dirname, "../renderer/index.html");
@@ -127,26 +122,10 @@ async function bootstrap(): Promise<void> {
   // Sign-in checks for Claude Code / Codex take seconds; run them before the first question.
   void getAiProvidersStatus().catch(() => {});
 
-  const localApiToken = randomUUID();
-  const launchedApi = await launchLocalApi({
-    authToken: localApiToken,
-    answerHooks: {
-      onAnswerText: (payload) => {
-        const webContents = popover?.getWebContents();
-
-        if (webContents !== null && webContents?.isDestroyed() === false) {
-          webContents.send(IPC_CHANNELS.askDelta, payload);
-        }
-      }
-    }
-  });
-
   if (isShuttingDown()) {
-    await stopLocalApi(launchedApi);
     return;
   }
 
-  apiHandle = launchedApi;
   const initialSettings = await settingsService.get();
   currentSettings = initialSettings;
   contextCollector = new ContextCollector({
@@ -164,8 +143,6 @@ async function bootstrap(): Promise<void> {
   registerIpcHandlers({
     popover,
     contextCollector,
-    api: apiHandle,
-    localApiToken,
     getSettings: () => settingsService!.get(),
     updateSettings: applySettingsUpdate,
     taskAgents: {
@@ -461,12 +438,12 @@ function startBootstrap(): void {
   }
 
   bootstrapPromise = bootstrap()
-    .catch((error: unknown) => {
+    .catch(() => {
       if (isShuttingDown()) {
         return;
       }
 
-      showBootstrapError(error);
+      showBootstrapError();
       beginShutdown();
     })
     .finally(() => {
@@ -528,40 +505,15 @@ async function shutdownResources(): Promise<void> {
   } catch (error: unknown) {
     reportShutdownError("destroy application windows", error);
   }
-
-  const currentApiHandle = apiHandle;
-  apiHandle = null;
-
-  if (currentApiHandle !== null) {
-    await stopLocalApi(currentApiHandle);
-  }
-}
-
-async function stopLocalApi(handle: LocalApiHandle): Promise<void> {
-  try {
-    await handle.stop();
-  } catch (error: unknown) {
-    reportShutdownError("stop the local API", error);
-  }
 }
 
 function isShuttingDown(): boolean {
   return shutdownPromise !== null || shutdownComplete;
 }
 
-function showBootstrapError(error: unknown): void {
-  const title = "Mauz couldn't start";
-
-  if (isPortUnavailable(error)) {
-    dialog.showErrorBox(
-      title,
-      `The local API server could not start after trying ports from ${getConfiguredLocalApiPort()} upward. Close the other process or set MAUZ_API_PORT to an available port, then reopen Mauz.`
-    );
-    return;
-  }
-
+function showBootstrapError(): void {
   dialog.showErrorBox(
-    title,
+    "Mauz couldn't start",
     "Mauz couldn't start its desktop runtime. Restart the app. If this keeps happening, check the application logs for startup errors."
   );
 }

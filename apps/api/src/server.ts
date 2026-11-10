@@ -1,15 +1,19 @@
-import Fastify, { type FastifyInstance } from "fastify";
 import { config as loadDotenv } from "dotenv";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { AiProvidersStatusResponse, SubscriptionConnectState } from "@mauzai/shared";
-import { registerAskRoute, type AnswerStreamHooks, type AskMauzHandler } from "./routes/ask";
+import {
+  AskMauzResponseSchema,
+  type AiProvidersStatusResponse,
+  type AskMauzRequest,
+  type AskMauzResponse,
+  type SubscriptionConnectState
+} from "@mauzai/shared";
+import { AiProviderError, MissingOpenAIKeyError, NoAiProviderError } from "./errors";
+import { askMauz } from "./openai/askMauz";
 import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
 import { getDefaultAnswerProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
 import { SubscriptionConnector } from "./providers/subscriptionConnect";
-import { registerHealthzRoute } from "./routes/healthz";
 
-export type { AnswerStreamHooks } from "./routes/ask";
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
 export { applyCliPathOverride, buildCliEnvironment, getCliSearchDirectories } from "./providers/cliCommand";
 
@@ -45,37 +49,31 @@ export function disposeAnswerProviders(): void {
   getDefaultAnswerProviderRegistry().dispose();
 }
 
-export type CreateMauzApiServerOptions = {
-  askHandler?: AskMauzHandler;
-  authToken?: string;
-  logger?: boolean;
-  loadEnv?: boolean;
-  answerHooks?: AnswerStreamHooks;
-};
+/**
+ * Answers an Ask request with the user's provider. onText receives the answer text so far.
+ * Provider errors keep their message; any other failure gets one generic message.
+ */
+export async function answerAsk(
+  request: AskMauzRequest,
+  onText?: (text: string) => void
+): Promise<AskMauzResponse> {
+  try {
+    return AskMauzResponseSchema.parse(await askMauz(request, onText === undefined ? {} : { onText }));
+  } catch (error) {
+    if (
+      error instanceof NoAiProviderError ||
+      error instanceof MissingOpenAIKeyError ||
+      error instanceof AiProviderError
+    ) {
+      throw error;
+    }
 
-export async function createMauzApiServer(
-  options: CreateMauzApiServerOptions = {}
-): Promise<FastifyInstance> {
-  if (options.loadEnv ?? true) {
-    loadLocalEnv();
+    throw new Error("Ask Mauz failed while contacting the model.");
   }
-
-  const app = Fastify({
-    logger: options.logger ?? false,
-    bodyLimit: 32 * 1024 * 1024
-  });
-
-  await registerHealthzRoute(app);
-  await registerAskRoute(app, {
-    ...(options.askHandler === undefined ? {} : { askHandler: options.askHandler }),
-    ...(options.authToken === undefined ? {} : { authToken: options.authToken }),
-    ...(options.answerHooks === undefined ? {} : { answerHooks: options.answerHooks })
-  });
-
-  return app;
 }
 
-function loadLocalEnv(): void {
+/** Loads `.env.local` and `.env` from the working folder and its parents. Set variables win. */
+export function loadLocalEnv(): void {
   for (const envPath of getEnvCandidates()) {
     if (existsSync(envPath)) {
       loadDotenv({ path: envPath, override: false, quiet: true });

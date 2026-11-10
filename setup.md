@@ -126,13 +126,4 @@ pnpm dev          # run the desktop app
 pnpm check        # format, env, secrets, typecheck, test, build
 ```
 
-The desktop app starts its local API with a random internal token. To run the API package alone, set a token first:
-
-```bash
-export MAUZ_LOCAL_API_TOKEN="$(uuidgen)"
-pnpm --filter @mauzai/api dev
-```
-
-`MAUZ_API_ALLOW_UNAUTHENTICATED=true` is only for isolated debugging.
-
 Stop the macOS app without reinstalling with `pnpm stop:mac`.

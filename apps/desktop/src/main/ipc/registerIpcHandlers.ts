@@ -22,19 +22,15 @@ import {
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
-import { getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
+import { answerAsk, getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
 import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
-import type { LocalApiHandle } from "../server/launchLocalApi";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
 import type { TalkTranscriber } from "../talk/TalkTranscriber";
-import { submitAskToLocalApi } from "./askApiClient";
 
 type RegisterIpcHandlersOptions = {
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
-  api: LocalApiHandle;
-  localApiToken: string;
   getSettings: () => Promise<MauzSettings>;
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
   taskAgents: {
@@ -90,8 +86,6 @@ const HANDLED_IPC_CHANNELS = [
 export function registerIpcHandlers({
   popover,
   contextCollector,
-  api,
-  localApiToken,
   getSettings,
   updateSettings,
   taskAgents,
@@ -156,7 +150,18 @@ export function registerIpcHandlers({
   ipcMain.handle(IPC_CHANNELS.askSubmit, async (event, payload: unknown) => {
     assertTrustedSender(event);
     const request = AskMauzRequestSchema.parse(payload);
-    return submitAskToLocalApi(api, localApiToken, request);
+    const { requestId } = request;
+
+    return answerAsk(
+      request,
+      requestId === undefined
+        ? undefined
+        : (text) => {
+            if (!event.sender.isDestroyed()) {
+              event.sender.send(IPC_CHANNELS.askDelta, { requestId, text });
+            }
+          }
+    );
   });
 
   ipcMain.handle(IPC_CHANNELS.taskAgents, async (event) => {

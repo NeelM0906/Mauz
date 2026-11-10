@@ -9,6 +9,7 @@ vi.mock("electron", () => ({
   ipcMain: ipcMainMock
 }));
 vi.mock("@mauzai/api/server", () => ({
+  answerAsk: vi.fn(),
   getAiProvidersStatus: vi.fn(async () => ({
     preference: "auto",
     activeProviderId: null,
@@ -16,10 +17,10 @@ vi.mock("@mauzai/api/server", () => ({
   }))
 }));
 
+import { answerAsk } from "@mauzai/api/server";
 import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
 import type { ContextCollector } from "../src/main/context/ContextCollector";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
-import type { LocalApiHandle } from "../src/main/server/launchLocalApi";
 import type { PopoverWindowController } from "../src/main/windows/PopoverWindowController";
 
 const HANDLED_CHANNELS = [
@@ -186,6 +187,55 @@ describe("registerIpcHandlers", () => {
     expect(options.getSettings).not.toHaveBeenCalled();
   });
 
+  it("answers Ask in process and sends text updates keyed by requestId", async () => {
+    vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
+      onText?.("partial");
+      return { answer: "done", model: "test" };
+    });
+    registerIpcHandlers(createOptions());
+    const event = createInvokeEvent();
+    const request = { question: "What is this?", context: createAskContext(), requestId: "req-1" };
+
+    await expect(getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request)).resolves.toEqual({
+      answer: "done",
+      model: "test"
+    });
+
+    expect(answerAsk).toHaveBeenCalledWith(request, expect.any(Function));
+    expect(event.sender.send).toHaveBeenCalledWith(IPC_CHANNELS.askDelta, {
+      requestId: "req-1",
+      text: "partial"
+    });
+  });
+
+  it("does not send Ask text updates to a destroyed window", async () => {
+    vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
+      onText?.("partial");
+      return { answer: "done", model: "test" };
+    });
+    registerIpcHandlers(createOptions());
+    const event = createInvokeEvent();
+    event.sender.isDestroyed.mockReturnValue(true);
+
+    await getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, {
+      question: "What is this?",
+      context: createAskContext(),
+      requestId: "req-1"
+    });
+
+    expect(event.sender.send).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid Ask payload without calling the provider", async () => {
+    vi.mocked(answerAsk).mockClear();
+    registerIpcHandlers(createOptions());
+
+    await expect(
+      getRegisteredHandler(IPC_CHANNELS.askSubmit)(createInvokeEvent(), { question: "" })
+    ).rejects.toThrow();
+    expect(answerAsk).not.toHaveBeenCalled();
+  });
+
   it("passes Task agent settings through to updateSettings without stripping them", async () => {
     const options = createOptions();
 
@@ -342,7 +392,7 @@ function getRegisteredHandler(channel: string): (...args: unknown[]) => Promise<
   return call[1] as (...args: unknown[]) => Promise<unknown>;
 }
 
-function createInvokeEvent(origin = "file:///renderer"): unknown {
+function createInvokeEvent(origin = "file:///renderer") {
   const url = `${origin}/index.html`;
 
   return {
@@ -350,7 +400,9 @@ function createInvokeEvent(origin = "file:///renderer"): unknown {
       url
     },
     sender: {
-      getURL: () => url
+      getURL: () => url,
+      isDestroyed: vi.fn(() => false),
+      send: vi.fn()
     }
   };
 }
@@ -390,17 +442,10 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     collectForAsk: vi.fn(),
     discardActivationSnapshot: vi.fn()
   } as unknown as ContextCollector;
-  const api: LocalApiHandle = {
-    baseUrl: "http://127.0.0.1:47891",
-    port: 47891,
-    stop: vi.fn(async () => {})
-  };
 
   return {
     popover,
     contextCollector,
-    api,
-    localApiToken: "test-token",
     taskAgents: {
       launcher: {
         listAgents: vi.fn(() => [

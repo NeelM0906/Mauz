@@ -206,7 +206,7 @@ describe("buildCliEnvironment", () => {
   it("removes Mauz internals and every API credential", () => {
     const env = buildCliEnvironment({
       PATH: "/bin",
-      MAUZ_LOCAL_API_TOKEN: "secret",
+      MAUZ_BROWSER_TOKEN: "secret",
       ELECTRON_RUN_AS_NODE: "1",
       ANTHROPIC_API_KEY: "sk-ant",
       ANTHROPIC_AUTH_TOKEN: "token",

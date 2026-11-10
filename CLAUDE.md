@@ -47,7 +47,6 @@ to their source files. The desktop build bundles both packages from source.
 | `agent/`    | `TaskAgentLauncher.ts`: find the agent CLI, write the task brief, start the agent.            |
 | `settings/` | `SettingsService.ts`: settings file, encrypted API keys.                                      |
 | `talk/`     | `TalkTranscriber.ts`: OpenAI first, Windows speech recognition second.                        |
-| `server/`   | `launchLocalApi.ts`: starts the loopback HTTP server that Ask uses.                           |
 
 ### Answer providers (`apps/api/src/providers`)
 
@@ -66,12 +65,14 @@ input/*  -->  index.ts handleActivation  -->  context/ContextCollector (snapshot
         |
 renderer (MauzMenu) --window.mauz--> preload --ipcRenderer.invoke--> ipc/registerIpcHandlers
         |
-        +-- Ask:           askApiClient --HTTP 127.0.0.1--> apps/api routes/ask --> registry --> provider
+        +-- Ask:           registerIpcHandlers --> answerAsk --> askMauz --> registry --> provider
         +-- Send to agent: agent/TaskAgentLauncher --> agent desktop app or terminal
         +-- Dictate:       talk/TalkTranscriber --> apps/api transcribeAudio, or Windows helper
 ```
 
-Answer text streams back through an in-process callback (`ask:delta`), not through HTTP.
+Every call into `apps/api` is a direct function import from `@mauzai/api/server`. Answer text streams
+as `ask:delta` events keyed by `requestId`. `bootstrap()` loads `.env` first, before any service reads
+the environment.
 
 ## Rules that the code follows
 
@@ -92,7 +93,5 @@ Answer text streams back through an in-process callback (`ask:delta`), not throu
 
 ## Known drift (audit of 2026-11-10)
 
-- Only Ask uses the loopback HTTP server. All other calls into `apps/api` are direct function imports.
-- `.env` is loaded inside `createMauzApiServer`, after `SettingsService` has read the environment.
 - Names: Ask is also called "lens" and "answer". Dictate is also called "talk" and "pushToTalk".
   `apps/api/src/openai/askMauz.ts` is not specific to OpenAI.
