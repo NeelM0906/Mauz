@@ -30,17 +30,7 @@ function bubbleStyle(key: BubbleKey, order: number, size = 52): React.CSSPropert
 }
 
 export function MauzMenu(): React.JSX.Element {
-  const {
-    settings,
-    status,
-    setAskAnswer,
-    setAskError,
-    setAskLoading,
-    setCurrentContext,
-    setMode,
-    setSettings,
-    setStatus
-  } = useMauzStore();
+  const { settings, status, setCurrentContext, setMode, setSettings, setStatus } = useMauzStore();
   const [pendingAction, setPendingAction] = useState<BubbleKey | null>(null);
   const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
 
@@ -107,9 +97,6 @@ export function MauzMenu(): React.JSX.Element {
   const openPanel = async (bubble: BubbleKey): Promise<void> => {
     setPendingAction(bubble);
     setStatus(null);
-    setAskAnswer(null);
-    setAskError(null);
-    setAskLoading(false);
 
     try {
       const context = await mauzClient.startAsk();

@@ -18,29 +18,25 @@ import { FormattedAnswer } from "./FormattedAnswer";
 
 const DEFAULT_QUESTION = "What is this, and what should I know about it?";
 
+type AskState =
+  | { status: "idle" }
+  | { status: "loading"; partial: string | null }
+  | { status: "answered"; answer: string }
+  | { status: "failed"; message: string };
+
 export function LensPanel(): React.JSX.Element {
-  const {
-    currentContext,
-    askAnswer,
-    askError,
-    askLoading,
-    backToMenu,
-    setAskAnswer,
-    setAskError,
-    setAskLoading,
-    dictation,
-    setDictation
-  } = useMauzStore();
+  const { currentContext, backToMenu, dictation, setDictation } = useMauzStore();
 
   const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
   const [question, setQuestion] = useState("");
-  const [streamingAnswer, setStreamingAnswer] = useState<string | null>(null);
+  // Local to this panel, so an answer that arrives after the panel closed has nowhere to go.
+  const [ask, setAsk] = useState<AskState>({ status: "idle" });
   const askRequestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return mauzClient.onAnswerDelta(({ requestId, text }) => {
       if (requestId === askRequestIdRef.current) {
-        setStreamingAnswer(text);
+        setAsk((current) => (current.status === "loading" ? { status: "loading", partial: text } : current));
       }
     });
   }, []);
@@ -57,7 +53,7 @@ export function LensPanel(): React.JSX.Element {
 
   const submitQuestion = async (typedQuestion: string): Promise<void> => {
     if (currentContext === null) {
-      setAskError("Mauz does not have cursor context yet.");
+      setAsk({ status: "failed", message: "Mauz does not have cursor context yet." });
       return;
     }
 
@@ -65,10 +61,7 @@ export function LensPanel(): React.JSX.Element {
     const requestId = crypto.randomUUID();
 
     askRequestIdRef.current = requestId;
-    setStreamingAnswer(null);
-    setAskLoading(true);
-    setAskError(null);
-    setAskAnswer(null);
+    setAsk({ status: "loading", partial: null });
 
     try {
       const response = await mauzClient.submitAsk({
@@ -77,14 +70,16 @@ export function LensPanel(): React.JSX.Element {
         requestId
       });
 
-      setAskAnswer(response.answer);
+      if (askRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setAsk({ status: "answered", answer: response.answer });
       setQuestion("");
     } catch (error) {
-      setAskError(error instanceof Error ? error.message : "Ask failed.");
-    } finally {
-      askRequestIdRef.current = null;
-      setStreamingAnswer(null);
-      setAskLoading(false);
+      if (askRequestIdRef.current === requestId) {
+        setAsk({ status: "failed", message: error instanceof Error ? error.message : "Ask failed." });
+      }
     }
   };
 
@@ -101,6 +96,8 @@ export function LensPanel(): React.JSX.Element {
     setQuestion(dictation);
     void submitQuestionRef.current(dictation);
   }, [dictation, setDictation]);
+
+  const askLoading = ask.status === "loading";
 
   return (
     <section className="lens-panel lens-task-panel" aria-label="Ask">
@@ -190,16 +187,14 @@ export function LensPanel(): React.JSX.Element {
 
       <div
         className="answer-area lens-answer-area"
-        data-empty={askError === null && askAnswer === null}
+        data-empty={ask.status === "idle" || askLoading}
         aria-live="polite"
         aria-busy={askLoading}
       >
-        {askError !== null ? <p className="ask-error">{askError}</p> : null}
-        {askLoading && askAnswer === null && streamingAnswer !== null ? (
-          <FormattedAnswer answer={streamingAnswer} />
-        ) : null}
-        {askAnswer !== null ? <FormattedAnswer answer={askAnswer} /> : null}
-        {askError === null && askAnswer === null && streamingAnswer === null && !askLoading ? (
+        {ask.status === "failed" ? <p className="ask-error">{ask.message}</p> : null}
+        {ask.status === "loading" && ask.partial !== null ? <FormattedAnswer answer={ask.partial} /> : null}
+        {ask.status === "answered" ? <FormattedAnswer answer={ask.answer} /> : null}
+        {ask.status === "idle" ? (
           <p className="ask-empty">
             Ask anything about what is under the pointer or selected. Press Ask with nothing typed to learn
             what this is.
