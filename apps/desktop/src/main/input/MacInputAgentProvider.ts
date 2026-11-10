@@ -223,13 +223,13 @@ export class MacInputAgentProvider implements InputProvider {
       return;
     }
 
-    // Fix 2: Reset restart budget on the first valid sample so two crashes hours apart
+    // Reset restart budget on the first valid sample so two crashes hours apart
     // don't permanently exhaust the lifetime cap.
     if (this.restartAttempts > 0) {
       this.restartAttempts = 0;
     }
 
-    // Fix 3: Clear permission-failure state when a valid sample arrives — the user
+    // Clear permission-failure state when a valid sample arrives — the user
     // must have granted Accessibility while we were retrying.
     if (this.permissionFailure) {
       this.permissionFailure = false;
@@ -267,7 +267,7 @@ export class MacInputAgentProvider implements InputProvider {
     }, this.restartDelayMs);
   }
 
-  // Fix 3: Retry spawning every permissionRetryDelayMs while in permission-failure state.
+  // Retry spawning every permissionRetryDelayMs while in permission-failure state.
   // Uses MAUZ_AX_PROMPT=0 so the user is not repeatedly prompted — they already saw the
   // prompt on first launch; the retry is purely to pick up a newly granted permission.
   private schedulePermissionRetry(): void {
