@@ -1,9 +1,10 @@
 import { tmpdir } from "node:os";
-import type {
-  AiProviderId,
-  AiProviderPreference,
-  AiProviderStatus,
-  AiProvidersStatusResponse
+import {
+  AiProviderPreferenceSchema,
+  type AiProviderId,
+  type AiProviderPreference,
+  type AiProviderStatus,
+  type AiProvidersStatusResponse
 } from "@mauzai/shared";
 import { NoAiProviderError } from "../errors";
 import { AnthropicApiProvider, DEFAULT_ANTHROPIC_ASK_MODEL } from "./anthropicProvider";
@@ -65,16 +66,7 @@ export class AnswerProviderRegistry {
   async getStatus(options: { refresh?: boolean } = {}): Promise<AiProvidersStatusResponse> {
     const cli = await this.detectCliProviders(options.refresh === true);
     const env = this.readEnv();
-    const detections: Record<AiProviderId, ProviderDetection> = {
-      ...cli,
-      anthropic: detectApiKey(env.ANTHROPIC_API_KEY, env.ANTHROPIC_ASK_MODEL, DEFAULT_ANTHROPIC_ASK_MODEL),
-      openai: detectApiKey(env.OPENAI_API_KEY, env.OPENAI_ASK_MODEL, DEFAULT_OPENAI_ASK_MODEL)
-    };
-    const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
-      id,
-      label: PROVIDER_LABELS[id],
-      ...detections[id]
-    }));
+    const providers = listProviders(cli, env);
     const preference = readPreference(env.MAUZ_AI_PROVIDER);
 
     return {
@@ -115,14 +107,7 @@ export class AnswerProviderRegistry {
     }
 
     const env = this.readEnv();
-    const providers: AiProviderStatus[] = AUTO_PROVIDER_ORDER.map((id) => ({
-      id,
-      label: PROVIDER_LABELS[id],
-      ...(id === "claude-code" || id === "codex"
-        ? cli[id]
-        : detectApiKey(id === "anthropic" ? env.ANTHROPIC_API_KEY : env.OPENAI_API_KEY, undefined, "unused"))
-    }));
-    const active = pickProvider(readPreference(env.MAUZ_AI_PROVIDER), providers);
+    const active = pickProvider(readPreference(env.MAUZ_AI_PROVIDER), listProviders(cli, env));
 
     if (active !== null) {
       this.providers[active.id].prewarm?.(systemPrompt);
@@ -232,36 +217,35 @@ export function resolveCliCommandForMauz(name: string, env: NodeJS.ProcessEnv): 
   });
 }
 
-/** The selected provider when it is ready; with "auto", the first ready one in AUTO_PROVIDER_ORDER. */
+/** Every provider's status, in AUTO_PROVIDER_ORDER. */
+function listProviders(
+  cli: Record<"claude-code" | "codex", ProviderDetection>,
+  env: NodeJS.ProcessEnv
+): AiProviderStatus[] {
+  const detections: Record<AiProviderId, ProviderDetection> = {
+    ...cli,
+    anthropic: detectApiKey(env.ANTHROPIC_API_KEY, env.ANTHROPIC_ASK_MODEL, DEFAULT_ANTHROPIC_ASK_MODEL),
+    openai: detectApiKey(env.OPENAI_API_KEY, env.OPENAI_ASK_MODEL, DEFAULT_OPENAI_ASK_MODEL)
+  };
+
+  return AUTO_PROVIDER_ORDER.map((id) => ({ id, label: PROVIDER_LABELS[id], ...detections[id] }));
+}
+
+/**
+ * The selected provider when it is ready; with "auto", the first ready one.
+ * `providers` must be in AUTO_PROVIDER_ORDER, as `listProviders` returns them.
+ */
 export function pickProvider(
   preference: AiProviderPreference,
   providers: readonly AiProviderStatus[]
 ): AiProviderStatus | null {
-  if (preference !== "auto") {
-    const selected = providers.find((provider) => provider.id === preference);
-    return selected?.available === true ? selected : null;
-  }
+  const ready = providers.filter((provider) => provider.available);
 
-  for (const id of AUTO_PROVIDER_ORDER) {
-    const provider = providers.find((candidate) => candidate.id === id);
-
-    if (provider?.available === true) {
-      return provider;
-    }
-  }
-
-  return null;
+  return (preference === "auto" ? ready[0] : ready.find((provider) => provider.id === preference)) ?? null;
 }
 
 function readPreference(value: string | undefined): AiProviderPreference {
-  const normalized = value?.trim();
-
-  return normalized === "claude-code" ||
-    normalized === "codex" ||
-    normalized === "anthropic" ||
-    normalized === "openai"
-    ? normalized
-    : "auto";
+  return AiProviderPreferenceSchema.catch("auto").parse(value?.trim());
 }
 
 function detectApiKey(
