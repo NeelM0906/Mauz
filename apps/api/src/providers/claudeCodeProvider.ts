@@ -19,7 +19,7 @@ import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "
 export const DEFAULT_CLAUDE_CODE_MODEL = "sonnet";
 export const DEFAULT_CLAUDE_CODE_EFFORT = "low";
 const ANSWER_TIMEOUT_MS = 120_000;
-const CLAUDE_CLI: AnswerCli = {
+export const CLAUDE_CLI: AnswerCli = {
   label: "Claude Code",
   signInKeywords: ["/login", "not logged in", "invalid api key", "authentication"],
   signInMessage: "Claude Code isn't signed in. Open a terminal, run `claude`, sign in, then try again."

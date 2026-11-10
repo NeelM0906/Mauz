@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { AiProviderStatus, AskMauzRequest } from "@mauzai/shared";
 import { AiProviderError, NoAiProviderError } from "../src/errors";
 import { askMauz, buildAnswerPrompt } from "../src/openai/askMauz";
-import { ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
+import { CLAUDE_CLI, ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
 import { buildCliEnvironment, getCliSearchDirectories, resolveCliCommand } from "../src/providers/cliCommand";
-import { parseCodexOutput } from "../src/providers/codexProvider";
-import type { ChildProcessLike, SpawnLike } from "../src/providers/processRunner";
+import { describeCodexFailure, parseCodexOutput } from "../src/providers/codexProvider";
+import { describeCliFailure, type ChildProcessLike, type SpawnLike } from "../src/providers/processRunner";
 import { AnthropicApiProvider } from "../src/providers/anthropicProvider";
 import { AnswerProviderRegistry, pickProvider } from "../src/providers/registry";
 import type { AnswerPrompt, AnswerProvider } from "../src/providers/types";
@@ -344,6 +344,50 @@ describe("ClaudeCodeProvider", () => {
     const provider = new ClaudeCodeProvider({ resolveCommand: () => null, env: () => ({}) });
 
     await expect(provider.answer(PROMPT)).rejects.toBeInstanceOf(AiProviderError);
+  });
+});
+
+describe("CLI failure text", () => {
+  const long = "x".repeat(300);
+
+  it.each([
+    [
+      "Reading prompt from stdin...\nError: not logged in",
+      1,
+      "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+    ],
+    [
+      "Please run codex login",
+      1,
+      "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+    ],
+    [
+      "HTTP 401 Unauthorized",
+      1,
+      "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
+    ],
+    ["You hit your usage limit.", 1, "Codex reported a usage limit: You hit your usage limit."],
+    ["Rate limit   reached\n", 1, "Codex reported a usage limit: Rate limit reached"],
+    ["Something  broke\n\nbadly", 1, "Codex could not answer: Something broke badly"],
+    [long, 1, `Codex could not answer: ${"x".repeat(237)}...`],
+    ["Reading prompt from stdin...", 2, "Codex exited without an answer (code 2)."],
+    ["   ", null, "Codex exited without an answer (code unknown)."]
+  ])("Codex: %j (exit %s)", (detail, exitCode, expected) => {
+    expect(describeCodexFailure(detail, exitCode)).toBe(expected);
+  });
+
+  const signIn = "Claude Code isn't signed in. Open a terminal, run `claude`, sign in, then try again.";
+
+  it.each([
+    ["Invalid API key · Please run /login", 1, signIn],
+    ["Not logged in", 1, signIn],
+    ["authentication failed", 1, signIn],
+    ["Usage limit reached", 1, "Claude Code reported a usage limit: Usage limit reached"],
+    ["Something  broke", 1, "Claude Code could not answer: Something broke"],
+    ["Please run codex login", 1, "Claude Code could not answer: Please run codex login"],
+    ["", 3, "Claude Code exited without an answer (code 3)."]
+  ])("Claude Code: %j (exit %s)", (detail, exitCode, expected) => {
+    expect(describeCliFailure(CLAUDE_CLI, detail, exitCode)).toBe(expected);
   });
 });
 

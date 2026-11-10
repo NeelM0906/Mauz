@@ -94,8 +94,10 @@ export class CodexProvider implements AnswerProvider {
         return { text: parsed.text };
       }
 
-      const detail = (parsed.error ?? output.stderr).replace(/Reading prompt from stdin\.\.\./g, "");
-      throw new AiProviderError(this.id, describeCliFailure(CODEX_CLI, detail, output.exitCode));
+      throw new AiProviderError(
+        this.id,
+        describeCodexFailure(parsed.error ?? output.stderr, output.exitCode)
+      );
     } finally {
       await rm(workingDirectory, { recursive: true, force: true }).catch(() => {});
     }
@@ -167,4 +169,9 @@ function readCodexErrorMessage(event: Record<string, unknown>): string | undefin
   const nested = event.error as Record<string, unknown> | undefined;
 
   return typeof nested?.message === "string" ? nested.message : undefined;
+}
+
+/** Codex prints "Reading prompt from stdin..." on every run; it is not part of the error. */
+export function describeCodexFailure(detail: string, exitCode: number | null): string {
+  return describeCliFailure(CODEX_CLI, detail.replace(/Reading prompt from stdin\.\.\./g, ""), exitCode);
 }

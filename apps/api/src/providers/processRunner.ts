@@ -174,10 +174,6 @@ export function describeCliFailure(cli: AnswerCli, detail: string, exitCode: num
 
 /** Turns a `runAndCollect` rejection (timeout or start failure) into a message for the user. */
 export function toCliError(providerId: string, label: string, error: unknown): AiProviderError {
-  if (error instanceof AiProviderError) {
-    return error;
-  }
-
   if (error instanceof ProcessTimeoutError) {
     return new AiProviderError(providerId, `${label} did not answer in time. Try again.`, { cause: error });
   }
