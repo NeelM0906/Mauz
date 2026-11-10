@@ -1,61 +1,27 @@
-import {
-  ArrowLeft,
-  Bot,
-  Check,
-  FolderOpen,
-  Globe,
-  MousePointerClick,
-  RefreshCw,
-  Save,
-  Settings2,
-  ShieldOff,
-  Sparkles,
-  Trash2,
-  Zap
-} from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import type {
-  AiProviderId,
-  AiProviderPreference,
-  AiProvidersStatusResponse,
-  BrowserExtensionStatus,
-  MauzSettings,
-  MauzSettingsUpdate,
-  ShakeSensitivity,
-  SubscriptionConnectState,
-  SubscriptionProviderId,
-  TaskAgentPreference,
-  TaskAgentStatus
-} from "@mauzai/shared";
-import { MAX_CAPTURE_BLOCKED_APPS, MAX_CAPTURE_BLOCKED_ENTRY_CHARS } from "@mauzai/shared";
+import { ArrowLeft, Save, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { AiProviderId, AiProviderPreference, MauzSettings } from "@mauzai/shared";
 import { mauz } from "@renderer/lib/mauzClient";
+import {
+  buildSettingsUpdate,
+  EMPTY_KEY_DRAFTS,
+  formatAppList,
+  type ApiKeyDrafts,
+  type ApiKeyId,
+  type BlockedListText
+} from "@renderer/lib/settingsUpdate";
 import { useMauzStore } from "@renderer/state/useMauzStore";
+import { AiProviderList, useAiProviders } from "./AiProviders";
 import { BrandLogo } from "./BrandLogo";
 import { goBackToMenu } from "./PanelHeader";
 import {
-  isConnecting,
-  isSubscriptionProvider,
-  SubscriptionButton,
-  SubscriptionSignIn
-} from "./SubscriptionConnect";
-
-const SENSITIVITY_OPTIONS: Array<{
-  value: ShakeSensitivity;
-  label: string;
-}> = [
-  {
-    value: "relaxed",
-    label: "Relaxed"
-  },
-  {
-    value: "normal",
-    label: "Normal"
-  },
-  {
-    value: "strict",
-    label: "Strict"
-  }
-];
+  ActivationSection,
+  ApiKeyField,
+  BrowserExtensionSection,
+  NeverCaptureSection,
+  TaskAgentSection,
+  type UpdateDraft
+} from "./SettingsSections";
 
 const AI_PROVIDER_CHOICES: Array<{ value: AiProviderId; label: string }> = [
   { value: "claude-code", label: "Claude Code subscription" },
@@ -68,183 +34,72 @@ const AI_PROVIDER_OPTIONS: Array<{ value: AiProviderPreference; label: string }>
   ...AI_PROVIDER_CHOICES
 ];
 
-const FALLBACK_TASK_AGENTS: TaskAgentStatus[] = [
-  { id: "hermes", label: "Hermes", installed: true },
-  { id: "claude-code", label: "Claude Code", installed: true },
-  { id: "codex", label: "Codex", installed: true }
+const API_KEY_FIELDS: Array<{
+  id: ApiKeyId;
+  label: string;
+  vendor: string;
+  placeholder: string;
+  isConfigured(settings: MauzSettings): boolean;
+}> = [
+  {
+    id: "anthropic",
+    label: "Anthropic API key",
+    vendor: "Anthropic",
+    placeholder: "sk-ant-...",
+    isConfigured: (settings) => settings.anthropicKeyConfigured
+  },
+  {
+    id: "openai",
+    label: "OpenAI API key",
+    vendor: "OpenAI",
+    placeholder: "sk-...",
+    isConfigured: (settings) => settings.apiKeyConfigured
+  }
 ];
 
 export function SettingsPanel(): React.JSX.Element {
   const { settings, setSettings, setStatus } = useMauzStore();
   const [draft, setDraft] = useState<MauzSettings | null>(settings);
-  // Edited as free text so typing a new line is not normalized away; parsed on Save.
-  const [blockedAppsDraft, setBlockedAppsDraft] = useState(formatAppList(settings?.captureBlockedApps));
-  const [blockedSitesDraft, setBlockedSitesDraft] = useState(formatAppList(settings?.captureBlockedSites));
-  const [browserStatus, setBrowserStatus] = useState<BrowserExtensionStatus | null>(null);
-  const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
-  const [clearSavedOpenAiApiKey, setClearSavedOpenAiApiKey] = useState(false);
+  const [blocked, setBlocked] = useState<BlockedListText>(toBlockedListText(settings));
+  const [keyDrafts, setKeyDrafts] = useState<ApiKeyDrafts>(EMPTY_KEY_DRAFTS);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
-  const [taskAgents, setTaskAgents] = useState<TaskAgentStatus[] | null>(null);
   const [saving, setSaving] = useState(false);
-  const [providersStatus, setProvidersStatus] = useState<AiProvidersStatusResponse | null>(null);
-  const [providersLoading, setProvidersLoading] = useState(false);
-  const [anthropicApiKeyDraft, setAnthropicApiKeyDraft] = useState("");
-  const [clearSavedAnthropicApiKey, setClearSavedAnthropicApiKey] = useState(false);
-  const [connectStates, setConnectStates] = useState<
-    Partial<Record<SubscriptionProviderId, SubscriptionConnectState>>
-  >({});
-  const [providerActionBusy, setProviderActionBusy] = useState(false);
-  const [providerActionError, setProviderActionError] = useState<string | null>(null);
+  const providers = useAiProviders();
 
-  const loadProvidersStatus = useCallback(async (refresh: boolean): Promise<void> => {
-    setProvidersLoading(true);
-
-    try {
-      setProvidersStatus(await mauz().providers.status({ refresh }));
-    } catch {
-      setProvidersStatus(null);
-    } finally {
-      setProvidersLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProvidersStatus(false);
-  }, [loadProvidersStatus]);
-
-  useEffect(() => {
-    let disposed = false;
-
-    void mauz()
-      .browser.status()
-      .then(
-        (status) => {
-          if (!disposed) {
-            setBrowserStatus(status);
-          }
-        },
-        () => {
-          // The section shows setup steps without a connection state.
-        }
-      );
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  useEffect(
-    () =>
-      mauz().providers.onConnectState((state) => {
-        setConnectStates((current) => ({ ...current, [state.providerId]: state }));
-
-        if (state.phase === "connected") {
-          // The connector already refreshed detection, so the cached status is current.
-          void loadProvidersStatus(false);
-        }
-      }),
-    [loadProvidersStatus]
-  );
-
-  const connectSubscription = async (providerId: SubscriptionProviderId): Promise<void> => {
-    setProviderActionError(null);
-
-    try {
-      const state = await mauz().providers.connect({ providerId });
-      setConnectStates((current) => ({ ...current, [providerId]: state }));
-    } catch (error) {
-      setProviderActionError(error instanceof Error ? error.message : "Could not start sign-in.");
-    }
-  };
-
-  const cancelSubscriptionConnect = (state: SubscriptionConnectState): void => {
-    void mauz()
-      .providers.cancelConnect({ connectId: state.connectId })
-      .catch(() => {});
-    setConnectStates((current) => ({ ...current, [state.providerId]: undefined }));
-  };
-
-  const disconnectSubscription = async (providerId: SubscriptionProviderId): Promise<void> => {
-    setProviderActionBusy(true);
-    setProviderActionError(null);
-
-    try {
-      setProvidersStatus(await mauz().providers.disconnect({ providerId }));
-      setConnectStates((current) => ({ ...current, [providerId]: undefined }));
-    } catch (error) {
-      setProviderActionError(error instanceof Error ? error.message : "Could not sign out.");
-    } finally {
-      setProviderActionBusy(false);
-    }
-  };
-
+  // Each new settings value (loaded or saved) resets the drafts. With none, load them: the store
+  // has none after an activation or a tray open, so the main process's changes show here.
   useEffect(() => {
     setDraft(settings);
-    setBlockedAppsDraft(formatAppList(settings?.captureBlockedApps));
-    setBlockedSitesDraft(formatAppList(settings?.captureBlockedSites));
-    setOpenAiApiKeyDraft("");
-    setClearSavedOpenAiApiKey(false);
-  }, [settings]);
+    setBlocked(toBlockedListText(settings));
+    setKeyDrafts(EMPTY_KEY_DRAFTS);
 
-  useEffect(() => {
+    if (settings !== null) {
+      return;
+    }
+
     let disposed = false;
 
-    const loadSettings = async (): Promise<void> => {
-      try {
-        const nextSettings = await mauz().settings.open();
-
-        if (!disposed) {
-          setSettings(nextSettings);
-          setDraft(nextSettings);
-          setOpenAiApiKeyDraft("");
-          setClearSavedOpenAiApiKey(false);
+    void mauz()
+      .settings.open()
+      .then(
+        (nextSettings) => {
+          if (!disposed) {
+            setSettings(nextSettings);
+          }
+        },
+        (error: unknown) => {
+          if (!disposed) {
+            setSettingsMessage(error instanceof Error ? error.message : "Could not load Mauz settings.");
+          }
         }
-      } catch (error) {
-        if (!disposed) {
-          setSettingsMessage(error instanceof Error ? error.message : "Could not load Mauz settings.");
-        }
-      }
-    };
-
-    if (settings === null) {
-      void loadSettings();
-    }
+      );
 
     return () => {
       disposed = true;
     };
   }, [setSettings, settings]);
 
-  useEffect(() => {
-    let disposed = false;
-
-    void mauz()
-      .task.agents()
-      .then(
-        (response) => {
-          if (!disposed) {
-            setTaskAgents(response.agents);
-          }
-        },
-        () => {
-          // The picker still lists every agent, just without install status.
-        }
-      );
-
-    return () => {
-      disposed = true;
-    };
-  }, []);
-
-  const browseTaskFolder = async (): Promise<void> => {
-    const picked = await mauz().task.pickFolder();
-
-    if (picked !== null) {
-      updateDraft("taskFolder", picked);
-    }
-  };
-
-  const updateDraft = <Key extends keyof MauzSettings>(key: Key, value: MauzSettings[Key]): void => {
+  const updateDraft: UpdateDraft = (key, value) => {
     setDraft((current) => (current === null ? current : { ...current, [key]: value }));
   };
 
@@ -257,45 +112,10 @@ export function SettingsPanel(): React.JSX.Element {
     setSettingsMessage(null);
 
     try {
-      const update: MauzSettingsUpdate = {
-        nativeShakeEnabled: draft.nativeShakeEnabled,
-        devHotkeyEnabled: draft.devHotkeyEnabled,
-        shakeSensitivity: draft.shakeSensitivity,
-        openAiAuthDisconnected: draft.openAiAuthDisconnected,
-        askModel: draft.askModel,
-        captureBlockedApps: parseAppList(blockedAppsDraft),
-        captureBlockedSites: parseAppList(blockedSitesDraft),
-        taskAgent: draft.taskAgent,
-        taskFolder: draft.taskFolder.trim(),
-        aiProvider: draft.aiProvider
-      };
-      const trimmedApiKeyDraft = openAiApiKeyDraft.trim();
-      const trimmedAnthropicApiKeyDraft = anthropicApiKeyDraft.trim();
-
-      if (trimmedApiKeyDraft.length > 0) {
-        update.openAiApiKey = trimmedApiKeyDraft;
-      }
-
-      if (clearSavedOpenAiApiKey) {
-        update.clearOpenAiApiKey = true;
-      }
-
-      if (trimmedAnthropicApiKeyDraft.length > 0) {
-        update.anthropicApiKey = trimmedAnthropicApiKeyDraft;
-      }
-
-      if (clearSavedAnthropicApiKey) {
-        update.clearAnthropicApiKey = true;
-      }
-
-      const nextSettings = await mauz().settings.update(update);
-      setSettings(nextSettings);
-      setOpenAiApiKeyDraft("");
-      setClearSavedOpenAiApiKey(false);
-      setAnthropicApiKeyDraft("");
-      setClearSavedAnthropicApiKey(false);
+      // The new settings value resets the drafts (effect above).
+      setSettings(await mauz().settings.update(buildSettingsUpdate(draft, keyDrafts, blocked)));
       setSettingsMessage("Settings saved.");
-      void loadProvidersStatus(false);
+      void providers.load(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not update Mauz settings.";
 
@@ -310,7 +130,7 @@ export function SettingsPanel(): React.JSX.Element {
     return (
       <section className="settings-panel" aria-label="Mauz settings">
         <SettingsHeader />
-        <p className="settings-message">Loading settings...</p>
+        <p className="settings-message">{settingsMessage ?? "Loading settings..."}</p>
       </section>
     );
   }
@@ -339,295 +159,39 @@ export function SettingsPanel(): React.JSX.Element {
               ))}
             </select>
           </label>
-          <div className="auth-provider-list" aria-label="Detected AI providers" aria-busy={providersLoading}>
-            {providersStatus === null ? (
-              <p className="settings-helper">
-                {providersLoading
-                  ? "Checking Claude Code, Codex, and API keys..."
-                  : "Provider status unavailable."}
-              </p>
-            ) : (
-              providersStatus.providers
-                .filter((provider) => isSubscriptionProvider(provider.id))
-                .map((provider) => {
-                  const subscription = isSubscriptionProvider(provider.id) ? provider.id : null;
-                  const connectState = subscription === null ? undefined : connectStates[subscription];
-
-                  return (
-                    <div
-                      className="auth-provider-card"
-                      data-status={provider.available ? "active" : "missing"}
-                      key={provider.id}
-                    >
-                      <div>
-                        <strong>{provider.label}</strong>
-                        <span>
-                          {connectState?.phase === "failed" && connectState.message !== null
-                            ? connectState.message
-                            : `${provider.detail} Model: ${provider.model}.`}
-                        </span>
-                      </div>
-                      <div className="provider-side">
-                        <span className="provider-status">
-                          {provider.id === providersStatus.activeProviderId ? (
-                            <>
-                              <Check aria-hidden="true" size={12} />
-                              In use
-                            </>
-                          ) : provider.available ? (
-                            "Ready"
-                          ) : isConnecting(connectState) ? (
-                            "Connecting"
-                          ) : (
-                            "Not set up"
-                          )}
-                        </span>
-                        {subscription !== null ? (
-                          <SubscriptionButton
-                            provider={{ ...provider, id: subscription }}
-                            state={connectState}
-                            busy={providerActionBusy}
-                            onConnect={() => void connectSubscription(subscription)}
-                            onDisconnect={() => void disconnectSubscription(subscription)}
-                          />
-                        ) : null}
-                      </div>
-                      {connectState !== undefined && isConnecting(connectState) ? (
-                        <SubscriptionSignIn
-                          label={provider.id === "claude-code" ? "Claude Code" : "Codex"}
-                          state={connectState}
-                          onCancel={() => cancelSubscriptionConnect(connectState)}
-                        />
-                      ) : null}
-                    </div>
-                  );
-                })
-            )}
-            {providerActionError !== null ? (
-              <p className="subscription-error">{providerActionError}</p>
-            ) : null}
-          </div>
-          <div className="settings-inline-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={providersLoading}
-              onClick={() => void loadProvidersStatus(true)}
-            >
-              <RefreshCw aria-hidden="true" size={12} />
-              <span>{providersLoading ? "Checking" : "Check again"}</span>
-            </button>
-          </div>
+          <AiProviderList providers={providers} />
           <p className="settings-helper">
             Connect a Claude Code or Codex subscription here, or add an API key below. With one provider set
             up, Mauz uses it. With several, pick the default.
           </p>
-          <label className="settings-field api-key-field">
-            <span>Anthropic API key</span>
-            <input
-              type="password"
-              value={anthropicApiKeyDraft}
-              placeholder={
-                draft.anthropicKeyConfigured ? "Configured - enter a new key to replace" : "sk-ant-..."
-              }
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => {
-                setAnthropicApiKeyDraft(event.target.value);
-                setClearSavedAnthropicApiKey(false);
+          {API_KEY_FIELDS.map((field) => (
+            <ApiKeyField
+              key={field.id}
+              label={field.label}
+              placeholder={field.placeholder}
+              configured={field.isConfigured(draft)}
+              draft={keyDrafts[field.id]}
+              saving={saving}
+              onChange={(value) => {
+                setKeyDrafts((current) => ({ ...current, [field.id]: { value, clear: false } }));
+
+                if (field.id === "openai") {
+                  // Row 14 (Phase 4) removes openAiAuthDisconnected.
+                  updateDraft("openAiAuthDisconnected", false);
+                }
+              }}
+              onClear={() => {
+                setKeyDrafts((current) => ({ ...current, [field.id]: { value: "", clear: true } }));
+                setSettingsMessage(`Saved ${field.vendor} key will be cleared on Save.`);
               }}
             />
-          </label>
-          {draft.anthropicKeyConfigured ? (
-            <div className="settings-inline-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={saving || clearSavedAnthropicApiKey}
-                onClick={() => {
-                  setAnthropicApiKeyDraft("");
-                  setClearSavedAnthropicApiKey(true);
-                  setSettingsMessage("Saved Anthropic key will be cleared on Save.");
-                }}
-              >
-                <Trash2 aria-hidden="true" size={12} />
-                <span>{clearSavedAnthropicApiKey ? "Marked clear" : "Clear saved key"}</span>
-              </button>
-            </div>
-          ) : null}
-          <label className="settings-field api-key-field">
-            <span>OpenAI API key</span>
-            <input
-              type="password"
-              value={openAiApiKeyDraft}
-              placeholder={draft.apiKeyConfigured ? "Configured - enter a new key to replace" : "sk-..."}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => {
-                setOpenAiApiKeyDraft(event.target.value);
-                setClearSavedOpenAiApiKey(false);
-                updateDraft("openAiAuthDisconnected", false);
-              }}
-            />
-          </label>
-          {draft.apiKeyConfigured ? (
-            <div className="settings-inline-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={saving || clearSavedOpenAiApiKey}
-                onClick={() => {
-                  setOpenAiApiKeyDraft("");
-                  setClearSavedOpenAiApiKey(true);
-                  setSettingsMessage("Saved OpenAI key will be cleared on Save.");
-                }}
-              >
-                <Trash2 aria-hidden="true" size={12} />
-                <span>{clearSavedOpenAiApiKey ? "Marked clear" : "Clear saved key"}</span>
-              </button>
-            </div>
-          ) : null}
+          ))}
         </div>
 
-        <div className="settings-section">
-          <div className="settings-label">
-            <Bot aria-hidden="true" size={15} />
-            <span>Task agent</span>
-          </div>
-          <label className="settings-field">
-            <span>Send to agent uses</span>
-            <select
-              value={draft.taskAgent}
-              onChange={(event) => updateDraft("taskAgent", event.target.value as TaskAgentPreference)}
-            >
-              <option value="auto">Automatic (first one installed)</option>
-              {(taskAgents ?? FALLBACK_TASK_AGENTS).map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {taskAgents !== null && !agent.installed ? `${agent.label} (not installed)` : agent.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="settings-field">
-            <span>Default work folder</span>
-            <div className="task-folder-row">
-              <input
-                type="text"
-                value={draft.taskFolder}
-                placeholder="Your home folder"
-                spellCheck={false}
-                onChange={(event) => updateDraft("taskFolder", event.target.value)}
-              />
-              <button type="button" className="secondary-button" onClick={() => void browseTaskFolder()}>
-                <FolderOpen aria-hidden="true" size={13} />
-                <span>Browse</span>
-              </button>
-            </div>
-          </label>
-          <p className="settings-helper">
-            Send to agent opens the agent in its own window with your task and what you were pointing at. Pick
-            a folder each time; this one is used when the agent has no recent folders.
-          </p>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-row">
-            <MousePointerClick aria-hidden="true" size={16} />
-            <div>
-              <strong>Native shake</strong>
-              <span>Starts the macOS helper. Requires Accessibility permission.</span>
-            </div>
-            <ToggleButton
-              pressed={draft.nativeShakeEnabled}
-              onClick={() => updateDraft("nativeShakeEnabled", !draft.nativeShakeEnabled)}
-            />
-          </div>
-          <div className="settings-row">
-            <Settings2 aria-hidden="true" size={16} />
-            <div>
-              <strong>Dev hotkey</strong>
-              <span>Command Shift M opens Mauz.</span>
-            </div>
-            <ToggleButton
-              pressed={draft.devHotkeyEnabled}
-              onClick={() => updateDraft("devHotkeyEnabled", !draft.devHotkeyEnabled)}
-            />
-          </div>
-          <div className="settings-label">
-            <Zap aria-hidden="true" size={15} />
-            <span>Sensitivity</span>
-          </div>
-          <div className="segmented-control" role="group" aria-label="Shake sensitivity">
-            {SENSITIVITY_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={draft.shakeSensitivity === option.value}
-                onClick={() => updateDraft("shakeSensitivity", option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-label">
-            <ShieldOff aria-hidden="true" size={15} />
-            <span>Never capture</span>
-          </div>
-          <textarea
-            className="settings-textarea"
-            aria-label="Apps Mauz never captures"
-            rows={4}
-            spellCheck={false}
-            value={blockedAppsDraft}
-            onChange={(event) => setBlockedAppsDraft(event.target.value)}
-          />
-          <p className="settings-helper">
-            One app per line: the program name on Windows (1Password.exe) or the bundle id on macOS. Mauz
-            sends no screenshot, text, or window title from these apps. Up to 50 entries.
-          </p>
-          <textarea
-            className="settings-textarea"
-            aria-label="Sites Mauz never captures"
-            rows={4}
-            spellCheck={false}
-            value={blockedSitesDraft}
-            onChange={(event) => setBlockedSitesDraft(event.target.value)}
-          />
-          <p className="settings-helper">
-            One site per line. example.com also covers its subdomains; * matches anything (*bank*). Needs the
-            browser extension: pages from these sites are not read or screenshotted. Up to 50 entries.
-          </p>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-label">
-            <Globe aria-hidden="true" size={15} />
-            <span>Browser extension</span>
-          </div>
-          <p className="settings-helper" role="status">
-            {getBrowserExtensionMessage(browserStatus)}
-          </p>
-          <p className="settings-helper">
-            Lets Mauz read the page under the pointer in Chrome or Edge: its address, text, and product
-            details such as price and sizes. To install, open chrome://extensions or edge://extensions, turn
-            on Developer mode, choose Load unpacked, and pick the extension folder.
-          </p>
-          {browserStatus?.extensionPath ? (
-            <div className="settings-inline-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => void mauz().browser.openExtensionFolder()}
-              >
-                <FolderOpen aria-hidden="true" size={13} />
-                <span>Extension folder</span>
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <TaskAgentSection draft={draft} updateDraft={updateDraft} />
+        <ActivationSection draft={draft} updateDraft={updateDraft} />
+        <NeverCaptureSection blocked={blocked} onChange={setBlocked} />
+        <BrowserExtensionSection />
       </div>
 
       <footer className="settings-footer">
@@ -641,30 +205,11 @@ export function SettingsPanel(): React.JSX.Element {
   );
 }
 
-function formatAppList(apps: readonly string[] | undefined): string {
-  return apps === undefined ? "" : apps.join("\n");
-}
-
-function parseAppList(text: string): string[] {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim().slice(0, MAX_CAPTURE_BLOCKED_ENTRY_CHARS))
-    .filter((line) => line.length > 0)
-    .slice(0, MAX_CAPTURE_BLOCKED_APPS);
-}
-
-function getBrowserExtensionMessage(status: BrowserExtensionStatus | null): string {
-  if (status === null) {
-    return "Checking the browser extension...";
-  }
-
-  if (status.connectedBrowsers.length > 0) {
-    return `Connected: ${status.connectedBrowsers.join(", ")}.`;
-  }
-
-  return status.hostRegistered
-    ? "Not connected. Install the extension, or open the browser if it is installed."
-    : "Not available: Mauz could not register its browser helper.";
+function toBlockedListText(settings: MauzSettings | null): BlockedListText {
+  return {
+    apps: formatAppList(settings?.captureBlockedApps),
+    sites: formatAppList(settings?.captureBlockedSites)
+  };
 }
 
 function SettingsHeader(): React.JSX.Element {
@@ -686,13 +231,5 @@ function SettingsHeader(): React.JSX.Element {
         </div>
       </div>
     </header>
-  );
-}
-
-function ToggleButton({ pressed, onClick }: { pressed: boolean; onClick(): void }): React.JSX.Element {
-  return (
-    <button className="toggle-button" type="button" aria-pressed={pressed} onClick={onClick}>
-      {pressed ? <Check aria-hidden="true" size={14} /> : null}
-    </button>
   );
 }
