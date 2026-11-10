@@ -147,6 +147,58 @@ Cause: `onOpenSettings` calls `reset()`, which keeps `settings`. `SettingsPanel`
 **Skipped in Phase 0:** none of the plan items. Not done: a test that loads the real `bootstrap()`
 (it needs Electron).
 
+### Phase 1 (2026-11-10, base `9767caa`; not yet reviewed or ticked)
+
+Gates after each row: typecheck, tests (api 47 passed; desktop 176 passed, 1 skipped, which is
+`dotenvStartOrder.test.ts` for row 1), lint. `corepack pnpm -r build` passes.
+
+**Row 2.** Every type with a schema is now `z.infer`. Zod 4 infers `.optional()` as `?: T | undefined`,
+so the types match the old hand-written ones and no caller changed. Changes in `schemas.ts`: the inline
+objects for `TaskAgentStatus` and `TaskFolder` are now `TaskAgentStatusSchema` and `TaskFolderSchema`;
+the doc comments moved from `types.ts` to the schema fields. `AiProvidersStatusRequest` is
+`NonNullable<...>`, because its schema is `.optional()`. `PointerTargetSource`, `SubscriptionConnectPhase`
+and `TalkTranscriptionEngine` are indexed types. Hand-written still: `MauzBridge`,
+`BrowserExtensionStatus`, `MauzSettingsOpenOptions` (no schema), as the audit said.
+
+- For row 9: the precondition "shared types declare each field as `?: T | undefined`" is now true for
+  every schema type.
+- For rows 13, 14 and 16: a field is now removed from the schema only; the type follows.
+
+**Row 3.** The audit finding is correct. Changes:
+
+- `cliCommand.ts` exports `getCliSearchDirectories` (the union of both old folder lists),
+  `applyCliPathOverride` (`claude` -> `MAUZ_CLAUDE_CODE_PATH`, `codex` -> `MAUZ_CODEX_PATH`), and a
+  `buildCliEnvironment(env)` with no second argument. `server.ts` re-exports the three.
+- `resolveCliCommand` applies the override itself, so the six `env.MAUZ_..._PATH?.trim() || "claude"`
+  expressions in the providers, `registry.ts` and `subscriptionConnect.ts` are gone. An injected
+  `resolveCommand` (tests) now receives `"claude"` or `"codex"`, not the override path.
+- `TaskAgentLauncher.findExecutable` uses the shared folders and override. It still returns a Windows
+  `.cmd` as it is, and still checks `.exe`, `.cmd`, `.bat` for each folder in turn. Ask still checks
+  `.exe` in every folder first, then turns a `.cmd` into `node <script>`. Both Windows tests pass.
+- `buildAgentEnvironment` calls `buildCliEnvironment`, then removes `OPENAI_ASK_MODEL` and the
+  parent-session variables. The 4 "known defects" tests pass without `.skip`.
+
+Changes in behaviour that the reviewer should check (all are in the direction of removing more):
+
+- Every CLI child now loses all three credentials. Before: the Claude status check and sign-in kept
+  `OPENAI_API_KEY`; the Codex status check and sign-in kept `ANTHROPIC_API_KEY` and
+  `ANTHROPIC_AUTH_TOKEN`; `npm install` of a CLI kept all three. None of these programs reads the other
+  vendor's key, and the answer runs already removed all three.
+- Variable names are compared in upper case (`mauz_x`, `openai_api_key` are removed too), as Windows
+  treats them.
+- Ask now also searches `~/.hermes/bin`, `%LOCALAPPDATA%\hermes\bin` and `/usr/bin`. Send to agent now
+  also searches `~/.claude/local` and `~/.bun/bin`, and skips repeated folders.
+
+For later phases:
+
+- Row 1 must keep the three `cliCommand` exports in the module that `@mauzai/api/server` points to.
+  `TaskAgentLauncher.ts` now imports from it.
+- Rows 12 and 17: the default `resolveCommand` with `fallbackNodeRuntime` is written three times
+  (`claudeCodeProvider.ts`, `codexProvider.ts`, `registry.ts` `resolveCliCommandForMauz`).
+
+**Skipped in Phase 1:** nothing from rows 2 and 3. The end-of-phase review and the phase tick were left to
+a separate agent, as the owner asked.
+
 ---
 
 # Audit
