@@ -80,26 +80,26 @@ _(Sessions add text here: baseline commands, defect confirmations, skipped items
 
 ### Phase 0 (2026-11-10, base `926e10b`)
 
-**Baseline.** No fix was needed. On Windows, `pnpm` is not on PATH, so use `corepack pnpm`. The root
+**Baseline.** On Windows, `pnpm` is not on PATH in the agent shell, so use `corepack pnpm`. The root
 scripts `pnpm test` and `pnpm typecheck` call `pnpm -r`, so call the recursive form directly:
 
-| Step      | Command                                                    | Result                                       |
-| --------- | ---------------------------------------------------------- | -------------------------------------------- |
-| Install   | `corepack pnpm install`                                    | OK                                           |
-| Typecheck | `corepack pnpm -r typecheck`                               | OK, 3 packages                               |
-| Tests     | `corepack pnpm -r test`                                    | api 46 passed; desktop 172 passed, 5 skipped |
-| Lint      | `corepack pnpm exec prettier --check --end-of-line auto .` | OK                                           |
+| Step      | Command                      | Result                                       |
+| --------- | ---------------------------- | -------------------------------------------- |
+| Install   | `corepack pnpm install`      | OK                                           |
+| Typecheck | `corepack pnpm -r typecheck` | OK, 3 packages                               |
+| Tests     | `corepack pnpm -r test`      | api 46 passed; desktop 172 passed, 5 skipped |
+| Lint      | `corepack pnpm lint`         | OK                                           |
 
-`corepack pnpm lint` fails on 130 files on Windows only: this checkout has `core.autocrlf=true`, so the
-files have CRLF line endings, and Prettier expects LF. With `--end-of-line auto` every file passes. The
-committed files have LF. This is a local setting, not a repo problem.
+One fix was needed for lint. On Windows, `core.autocrlf=true` checks files out with CRLF line endings,
+and Prettier expected LF, so `pnpm lint` failed on 130 files. `.prettierrc.json` now has
+`"endOfLine": "auto"`. Git still stores LF, because `autocrlf` converts on commit.
 
 **Defects.** The 5 skipped tests fail today for the stated reason. This was checked by running them
 without `.skip`. The fix that removes each `.skip` must make the test pass.
 
 | Defect                     | Status after Phase 0 | Evidence                                                       |
 | -------------------------- | -------------------- | -------------------------------------------------------------- |
-| `.env` key hidden          | Confirmed by test    | `SettingsService.test.ts` "known defects" (skipped)            |
+| `.env` key hidden          | Confirmed by test    | `dotenvStartOrder.test.ts` (skipped)                           |
 | Late Ask answer            | Confirmed by reading | Manual steps below; the renderer has no DOM test setup         |
 | CLI path for Ask only      | Confirmed by tests   | `TaskAgentLauncher.test.ts` "known defects": 3 tests (skipped) |
 | Credential list differs    | Confirmed by test    | `TaskAgentLauncher.test.ts` "known defects" (skipped)          |
@@ -109,7 +109,9 @@ without `.skip`. The fix that removes each `.skip` must make the test pass.
   `createMauzApiServer()`, which loads `.env`. Row 1 deletes `createMauzApiServer` and fixes the order
   inside `bootstrap()`, which a test cannot run. So row 1 must rewrite or delete this test (for example,
   call the exported `loadLocalEnv()` before `new SettingsService()`), and the owner checks the fix with
-  the smoke step "Ask with the key only in `.env`".
+  the smoke step "Ask with the key only in `.env`". The test is in its own file, so that the other
+  settings tests do not load the API server and do not break when row 1 removes it. It restores the
+  whole environment after it runs, because `.env` files in parent folders can add any variable.
 - **CLI-path tests and row 3.** The tests check `listAgents()`. `launch()` calls the same
   `findExecutable(agent.command)`, so row 3 must fix that function, not `listAgents()` alone.
 - **Credential list.** Mauz never sets `ANTHROPIC_AUTH_TOKEN` itself (`applyRuntimeEnvironment` sets
