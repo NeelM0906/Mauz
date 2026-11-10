@@ -637,7 +637,7 @@ export class TaskAgentLauncher {
       const scriptPath = this.path.join(launch.handoffDirectory, "launch.ps1");
       // Windows PowerShell 5.1 reads a script without a BOM as the ANSI code page, which turns
       // the "→" in the title into bytes that include a curly quote and breaks the string.
-      writeFileSync(scriptPath, `﻿${buildPowerShellLauncher(launch)}`, "utf8");
+      writeFileSync(scriptPath, `\uFEFF${buildPowerShellLauncher(launch)}`, "utf8");
       // `start` gives PowerShell its own console window (Windows Terminal when that is the default).
       await this.startProcess(
         "cmd.exe",
