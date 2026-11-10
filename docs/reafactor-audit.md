@@ -53,7 +53,7 @@ Audit base commit: `c7fd5b9`. Line numbers in the audit match this commit.
   - Do not refactor in this phase.
 - [x] **Phase 1: shared foundations.** (done 2026-11-10; see "Phase 1" in Notes) Row 2 (`z.infer`), then row 3 (one CLI search and one
       environment cleaner). Row 3 fixes the CLI-path defect and the credential-list defect.
-- [ ] **Phase 2: Ask without HTTP.** Row 1. Use plan mode: show the plan and wait for approval before
+- [x] **Phase 2: Ask without HTTP.** (done 2026-11-10; see "Phase 2" in Notes) Row 1. Use plan mode: show the plan and wait for approval before
       you edit. This phase fixes the `.env` defect.
 - [ ] **Phase 3: renderer.** Rows 5 (fixes the late-answer defect), 4, 7, 24, 21, then 6. For row 6,
       plan first and get approval. Check the stale-task-agent defect during rows 21 and 6.
@@ -205,8 +205,8 @@ gets no credentials. Left for Phase 2: the launcher's import of `@mauzai/api/ser
 
 ### Phase 2 (2026-11-10, base `844822e`)
 
-Row 1 is done as the approved plan says, in one commit. Gates: typecheck, tests (api 46 passed;
-desktop 175 passed, 0 skipped), lint, `node scripts/check-env.mjs`, `node scripts/check-secrets.mjs`,
+Row 1 is done as the approved plan says, in one commit. Gates: typecheck, tests (after the review fixes:
+api 47 passed; desktop 176 passed, 0 skipped), lint, `node scripts/check-env.mjs`, `node scripts/check-secrets.mjs`,
 `corepack pnpm -r build`. `check-env.mjs` needs no real `.env`.
 
 - `server.ts` exports `answerAsk(request, onText?)` and `loadLocalEnv()`. The three `cliCommand`
@@ -236,20 +236,34 @@ are gone; an invalid payload is still a `ZodError` from the IPC handler.
 
 Accepted risks (owner-approved):
 
-- Ask has no HTTP fetch timeout any more. The provider timeouts remain.
-- `.env` now applies to everything `bootstrap()` reads, for example `MAUZ_EXCLUDE_FROM_CAPTURE`, which was
-  read before the old server loaded `.env`. Set variables still win (`override: false`).
+- Ask timeout: `fetch` used to stop a silent Ask at 300 s (`headersTimeout`). Now the OpenAI and
+  Anthropic SDK default (10 minutes) applies. The CLI providers keep their own timeouts.
+- `.env` now applies to everything `bootstrap()` reads: `MAUZ_EXCLUDE_FROM_CAPTURE`,
+  `ELECTRON_RENDERER_URL`, and the settings defaults (`MAUZ_ENABLE_NATIVE_INPUT`, `MAUZ_ENABLE_DEV_HOTKEY`,
+  `OPENAI_ASK_MODEL`, `MAUZ_TASK_AGENT`, `MAUZ_AI_PROVIDER`). Set variables still win (`override: false`),
+  and saved settings still win at runtime.
+- Users with `openAiAuthDisconnected: true`: before, the old server loaded `.env` after
+  `applyRuntimeEnvironment` had deleted `OPENAI_API_KEY`, and put the key back. Now it stays deleted.
+  Row 13 removes the field anyway.
+- `dotenvStartOrder.test.ts` calls `loadLocalEnv()` itself, so it cannot catch a regression in the order
+  inside `bootstrap()`. The owner's smoke step "Ask with the key only in `.env`" covers that.
 - The module name `@mauzai/api/server` is kept, although there is no server.
 
 For later phases:
 
-- `shutdownResources()` is still `async` but has no `await` now. It is harmless; leave it unless a row
-  touches it.
+- `shutdownResources()` stays `async` with nothing to await. `beginShutdown` needs the promise: its
+  `.catch` reports a throw, `shutdownPromise` is the "shutting down" flag, and `.finally` calls
+  `app.quit()` after the `before-quit` handler has returned. A synchronous `app.quit()` inside that
+  handler would start `before-quit` again while the first call still prevents the quit.
 - Row 11: `askMauz` still accepts `signal`; `answerAsk` does not pass one.
 - Row 26: `isTrustedRendererOrigin` still trusts `127.0.0.1` and `localhost` on any port (dev renderer).
 
-**Skipped in Phase 2:** nothing from row 1. The end-of-phase review and the tick are left to the
-reviewing agent, as the orchestrator asked.
+**Skipped in Phase 2:** nothing from row 1.
+
+**Review.** A separate agent reviewed the phase and found no bugs. Fixed: provider errors reach the
+renderer as a plain `Error`, so the text stays "Error: <message>" as before (Electron uses
+`err.toString()`); new tests for an Ask without a `requestId` and for a response that fails the schema.
+Left: `shutdownResources()` stays `async` (reason above).
 
 ---
 
