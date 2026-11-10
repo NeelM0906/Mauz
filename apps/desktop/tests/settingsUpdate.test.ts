@@ -7,7 +7,6 @@ const SETTINGS: MauzSettings = {
   nativeShakeEnabled: true,
   devHotkeyEnabled: false,
   shakeSensitivity: "strict",
-  openAiAuthDisconnected: false,
   openAiCredentialSource: "saved",
   askModel: "gpt-5.4-mini",
   captureBlockedApps: [],
@@ -28,7 +27,6 @@ describe("buildSettingsUpdate", () => {
       nativeShakeEnabled: true,
       devHotkeyEnabled: false,
       shakeSensitivity: "strict",
-      openAiAuthDisconnected: false,
       askModel: "gpt-5.4-mini",
       captureBlockedApps: ["1Password.exe"],
       captureBlockedSites: ["bank.com"],
@@ -62,15 +60,6 @@ describe("buildSettingsUpdate", () => {
     expect(update.clearAnthropicApiKey).toBe(true);
     expect(update.openAiApiKey).toBe("sk-o");
     expect(update).not.toHaveProperty("clearOpenAiApiKey");
-  });
-
-  it("passes openAiAuthDisconnected through", () => {
-    const update = buildSettingsUpdate({ ...SETTINGS, openAiAuthDisconnected: true }, EMPTY_KEY_DRAFTS, {
-      apps: "",
-      sites: ""
-    });
-
-    expect(update.openAiAuthDisconnected).toBe(true);
   });
 
   it("keeps the block lists within the schema limits", () => {

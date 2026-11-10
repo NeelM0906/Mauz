@@ -127,8 +127,7 @@ export class SettingsService {
       encryptedAnthropicApiKey: _encryptedAnthropicApiKey,
       ...runtimeSettings
     } = stored;
-    const savedApiKey = decryptStoredApiKey(stored, this.secretCodec);
-    const runtimeApiKey = stored.openAiAuthDisconnected ? undefined : (savedApiKey ?? this.environmentApiKey);
+    const runtimeApiKey = decryptStoredApiKey(stored, this.secretCodec) ?? this.environmentApiKey;
     const anthropicApiKey =
       decryptSecret(stored.encryptedAnthropicApiKey, this.secretCodec) ?? this.environmentAnthropicApiKey;
 
@@ -148,7 +147,6 @@ export class SettingsService {
       applyDefinedSetting(nextSettings, "nativeShakeEnabled", parsedUpdate.nativeShakeEnabled);
       applyDefinedSetting(nextSettings, "devHotkeyEnabled", parsedUpdate.devHotkeyEnabled);
       applyDefinedSetting(nextSettings, "shakeSensitivity", parsedUpdate.shakeSensitivity);
-      applyDefinedSetting(nextSettings, "openAiAuthDisconnected", parsedUpdate.openAiAuthDisconnected);
       applyDefinedSetting(nextSettings, "askModel", parsedUpdate.askModel);
       applyDefinedSetting(
         nextSettings,
@@ -269,7 +267,6 @@ function applyApiKeyUpdate(
 
   try {
     settings.encryptedOpenAiApiKey = secretCodec.encrypt(normalizedApiKey);
-    settings.openAiAuthDisconnected = false;
   } catch {
     throw new Error("Mauz could not save the OpenAI API key securely on this computer.");
   }
@@ -326,7 +323,6 @@ function getDefaultSettings(): StoredMauzSettings {
     nativeShakeEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_NATIVE_INPUT, true),
     devHotkeyEnabled: readBooleanEnv(process.env.MAUZ_ENABLE_DEV_HOTKEY, true),
     shakeSensitivity: "normal",
-    openAiAuthDisconnected: false,
     askModel: process.env.OPENAI_ASK_MODEL?.trim() || DEFAULT_ASK_MODEL,
     captureBlockedApps: [...DEFAULT_CAPTURE_BLOCKED_APPS],
     captureBlockedSites: [...DEFAULT_CAPTURE_BLOCKED_SITES],
@@ -378,7 +374,6 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     nativeShakeEnabled: publicSettings.data.nativeShakeEnabled,
     devHotkeyEnabled: publicSettings.data.devHotkeyEnabled,
     shakeSensitivity: publicSettings.data.shakeSensitivity,
-    openAiAuthDisconnected: publicSettings.data.openAiAuthDisconnected,
     askModel: publicSettings.data.askModel,
     captureBlockedApps: publicSettings.data.captureBlockedApps,
     captureBlockedSites: publicSettings.data.captureBlockedSites,
@@ -438,7 +433,6 @@ function toPublicSettings(
     nativeShakeEnabled: settings.nativeShakeEnabled,
     devHotkeyEnabled: settings.devHotkeyEnabled,
     shakeSensitivity: settings.shakeSensitivity,
-    openAiAuthDisconnected: settings.openAiAuthDisconnected,
     openAiCredentialSource,
     askModel: settings.askModel,
     captureBlockedApps: [...settings.captureBlockedApps],
@@ -457,10 +451,6 @@ function getOpenAiCredentialSource(
   environmentApiKey: string | undefined,
   secretCodec: SecretCodec
 ): OpenAiCredentialSource {
-  if (settings.openAiAuthDisconnected) {
-    return "none";
-  }
-
   if (decryptStoredApiKey(settings, secretCodec) !== undefined) {
     return "saved";
   }

@@ -178,11 +178,6 @@ export function SettingsPanel(): React.JSX.Element {
               saving={saving}
               onChange={(value) => {
                 setKeyDrafts((current) => ({ ...current, [field.id]: { value, clear: false } }));
-
-                if (field.id === "openai") {
-                  // Row 14 (Phase 4) removes openAiAuthDisconnected.
-                  updateDraft("openAiAuthDisconnected", false);
-                }
               }}
               onClear={() => {
                 setKeyDrafts((current) => ({ ...current, [field.id]: { value: "", clear: true } }));

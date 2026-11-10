@@ -35,7 +35,6 @@ export function buildSettingsUpdate(
     nativeShakeEnabled: draft.nativeShakeEnabled,
     devHotkeyEnabled: draft.devHotkeyEnabled,
     shakeSensitivity: draft.shakeSensitivity,
-    openAiAuthDisconnected: draft.openAiAuthDisconnected,
     askModel: draft.askModel,
     captureBlockedApps: parseAppList(blocked.apps),
     captureBlockedSites: parseAppList(blocked.sites),

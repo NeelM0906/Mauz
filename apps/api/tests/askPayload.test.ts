@@ -6,7 +6,6 @@ function buildSettingsFixture() {
     nativeShakeEnabled: true,
     devHotkeyEnabled: false,
     shakeSensitivity: "normal" as const,
-    openAiAuthDisconnected: false,
     openAiCredentialSource: "none" as const,
     askModel: "gpt-5.4-mini",
     captureBlockedApps: [],

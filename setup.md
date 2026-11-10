@@ -45,7 +45,7 @@ Mauz answers with the provider you have set up:
 
 If only one is set up, Mauz uses it. If several are, **Settings → General AI → Default provider** picks one. Left on **Automatic**, Mauz prefers an API key, then Claude Code, then Codex.
 
-**API keys:** paste them in Settings (stored with Electron safe storage: Keychain on macOS, DPAPI on Windows), or start Mauz with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set. Disconnecting a provider in Settings makes Mauz ignore its key, including one from the environment, until you reconnect.
+**API keys:** paste them in Settings (stored with Electron safe storage: Keychain on macOS, DPAPI on Windows), or start Mauz with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set.
 
 **Subscriptions:** click **Connect** next to Claude Code or Codex in **Settings → General AI**.
 

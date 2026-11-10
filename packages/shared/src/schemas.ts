@@ -125,7 +125,6 @@ export const MauzSettingsSchema = z.object({
   nativeShakeEnabled: z.boolean(),
   devHotkeyEnabled: z.boolean(),
   shakeSensitivity: ShakeSensitivitySchema,
-  openAiAuthDisconnected: z.boolean(),
   openAiCredentialSource: OpenAiCredentialSourceSchema,
   askModel: ModelNameSchema,
   /** Executable names (Windows) or bundle ids (macOS) Mauz never captures. */
