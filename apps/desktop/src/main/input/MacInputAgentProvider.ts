@@ -1,8 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import { fileURLToPath } from "node:url";
 import { MacInputAgentEventSchema } from "@mauzai/shared";
 import type { Readable } from "node:stream";
 import type { InputProvider, InputProviderCallbacks } from "./InputProvider";
@@ -29,7 +27,7 @@ type ShakeDetectorLike = {
 };
 
 export type MacInputAgentProviderOptions = {
-  helperPath?: string;
+  helperPath: string;
   platform?: NodeJS.Platform;
   pathExists?: (path: string) => boolean;
   spawn?: SpawnLike;
@@ -66,7 +64,7 @@ export class MacInputAgentProvider implements InputProvider {
 
   constructor(
     private readonly callbacks: InputProviderCallbacks,
-    options: MacInputAgentProviderOptions = {}
+    options: MacInputAgentProviderOptions
   ) {
     this.detector = options.detector ?? new ShakeDetector();
     this.maxRestarts = options.maxRestarts ?? DEFAULT_MAX_RESTARTS;
@@ -77,7 +75,7 @@ export class MacInputAgentProvider implements InputProvider {
       options.spawn ??
       ((command, args, opts) => spawn(command, args ?? [], opts?.env !== undefined ? { env: opts.env } : {}));
     this.platform = options.platform ?? process.platform;
-    this.helperPath = options.helperPath ?? findDefaultHelperPath();
+    this.helperPath = options.helperPath;
   }
 
   private readonly helperPath: string;
@@ -293,45 +291,4 @@ function parseJson(line: string): unknown | undefined {
   } catch {
     return undefined;
   }
-}
-
-function findDefaultHelperPath(): string {
-  const configuredHelperPath = process.env.MAUZ_INPUT_AGENT_PATH?.trim();
-
-  if (configuredHelperPath && existsSync(configuredHelperPath)) {
-    return configuredHelperPath;
-  }
-
-  const currentFileDir = dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    resolve(
-      dirname(process.execPath),
-      "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(dirname(process.execPath), "../Resources/app/native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      process.resourcesPath,
-      "app/native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(process.resourcesPath, "app/native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"),
-    resolve(process.cwd(), "native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      process.cwd(),
-      "../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(process.cwd(), "../../native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      currentFileDir,
-      "../../../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(currentFileDir, "../../../../native/macos/MauzInputAgent/MauzInputAgent"),
-    resolve(
-      currentFileDir,
-      "../../../../../native/macos/MauzInputAgent/MauzInputAgent.app/Contents/MacOS/MauzInputAgent"
-    ),
-    resolve(currentFileDir, "../../../../../native/macos/MauzInputAgent/MauzInputAgent")
-  ];
-
-  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }
