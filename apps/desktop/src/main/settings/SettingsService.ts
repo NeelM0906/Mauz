@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { app, safeStorage } from "electron";
@@ -70,7 +69,6 @@ type StoredMauzSettings = Omit<
 > & {
   encryptedOpenAiApiKey?: string | undefined;
   encryptedAnthropicApiKey?: string | undefined;
-  installId: string;
 };
 
 export type MauzRuntimeSettings = Omit<
@@ -206,11 +204,8 @@ export class SettingsService {
       return this.cachedSettings;
     }
 
-    let rawSettings: string | undefined;
-
     try {
-      rawSettings = await this.readTextFile(this.settingsPath);
-      const parsed = JSON.parse(rawSettings) as unknown;
+      const parsed = JSON.parse(await this.readTextFile(this.settingsPath)) as unknown;
       const parsedSettings = parseStoredSettings(parsed);
 
       if (parsedSettings !== null) {
@@ -225,15 +220,8 @@ export class SettingsService {
       // Missing or malformed settings should never prevent Mauz from starting.
     }
 
-    // Attempt to salvage the installId from raw file content so that a transient
-    // read failure or a failed schema migration does not silently rotate the
-    // installation identity and persist a new UUID on the next update().
-    const salvagedInstallId = rawSettings !== undefined ? salvageInstallId(rawSettings) : null;
-    const fallback =
-      salvagedInstallId !== null ? { ...this.defaults, installId: salvagedInstallId } : this.defaults;
-
-    this.cachedSettings = fallback;
-    return fallback;
+    this.cachedSettings = this.defaults;
+    return this.defaults;
   }
 
   private async sanitizeStoredSettings(settings: StoredMauzSettings): Promise<void> {
@@ -345,8 +333,7 @@ function getDefaultSettings(): StoredMauzSettings {
     taskAgent: TaskAgentPreferenceSchema.catch("auto").parse(process.env.MAUZ_TASK_AGENT?.trim()),
     taskFolder: "",
     taskAgentFolders: {},
-    aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim()),
-    installId: randomUUID()
+    aiProvider: AiProviderPreferenceSchema.catch("auto").parse(process.env.MAUZ_AI_PROVIDER?.trim())
   };
 }
 
@@ -399,10 +386,6 @@ function parseStoredSettings(parsed: unknown): StoredMauzSettings | null {
     taskFolder: publicSettings.data.taskFolder,
     taskAgentFolders: publicSettings.data.taskAgentFolders,
     aiProvider: publicSettings.data.aiProvider,
-    installId:
-      typeof parsedRecord.installId === "string" && parsedRecord.installId.trim().length > 0
-        ? parsedRecord.installId.trim()
-        : defaults.installId,
     ...(encryptedOpenAiApiKey === undefined ? {} : { encryptedOpenAiApiKey }),
     ...(encryptedAnthropicApiKey === undefined ? {} : { encryptedAnthropicApiKey })
   };
@@ -417,7 +400,6 @@ function shouldSanitizeStoredSettings(parsed: unknown): boolean {
 
   return (
     "openAiApiKey" in parsed ||
-    !("installId" in parsed) ||
     // Gateway-era fields: rewrite without them.
     LEGACY_GATEWAY_KEYS.some((key) => key in parsedRecord)
   );
@@ -536,11 +518,4 @@ async function ensureDirectoryExists(path: string): Promise<void> {
   await mkdir(path, {
     recursive: true
   });
-}
-
-const INSTALL_ID_PATTERN =
-  /"installId"\s*:\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/i;
-
-function salvageInstallId(raw: string): string | null {
-  return INSTALL_ID_PATTERN.exec(raw)?.[1] ?? null;
 }

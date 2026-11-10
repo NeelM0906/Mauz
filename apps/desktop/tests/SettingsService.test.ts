@@ -23,13 +23,12 @@ type TestSecretCodec = {
 };
 
 describe("SettingsService", () => {
-  it("defaults Task agent settings and generates a stable installId", async () => {
+  it("defaults Task agent settings", async () => {
     const service = createService();
     const runtime = await service.getRuntime();
     expect(runtime.taskAgent).toBe("auto");
     expect(runtime.taskFolder).toBe("");
     expect(runtime.taskAgentFolders).toEqual({});
-    expect(runtime.installId).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it("defaults the never-capture list to common password managers", async () => {
@@ -58,15 +57,6 @@ describe("SettingsService", () => {
     });
 
     expect(settings.captureBlockedApps).toEqual(["Signal.exe", "com.agilebits.onepassword7"]);
-  });
-
-  it("persists installId across loads once written", async () => {
-    const files = new Map<string, string>();
-    const service = createServiceWithFiles(files);
-    const first = (await service.getRuntime()).installId;
-    await service.update({ askModel: "gpt-5.4-mini" }); // forces a write
-    const service2 = createServiceWithFiles(files);
-    expect((await service2.getRuntime()).installId).toBe(first);
   });
 
   it("updates the task agent, default folder, and last folder per agent", async () => {
@@ -278,13 +268,7 @@ describe("SettingsService", () => {
 
   it("serializes concurrent updates so neither change is lost", async () => {
     const files = new Map<string, string>();
-    files.set(
-      SHARED_SETTINGS_PATH,
-      JSON.stringify({
-        ...DEFAULT_SETTINGS,
-        installId: "aabbccdd-1122-3344-5566-778899aabbcc"
-      })
-    );
+    files.set(SHARED_SETTINGS_PATH, JSON.stringify(DEFAULT_SETTINGS));
 
     const service = createServiceWithFiles(files);
 
@@ -299,26 +283,18 @@ describe("SettingsService", () => {
     expect(runtime.taskAgent).toBe("codex");
   });
 
-  it("preserves installId from a settings file with malformed JSON", async () => {
-    const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
-    const { service } = createSettingsService({
-      settingsJson: `not valid json but "installId": "${knownId}" is in here`
-    });
-    const runtime = await service.getRuntime();
-    expect(runtime.installId).toBe(knownId);
-  });
-
-  it("preserves installId when stored settings contain a legacy backendPreset field", async () => {
-    const knownId = "aabbccdd-1122-3344-5566-778899aabbcc";
+  it("loads an old settings file that still has installId and a legacy backendPreset", async () => {
     const { service } = createSettingsService({
       settingsJson: JSON.stringify({
         ...DEFAULT_SETTINGS,
-        installId: knownId,
+        askModel: "gpt-5.5",
+        installId: "aabbccdd-1122-3344-5566-778899aabbcc",
         backendPreset: "not-a-valid-preset"
       })
     });
     const runtime = await service.getRuntime();
-    expect(runtime.installId).toBe(knownId);
+    expect(runtime.askModel).toBe("gpt-5.5");
+    expect(runtime).not.toHaveProperty("installId");
   });
 
   it("loads settings saved by older versions and drops removed fields", async () => {

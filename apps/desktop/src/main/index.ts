@@ -274,8 +274,6 @@ function applyRuntimeEnvironment(settings: MauzRuntimeSettings): void {
 
   process.env.MAUZ_AI_PROVIDER = settings.aiProvider;
   process.env.OPENAI_ASK_MODEL = settings.askModel;
-
-  process.env.MAUZ_INSTALL_ID = settings.installId;
 }
 
 function configureAppIdentity(iconPath: string): void {
