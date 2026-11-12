@@ -10,16 +10,16 @@ import {
   runAndCollect,
   spawnCliProcess,
   toCliError,
-  type AnswerCli,
+  type AskCli,
   type ChildProcessLike,
   type SpawnLike
 } from "./processRunner";
-import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
+import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
 
 export const DEFAULT_CLAUDE_CODE_MODEL = "sonnet";
 const DEFAULT_CLAUDE_CODE_EFFORT = "low";
-const ANSWER_TIMEOUT_MS = 120_000;
-export const CLAUDE_CLI: AnswerCli = {
+const ASK_TIMEOUT_MS = 120_000;
+export const CLAUDE_CLI: AskCli = {
   label: "Claude Code",
   signInKeywords: ["/login", "not logged in", "invalid api key", "authentication"],
   signInMessage: "Claude Code isn't signed in. Open a terminal, run `claude`, sign in, then try again."
@@ -34,7 +34,7 @@ type ClaudeCodeProviderOptions = {
   model?: () => string;
   effort?: () => string;
   makeWorkingDirectory?: () => string;
-  answerTimeoutMs?: number;
+  askTimeoutMs?: number;
 };
 
 type Launch = {
@@ -54,7 +54,7 @@ type WarmProcess = {
  * Answers through the user's signed-in Claude Code CLI (their Claude subscription),
  * with tools, hooks, MCP servers, slash commands and session history all disabled.
  */
-export class ClaudeCodeProvider implements AnswerProvider {
+export class ClaudeCodeProvider implements AskProvider {
   readonly id = "claude-code" as const;
   private readonly spawnProcess: SpawnLike;
   private readonly resolveCommand: () => ResolvedCliCommand | null;
@@ -62,7 +62,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
   private readonly readModel: () => string;
   private readonly readEffort: () => string;
   private readonly makeWorkingDirectory: () => string;
-  private readonly answerTimeoutMs: number;
+  private readonly askTimeoutMs: number;
   private warm: WarmProcess | null = null;
 
   constructor(options: ClaudeCodeProviderOptions = {}) {
@@ -80,7 +80,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     this.readEffort =
       options.effort ?? (() => this.readEnv().MAUZ_CLAUDE_CODE_EFFORT?.trim() || DEFAULT_CLAUDE_CODE_EFFORT);
     this.makeWorkingDirectory = options.makeWorkingDirectory ?? getClaudeWorkingDirectory;
-    this.answerTimeoutMs = options.answerTimeoutMs ?? ANSWER_TIMEOUT_MS;
+    this.askTimeoutMs = options.askTimeoutMs ?? ASK_TIMEOUT_MS;
   }
 
   prewarm(systemPrompt: string): void {
@@ -117,7 +117,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     }
   }
 
-  async answer(prompt: AnswerPrompt, options: AnswerOptions = {}): Promise<AnswerResult> {
+  async answer(prompt: AskPrompt, options: AskOptions = {}): Promise<AskResult> {
     const launch = this.buildLaunch(prompt.systemPrompt);
 
     if (launch === null) {
@@ -220,11 +220,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     warm.idleTimer = setTimeout(() => this.discardWarm(), WARM_PROCESS_MAX_IDLE_MS);
   }
 
-  private async runTurn(
-    child: ChildProcessLike,
-    prompt: AnswerPrompt,
-    options: AnswerOptions
-  ): Promise<AnswerResult> {
+  private async runTurn(child: ChildProcessLike, prompt: AskPrompt, options: AskOptions): Promise<AskResult> {
     let streamedText = "";
     // Written by the line callback; the casts stop TypeScript from narrowing them to null.
     let resultText = null as string | null;
@@ -233,7 +229,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
     // runAndCollect settles on "close", after stdout is fully drained, so the result line has been read.
     const output = await runAndCollect(child, {
       stdinText: `${JSON.stringify(buildUserMessage(prompt))}\n`,
-      timeoutMs: this.answerTimeoutMs,
+      timeoutMs: this.askTimeoutMs,
       onStdoutLine: (line) => {
         const event = parseJsonLine(line);
 
@@ -273,7 +269,7 @@ export class ClaudeCodeProvider implements AnswerProvider {
   }
 }
 
-function buildUserMessage(prompt: AnswerPrompt): Record<string, unknown> {
+function buildUserMessage(prompt: AskPrompt): Record<string, unknown> {
   const content: Array<Record<string, unknown>> = [];
 
   for (const image of prompt.images) {

@@ -13,11 +13,11 @@ import {
 } from "@mauzai/shared";
 import {
   createSubscriptionConnector,
-  disposeAnswerProviders,
+  disposeAskProviders,
   getAiProvidersStatus,
   hasOpenAiTranscription,
   loadLocalEnv,
-  prewarmAnswerProvider,
+  prewarmAskProvider,
   transcribeWithOpenAi,
   type SubscriptionConnector
 } from "@mauzai/api/server";
@@ -35,7 +35,7 @@ import { DevHotkeyInputProvider } from "./input/DevHotkeyInputProvider";
 import type { InputProvider, InputProviderCallbacks } from "./input/InputProvider";
 import { MacInputAgentProvider } from "./input/MacInputAgentProvider";
 import { getShakeDetectorConfigForSensitivity, ShakeDetector } from "./input/ShakeDetector";
-import { TalkTranscriber } from "./talk/TalkTranscriber";
+import { DictateTranscriber } from "./dictate/DictateTranscriber";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers";
 import { SettingsService, type MauzRuntimeSettings } from "./settings/SettingsService";
 import { PopoverWindowController } from "./windows/PopoverWindowController";
@@ -161,7 +161,7 @@ async function bootstrap(): Promise<void> {
         return result.canceled ? null : (result.filePaths[0] ?? null);
       }
     },
-    talkTranscriber: new TalkTranscriber({
+    dictateTranscriber: new DictateTranscriber({
       getWindowsHelper: () => windowsContextHelper,
       hasOpenAiKey: hasOpenAiTranscription,
       transcribeWithOpenAi
@@ -425,8 +425,8 @@ function restartInputProviders(settings: MauzSettings): void {
 }
 
 async function handleActivation(cursor: { x: number; y: number }): Promise<void> {
-  // A question is likely; start the answer provider (e.g. the Claude Code CLI) while the menu is open.
-  prewarmAnswerProvider();
+  // A question is likely; start the Ask provider (e.g. the Claude Code CLI) while the menu is open.
+  prewarmAskProvider();
 
   try {
     await contextCollector?.prepareForActivation(cursor);
@@ -493,9 +493,9 @@ async function shutdownResources(): Promise<void> {
   subscriptionConnector = null;
 
   try {
-    disposeAnswerProviders();
+    disposeAskProviders();
   } catch (error: unknown) {
-    reportShutdownError("stop the answer providers", error);
+    reportShutdownError("stop the Ask providers", error);
   }
 
   const currentPopover = popover;

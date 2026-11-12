@@ -97,12 +97,12 @@ export const AiProvidersStatusRequestSchema = z
 
 const MAX_AUDIO_BASE64_CHARS = 12_000_000;
 
-export const TalkTranscribeRequestSchema = z.object({
+export const DictateTranscribeRequestSchema = z.object({
   audioBase64: z.string().min(1).max(MAX_AUDIO_BASE64_CHARS),
   mimeType: z.literal("audio/wav")
 });
 
-export const TalkTranscribeResponseSchema = z.object({
+export const DictateTranscribeResponseSchema = z.object({
   text: z.string().max(MAX_QUESTION_CHARS)
 });
 

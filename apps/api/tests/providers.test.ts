@@ -4,14 +4,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it, vi } from "vitest";
 import type { AiProviderStatus, AskMauzRequest } from "@mauzai/shared";
 import { AiProviderError, NoAiProviderError } from "../src/errors";
-import { askMauz, buildAnswerPrompt } from "../src/openai/askMauz";
+import { askMauz, buildAskPrompt } from "../src/openai/askMauz";
 import { CLAUDE_CLI, ClaudeCodeProvider } from "../src/providers/claudeCodeProvider";
 import { buildCliEnvironment, getCliSearchDirectories, resolveCliCommand } from "../src/providers/cliCommand";
 import { describeCodexFailure, parseCodexOutput } from "../src/providers/codexProvider";
 import { describeCliFailure, type ChildProcessLike, type SpawnLike } from "../src/providers/processRunner";
 import { AnthropicApiProvider } from "../src/providers/anthropicProvider";
-import { AnswerProviderRegistry, pickProvider } from "../src/providers/registry";
-import type { AnswerPrompt, AnswerProvider } from "../src/providers/types";
+import { AskProviderRegistry, pickProvider } from "../src/providers/registry";
+import type { AskPrompt, AskProvider } from "../src/providers/types";
 
 type FakeRun = {
   stdoutLines: string[];
@@ -78,7 +78,7 @@ function createFakeChild(respond: (stdinText: string) => FakeRun): FakeChild {
   return child as unknown as FakeChild;
 }
 
-const PROMPT: AnswerPrompt = {
+const PROMPT: AskPrompt = {
   systemPrompt: "system",
   userText: "What is this?",
   images: [{ mimeType: "image/jpeg", base64: "aW1n", label: "Image 1: cursor crop" }]
@@ -299,7 +299,7 @@ describe("ClaudeCodeProvider", () => {
       resolveCommand: () => ({ command: "claude", args: [] }),
       env: () => ({}),
       makeWorkingDirectory: () => "/tmp",
-      answerTimeoutMs: 10
+      askTimeoutMs: 10
     });
 
     await expect(provider.answer(PROMPT)).rejects.toThrow("Claude Code did not answer in time. Try again.");
@@ -435,14 +435,14 @@ describe("pickProvider", () => {
   });
 });
 
-describe("AnswerProviderRegistry", () => {
+describe("AskProviderRegistry", () => {
   function createRegistry(env: NodeJS.ProcessEnv, cliStatus: { claude: string; codex: string }) {
     const spawn: SpawnLike = (_command, args) =>
       createFakeChild(() =>
         args.includes("auth") ? { stdoutLines: [cliStatus.claude] } : { stdoutLines: [cliStatus.codex] }
       );
 
-    return new AnswerProviderRegistry({
+    return new AskProviderRegistry({
       env: () => env,
       spawn,
       resolveCommand: (name) => ({ command: name, args: [] })
@@ -515,7 +515,7 @@ describe("askMauz provider routing", () => {
   };
 
   it("answers through the resolved provider and streams text", async () => {
-    const answer = vi.fn<AnswerProvider["answer"]>(async (_prompt, options) => {
+    const answer = vi.fn<AskProvider["answer"]>(async (_prompt, options) => {
       options?.onText?.("Partial");
       return { text: "Final answer" };
     });
@@ -531,7 +531,7 @@ describe("askMauz provider routing", () => {
   });
 
   it("sends the cursor crop and leaves the full screenshot out by default", () => {
-    const prompt = buildAnswerPrompt(request);
+    const prompt = buildAskPrompt(request);
 
     expect(prompt.images).toHaveLength(1);
     expect(prompt.images[0]?.label).toMatch(/crop centered on the pointer/);

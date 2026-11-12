@@ -1,6 +1,6 @@
 import { describeElement, type MauzDesktopContext, type ScreenshotPayload } from "@mauzai/shared";
 
-type LensObjectType =
+type CursorTargetType =
   | "selected-text"
   | "element"
   | "cursor-area"
@@ -17,22 +17,22 @@ type CaptureDetail = {
   image?: ScreenshotPayload | undefined;
 };
 
-type LensObject = {
+type CursorTarget = {
   id: string;
-  type: LensObjectType;
+  type: CursorTargetType;
   label: string;
   summary: string;
   confidence: number;
   privacyMode: string;
 };
 
-export function detectLensObject(context: MauzDesktopContext | null): LensObject {
+export function detectCursorTarget(context: MauzDesktopContext | null): CursorTarget {
   if (context === null) {
     return {
       id: "empty",
       type: "cursor",
       label: "No cursor context",
-      summary: "Open Mauz from the cursor to create a Lens snapshot.",
+      summary: "Open Mauz from the cursor to capture what is under it.",
       confidence: 0,
       privacyMode: "No context captured"
     };
@@ -40,7 +40,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
 
   if (context.captureBlocked !== undefined) {
     return {
-      id: createLensId(context, "blocked"),
+      id: createCursorTargetId(context, "blocked"),
       type: "blocked",
       label: `Capture blocked in ${context.captureBlocked.appName}`,
       summary:
@@ -60,7 +60,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
 
   if (selectedText?.trim()) {
     return {
-      id: createLensId(context, "selected-text"),
+      id: createCursorTargetId(context, "selected-text"),
       type: "selected-text",
       label: `Selected text in ${appName}`,
       summary: truncateText(selectedText.trim(), 160),
@@ -79,7 +79,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
     const name = product?.name ?? page.title ?? getHost(page.url);
 
     return {
-      id: createLensId(context, "page"),
+      id: createCursorTargetId(context, "page"),
       type: "page",
       label: `${truncateText(name, 60)} in ${page.browser}`,
       summary: truncateText(
@@ -104,7 +104,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
     const text = element.text ?? element.value ?? target.container?.text ?? element.name;
 
     return {
-      id: createLensId(context, "element"),
+      id: createCursorTargetId(context, "element"),
       type: "element",
       label: `${describeElement(element)} in ${appName}`,
       summary:
@@ -118,7 +118,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
 
   if (context.pointer?.cursorCrop !== undefined) {
     return {
-      id: createLensId(context, "cursor-area"),
+      id: createCursorTargetId(context, "cursor-area"),
       type: "cursor-area",
       label: windowTitle === undefined ? `Cursor area in ${appName}` : `Cursor area in ${windowTitle}`,
       summary:
@@ -132,7 +132,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
 
   if (context.pointer?.screenshot !== undefined || context.screenshot !== undefined) {
     return {
-      id: createLensId(context, "screen"),
+      id: createCursorTargetId(context, "screen"),
       type: "screen",
       label: `Window near ${appName}`,
       summary: `Mauz has an image of the window under the pointer at ${formatCursor(context)}.`,
@@ -143,7 +143,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
 
   if (activeApp !== undefined || activeWindow !== undefined) {
     return {
-      id: createLensId(context, "window"),
+      id: createCursorTargetId(context, "window"),
       type: "window",
       label: windowTitle === undefined ? appName : windowTitle,
       summary: `Window metadata from ${appName} is available, without a screenshot.`,
@@ -153,7 +153,7 @@ export function detectLensObject(context: MauzDesktopContext | null): LensObject
   }
 
   return {
-    id: createLensId(context, "cursor"),
+    id: createCursorTargetId(context, "cursor"),
     type: "cursor",
     label: "Cursor point",
     summary: `Mauz knows the pointer location at ${formatCursor(context)}.`,
@@ -287,7 +287,7 @@ function getHost(url: string): string {
   }
 }
 
-function createLensId(context: MauzDesktopContext, type: LensObjectType): string {
+function createCursorTargetId(context: MauzDesktopContext, type: CursorTargetType): string {
   return `${type}:${context.timestamp}:${Math.round(context.cursor.x)}:${Math.round(context.cursor.y)}`;
 }
 

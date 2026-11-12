@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MauzDesktopContext } from "@mauzai/shared";
-import { describeCapture, detectLensObject } from "../src/renderer/src/lib/lensObject";
+import { describeCapture, detectCursorTarget } from "../src/renderer/src/lib/cursorTarget";
 
 const crop = { mimeType: "image/jpeg" as const, base64: "Y3JvcA==", width: 360, height: 240 };
 
@@ -22,11 +22,11 @@ const elementContext: MauzDesktopContext = {
   }
 };
 
-describe("detectLensObject and describeCapture", () => {
+describe("detectCursorTarget and describeCapture", () => {
   it("names the pointed element and what is sent with it", () => {
-    const lensObject = detectLensObject(elementContext);
+    const cursorTarget = detectCursorTarget(elementContext);
 
-    expect(lensObject).toMatchObject({
+    expect(cursorTarget).toMatchObject({
       type: "element",
       label: 'Text "$328.00" in Microsoft Edge',
       summary: "Sony WH-1000XM5 $328.00",
@@ -48,7 +48,7 @@ describe("detectLensObject and describeCapture", () => {
       captureBlocked: { appName: "Signal" }
     };
 
-    expect(detectLensObject(context)).toMatchObject({
+    expect(detectCursorTarget(context)).toMatchObject({
       type: "blocked",
       label: "Capture blocked in Signal",
       privacyMode: "Nothing captured"
@@ -68,7 +68,7 @@ describe("detectLensObject and describeCapture", () => {
       }
     };
 
-    expect(detectLensObject(context)).toMatchObject({
+    expect(detectCursorTarget(context)).toMatchObject({
       type: "cursor-area",
       privacyMode: "area around pointer"
     });
@@ -86,7 +86,7 @@ describe("detectLensObject and describeCapture", () => {
       }
     };
 
-    expect(detectLensObject(context)).toMatchObject({
+    expect(detectCursorTarget(context)).toMatchObject({
       type: "page",
       label: "Trail Shoe in Microsoft Edge",
       summary: "Acme · Trail Shoe · 89.99 EUR",

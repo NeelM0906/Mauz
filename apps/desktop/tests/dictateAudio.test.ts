@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeWav } from "../src/renderer/src/lib/pushToTalk";
+import { encodeWav } from "../src/renderer/src/lib/dictateAudio";
 
 describe("encodeWav", () => {
   it("writes a 16-bit mono PCM WAV header and clamps samples", () => {

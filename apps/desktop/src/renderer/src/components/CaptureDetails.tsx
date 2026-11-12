@@ -1,6 +1,6 @@
 import { Eye } from "lucide-react";
 import type { MauzDesktopContext } from "@mauzai/shared";
-import { describeCapture } from "@renderer/lib/lensObject";
+import { describeCapture } from "@renderer/lib/cursorTarget";
 
 /** Collapsed "What Mauz saw" list: everything a question about this context sends. */
 export function CaptureDetails({

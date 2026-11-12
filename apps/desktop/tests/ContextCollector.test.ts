@@ -460,7 +460,7 @@ describe("ContextCollector: OCR and browser pages", () => {
     } as unknown as ScreenshotService;
     const collector = new ContextCollector({
       screenshotService,
-      // Mauz itself is in front during later Talk turns.
+      // Mauz itself is in front during later Dictate turns.
       activeWindowService: createActiveWindowService(),
       selectedTextService: createSelectedTextService(),
       windowsContextHelper: createTargetReader(productTarget),

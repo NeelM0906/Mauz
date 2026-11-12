@@ -146,14 +146,14 @@ export function parseJsonLine(line: string): Record<string, unknown> | null {
 }
 
 /** What an answer CLI is called and how its "signed out" errors read. */
-export type AnswerCli = {
+export type AskCli = {
   label: string;
   signInKeywords: readonly string[];
   signInMessage: string;
 };
 
 /** A message for the user from a CLI's error text, or from its exit code when it printed nothing. */
-export function describeCliFailure(cli: AnswerCli, detail: string, exitCode: number | null): string {
+export function describeCliFailure(cli: AskCli, detail: string, exitCode: number | null): string {
   const normalized = detail.replace(/\s+/g, " ").trim();
   const lowered = normalized.toLowerCase();
 

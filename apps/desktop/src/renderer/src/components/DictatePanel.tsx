@@ -1,6 +1,6 @@
 import { BriefcaseBusiness, LoaderCircle, Mic, ScanSearch, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { recordingToWav } from "@renderer/lib/pushToTalk";
+import { recordingToWav } from "@renderer/lib/dictateAudio";
 import { mauz } from "@renderer/lib/mauzClient";
 import { useMauzStore } from "@renderer/state/useMauzStore";
 import { PanelHeader } from "./PanelHeader";
@@ -119,7 +119,7 @@ export function DictatePanel(): React.JSX.Element {
         return;
       }
 
-      const transcription = await mauz().talk.transcribe({
+      const transcription = await mauz().dictate.transcribe({
         audioBase64: audio.base64,
         mimeType: "audio/wav"
       });
@@ -173,7 +173,7 @@ export function DictatePanel(): React.JSX.Element {
     abandonRecording();
     setDictation(text.trim());
 
-    setMode(target === "ask" ? "lens" : "task");
+    setMode(target);
   };
 
   const listening = state === "listening" || state === "starting";
@@ -181,7 +181,7 @@ export function DictatePanel(): React.JSX.Element {
   const canSend = !listening && !busy && text.trim().length > 0;
 
   return (
-    <section className="lens-panel lens-task-panel dictate-panel" aria-label="Dictate">
+    <section className="mode-panel dictate-panel" aria-label="Dictate">
       <PanelHeader
         title="Dictate"
         subtitle="Speak, then send it to Ask or your agent."

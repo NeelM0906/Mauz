@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AskMauzRequest } from "@mauzai/shared";
-import { buildAnswerPrompt, buildContextText } from "../src/openai/askMauz";
+import { buildAskPrompt, buildContextText } from "../src/openai/askMauz";
 import { MAUZ_SYSTEM_PROMPT } from "../src/prompts/mauzSystemPrompt";
 
 function buildRequest(): AskMauzRequest {
@@ -50,7 +50,7 @@ describe("Ask Mauz prompt payload", () => {
   });
 
   it("sends only the cursor crop by default for faster pointer asks", () => {
-    const { images } = buildAnswerPrompt(requestWithPointerContext);
+    const { images } = buildAskPrompt(requestWithPointerContext);
 
     expect(images).toHaveLength(1);
     expect(images[0]).toMatchObject({ mimeType: "image/jpeg", base64: "cursor-crop-base64" });
@@ -58,7 +58,7 @@ describe("Ask Mauz prompt payload", () => {
 
   it("sends the window screenshot only when there is no cursor crop", () => {
     const { cursorCrop: _cursorCrop, ...pointer } = requestWithPointerContext.context.pointer!;
-    const { images } = buildAnswerPrompt({
+    const { images } = buildAskPrompt({
       ...requestWithPointerContext,
       context: { ...requestWithPointerContext.context, pointer }
     });
@@ -70,7 +70,7 @@ describe("Ask Mauz prompt payload", () => {
   it("ignores the removed full-screenshot environment flag", () => {
     vi.stubEnv("OPENAI_INCLUDE_FULL_SCREENSHOT", "true");
 
-    expect(buildAnswerPrompt(requestWithPointerContext).images).toHaveLength(1);
+    expect(buildAskPrompt(requestWithPointerContext).images).toHaveLength(1);
   });
 
   it("describes pointer priority for vague this-or-that questions", () => {
@@ -132,7 +132,7 @@ describe("Ask Mauz prompt payload", () => {
     expect(contextText).toContain(
       "crop framed on the pointed element and the group around it (768x576); pointer at (120, 48) in the image"
     );
-    expect(buildAnswerPrompt(request).images).toEqual([
+    expect(buildAskPrompt(request).images).toEqual([
       expect.objectContaining({
         label: expect.stringMatching(/^Image 1: crop framed on the pointed element/)
       })
@@ -153,7 +153,7 @@ describe("Ask Mauz prompt payload", () => {
     };
     const contextText = buildContextText(request);
 
-    expect(buildAnswerPrompt(request).images).toEqual([]);
+    expect(buildAskPrompt(request).images).toEqual([]);
     expect(contextText).not.toContain("Vault item");
     expect(contextText).toContain(
       "Capture is blocked: the app or site under the pointer is on the user's never-capture list"

@@ -11,7 +11,7 @@ import {
 import { AiProviderError, MissingOpenAIKeyError, NoAiProviderError } from "./errors";
 import { askMauz } from "./openai/askMauz";
 import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
-import { getDefaultAnswerProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
+import { getDefaultAskProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
 import { SubscriptionConnector } from "./providers/subscriptionConnect";
 
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
@@ -21,12 +21,12 @@ export { applyCliPathOverride, buildCliEnvironment, getCliSearchDirectories } fr
 export function getAiProvidersStatus(
   options: { refresh?: boolean } = {}
 ): Promise<AiProvidersStatusResponse> {
-  return getDefaultAnswerProviderRegistry().getStatus(options);
+  return getDefaultAskProviderRegistry().getStatus(options);
 }
 
 /** Starts slow provider setup (for example the Claude Code CLI) when a question is likely. */
-export function prewarmAnswerProvider(): void {
-  getDefaultAnswerProviderRegistry().prewarm(MAUZ_SYSTEM_PROMPT);
+export function prewarmAskProvider(): void {
+  getDefaultAskProviderRegistry().prewarm(MAUZ_SYSTEM_PROMPT);
 }
 
 /**
@@ -38,15 +38,15 @@ export function createSubscriptionConnector(
 ): SubscriptionConnector {
   return new SubscriptionConnector({
     resolveCommand: resolveCliCommandForMauz,
-    onAuthChanged: () => getDefaultAnswerProviderRegistry().getStatus({ refresh: true }),
+    onAuthChanged: () => getDefaultAskProviderRegistry().getStatus({ refresh: true }),
     onState
   });
 }
 
 export type { SubscriptionConnector } from "./providers/subscriptionConnect";
 
-export function disposeAnswerProviders(): void {
-  getDefaultAnswerProviderRegistry().dispose();
+export function disposeAskProviders(): void {
+  getDefaultAskProviderRegistry().dispose();
 }
 
 /**

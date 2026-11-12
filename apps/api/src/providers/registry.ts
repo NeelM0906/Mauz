@@ -13,7 +13,7 @@ import { buildCliEnvironment, resolveCliCommand, type ResolvedCliCommand } from 
 import { CodexProvider } from "./codexProvider";
 import { DEFAULT_OPENAI_ASK_MODEL, OpenAiApiProvider } from "./openaiProvider";
 import { parseJsonLine, runAndCollect, spawnCliProcess, type SpawnLike } from "./processRunner";
-import type { AnswerProvider, ProviderDetection } from "./types";
+import type { AskProvider, ProviderDetection } from "./types";
 
 /**
  * Auto order, used only when the default is "auto" and several providers are ready: a key
@@ -31,7 +31,7 @@ const PROVIDER_LABELS: Record<AiProviderId, string> = {
 const CLI_DETECTION_TTL_MS = 5 * 60_000;
 const CLI_STATUS_TIMEOUT_MS = 15_000;
 
-type AnswerProviderRegistryOptions = {
+type AskProviderRegistryOptions = {
   env?: () => NodeJS.ProcessEnv;
   spawn?: SpawnLike;
   resolveCommand?: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
@@ -42,15 +42,15 @@ type CliDetectionCache = {
   promise: Promise<Record<"claude-code" | "codex", ProviderDetection>>;
 };
 
-export class AnswerProviderRegistry {
+export class AskProviderRegistry {
   private readonly readEnv: () => NodeJS.ProcessEnv;
   private readonly spawnProcess: SpawnLike;
   private readonly resolveCommand: (name: string, env: NodeJS.ProcessEnv) => ResolvedCliCommand | null;
-  private readonly providers: Record<AiProviderId, AnswerProvider>;
+  private readonly providers: Record<AiProviderId, AskProvider>;
   private cliDetection: CliDetectionCache | null = null;
   private lastCliDetection: Record<"claude-code" | "codex", ProviderDetection> | null = null;
 
-  constructor(options: AnswerProviderRegistryOptions = {}) {
+  constructor(options: AskProviderRegistryOptions = {}) {
     this.readEnv = options.env ?? (() => process.env);
     this.spawnProcess = options.spawn ?? spawnCliProcess;
     this.resolveCommand = options.resolveCommand ?? resolveCliCommandForMauz;
@@ -77,7 +77,7 @@ export class AnswerProviderRegistry {
   }
 
   /** Returns the provider that should answer now, or explains why none can. */
-  async resolve(): Promise<AnswerProvider> {
+  async resolve(): Promise<AskProvider> {
     const status = await this.getStatus();
 
     if (status.activeProviderId !== null) {
@@ -267,9 +267,9 @@ function describeDetectionError(name: string, error: unknown): string {
   return `Could not check ${name} sign-in: ${detail}`;
 }
 
-let defaultRegistry: AnswerProviderRegistry | null = null;
+let defaultRegistry: AskProviderRegistry | null = null;
 
-export function getDefaultAnswerProviderRegistry(): AnswerProviderRegistry {
-  defaultRegistry ??= new AnswerProviderRegistry();
+export function getDefaultAskProviderRegistry(): AskProviderRegistry {
+  defaultRegistry ??= new AskProviderRegistry();
   return defaultRegistry;
 }

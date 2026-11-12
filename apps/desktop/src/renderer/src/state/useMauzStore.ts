@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { MauzDesktopContext, MauzSettings } from "@mauzai/shared";
 
-export type MauzMode = "menu" | "lens" | "task" | "dictate" | "settings";
+export type MauzMode = "menu" | "ask" | "task" | "dictate" | "settings";
 
 type MauzStore = {
   mode: MauzMode;

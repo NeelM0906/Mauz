@@ -30,7 +30,7 @@ export const IPC_CHANNELS = {
   providersConnectOpenPage: "mauz:providers:connect-open-page",
   providersConnectState: "mauz:providers:connect-state",
   providersDisconnect: "mauz:providers:disconnect",
-  talkTranscribe: "mauz:talk:transcribe",
+  dictateTranscribe: "mauz:dictate:transcribe",
   browserStatus: "mauz:browser:status",
   browserOpenExtensionFolder: "mauz:browser:open-extension-folder",
   taskAgents: "mauz:task:agents",

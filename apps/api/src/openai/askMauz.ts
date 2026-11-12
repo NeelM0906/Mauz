@@ -5,11 +5,11 @@ import {
   type AskMauzResponse
 } from "@mauzai/shared";
 import { MAUZ_SYSTEM_PROMPT } from "../prompts/mauzSystemPrompt";
-import { getDefaultAnswerProviderRegistry, type AnswerProviderRegistry } from "../providers/registry";
-import type { AnswerImage, AnswerPrompt } from "../providers/types";
+import { getDefaultAskProviderRegistry, type AskProviderRegistry } from "../providers/registry";
+import type { AskImage, AskPrompt } from "../providers/types";
 
 type AskMauzOptions = {
-  registry?: Pick<AnswerProviderRegistry, "resolve">;
+  registry?: Pick<AskProviderRegistry, "resolve">;
   onText?: (textSoFar: string) => void;
 };
 
@@ -18,9 +18,9 @@ export async function askMauz(
   request: AskMauzRequest,
   options: AskMauzOptions = {}
 ): Promise<AskMauzResponse> {
-  const registry = options.registry ?? getDefaultAnswerProviderRegistry();
+  const registry = options.registry ?? getDefaultAskProviderRegistry();
   const provider = await registry.resolve();
-  const result = await provider.answer(buildAnswerPrompt(request), {
+  const result = await provider.answer(buildAskPrompt(request), {
     onText: options.onText
   });
 
@@ -28,9 +28,9 @@ export async function askMauz(
 }
 
 /** Provider-neutral prompt: system prompt, context text, and labeled images in send order. */
-export function buildAnswerPrompt(request: AskMauzRequest): AnswerPrompt {
+export function buildAskPrompt(request: AskMauzRequest): AskPrompt {
   const image = getContextImage(request.context);
-  const images: AnswerImage[] =
+  const images: AskImage[] =
     image === undefined
       ? []
       : [
