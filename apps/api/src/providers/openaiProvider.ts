@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import { AiProviderError, MissingOpenAIKeyError } from "../errors";
-import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
+import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
 
 export const DEFAULT_OPENAI_ASK_MODEL = "gpt-5.4-mini";
 const DEFAULT_ASK_MAX_OUTPUT_TOKENS = 700;
@@ -14,7 +14,7 @@ type OpenAiApiProviderOptions = {
 };
 
 /** Answers with the user's own OpenAI API key through the Responses API. */
-export class OpenAiApiProvider implements AnswerProvider {
+export class OpenAiApiProvider implements AskProvider {
   readonly id = "openai" as const;
   private readonly readEnv: () => NodeJS.ProcessEnv;
   private readonly createClient: (apiKey: string) => OpenAiClientLike;
@@ -24,7 +24,7 @@ export class OpenAiApiProvider implements AnswerProvider {
     this.createClient = options.createClient ?? ((apiKey) => new OpenAI({ apiKey }));
   }
 
-  async answer(prompt: AnswerPrompt, options: AnswerOptions = {}): Promise<AnswerResult> {
+  async answer(prompt: AskPrompt, options: AskOptions = {}): Promise<AskResult> {
     const env = this.readEnv();
     const apiKey = env.OPENAI_API_KEY?.trim();
 

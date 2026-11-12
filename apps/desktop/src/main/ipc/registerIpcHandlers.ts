@@ -10,8 +10,8 @@ import {
   SubscriptionConnectRequestSchema,
   SubscriptionConnectStateSchema,
   SubscriptionDisconnectRequestSchema,
-  TalkTranscribeRequestSchema,
-  TalkTranscribeResponseSchema,
+  DictateTranscribeRequestSchema,
+  DictateTranscribeResponseSchema,
   TaskAgentsResponseSchema,
   TaskFoldersRequestSchema,
   TaskFoldersResponseSchema,
@@ -24,7 +24,7 @@ import { answerAsk, getAiProvidersStatus, type SubscriptionConnector } from "@ma
 import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
-import type { TalkTranscriber } from "../talk/TalkTranscriber";
+import type { DictateTranscriber } from "../dictate/DictateTranscriber";
 import { isTrustedRendererUrl } from "../windows/WindowSecurity";
 
 type RegisterIpcHandlersOptions = {
@@ -49,7 +49,7 @@ type RegisterIpcHandlersOptions = {
     pickFolder(): Promise<string | null>;
   };
   getProvidersStatus?: typeof getAiProvidersStatus;
-  talkTranscriber?: Pick<TalkTranscriber, "transcribe">;
+  dictateTranscriber?: Pick<DictateTranscriber, "transcribe">;
   subscriptionConnector?: Pick<
     SubscriptionConnector,
     "connect" | "submitCode" | "cancel" | "disconnect" | "getState"
@@ -83,7 +83,7 @@ export function registerIpcHandlers({
   updateSettings,
   taskAgents,
   getProvidersStatus = getAiProvidersStatus,
-  talkTranscriber,
+  dictateTranscriber,
   subscriptionConnector,
   openExternal,
   browserExtension
@@ -239,14 +239,14 @@ export function registerIpcHandlers({
     return subscriptionConnector;
   }
 
-  handle(IPC_CHANNELS.talkTranscribe, async (_event, payload) => {
-    const request = TalkTranscribeRequestSchema.parse(payload);
+  handle(IPC_CHANNELS.dictateTranscribe, async (_event, payload) => {
+    const request = DictateTranscribeRequestSchema.parse(payload);
 
-    if (talkTranscriber === undefined) {
+    if (dictateTranscriber === undefined) {
       throw new Error("Dictation is not available in this build.");
     }
 
-    return TalkTranscribeResponseSchema.parse(await talkTranscriber.transcribe(request));
+    return DictateTranscribeResponseSchema.parse(await dictateTranscriber.transcribe(request));
   });
 
   handle(IPC_CHANNELS.browserStatus, (): BrowserExtensionStatus => {

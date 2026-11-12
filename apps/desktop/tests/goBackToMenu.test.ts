@@ -20,11 +20,11 @@ describe("goBackToMenu", () => {
     stubBridge(async () => {
       calls.push(`showMenu while ${useMauzStore.getState().mode}`);
     });
-    useMauzStore.setState({ mode: "lens" });
+    useMauzStore.setState({ mode: "ask" });
 
     await goBackToMenu();
 
-    expect(calls).toEqual(["showMenu while lens"]);
+    expect(calls).toEqual(["showMenu while ask"]);
     expect(useMauzStore.getState().mode).toBe("menu");
   });
 

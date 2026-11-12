@@ -42,7 +42,7 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.providersConnectCancel,
   IPC_CHANNELS.providersConnectOpenPage,
   IPC_CHANNELS.providersDisconnect,
-  IPC_CHANNELS.talkTranscribe,
+  IPC_CHANNELS.dictateTranscribe,
   IPC_CHANNELS.browserStatus,
   IPC_CHANNELS.browserOpenExtensionFolder
 ] as const;

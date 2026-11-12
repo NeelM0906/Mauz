@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { TalkTranscriber } from "../src/main/talk/TalkTranscriber";
+import { DictateTranscriber } from "../src/main/dictate/DictateTranscriber";
 
 const REQUEST = { audioBase64: Buffer.from("RIFF-test").toString("base64"), mimeType: "audio/wav" as const };
 
-describe("TalkTranscriber", () => {
+describe("DictateTranscriber", () => {
   it("uses OpenAI when an OpenAI key is configured", async () => {
     const transcribeWithOpenAi = vi.fn(async () => "hello from openai");
     const transcribeWav = vi.fn();
-    const transcriber = new TalkTranscriber({
+    const transcriber = new DictateTranscriber({
       getWindowsHelper: () => ({ transcribeWav }),
       hasOpenAiKey: () => true,
       transcribeWithOpenAi
@@ -23,7 +23,7 @@ describe("TalkTranscriber", () => {
     const writeTempFile = vi.fn(async (_path: string, _data: Buffer) => {});
     const removeTempFile = vi.fn(async () => {});
     const transcribeWav = vi.fn(async () => "hello from windows");
-    const transcriber = new TalkTranscriber({
+    const transcriber = new DictateTranscriber({
       getWindowsHelper: () => ({ transcribeWav }),
       hasOpenAiKey: () => false,
       transcribeWithOpenAi: vi.fn(),
@@ -40,7 +40,7 @@ describe("TalkTranscriber", () => {
   });
 
   it("explains how to enable voice when no speech engine is available", async () => {
-    const transcriber = new TalkTranscriber({
+    const transcriber = new DictateTranscriber({
       getWindowsHelper: () => null,
       hasOpenAiKey: () => false,
       transcribeWithOpenAi: vi.fn()

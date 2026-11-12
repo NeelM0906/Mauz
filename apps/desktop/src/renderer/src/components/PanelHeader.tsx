@@ -23,7 +23,7 @@ export function PanelHeader({
   onLeave?: () => void;
 }): React.JSX.Element {
   return (
-    <header className="lens-header lens-task-header">
+    <header className="mode-header">
       <button
         className="icon-button"
         type="button"

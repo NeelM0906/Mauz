@@ -9,13 +9,13 @@ import {
   runAndCollect,
   spawnCliProcess,
   toCliError,
-  type AnswerCli
+  type AskCli
 } from "./processRunner";
-import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
+import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
 
 const DEFAULT_CODEX_REASONING_EFFORT = "low";
-const ANSWER_TIMEOUT_MS = 180_000;
-const CODEX_CLI: AnswerCli = {
+const ASK_TIMEOUT_MS = 180_000;
+const CODEX_CLI: AskCli = {
   label: "Codex",
   signInKeywords: ["login", "not logged in", "401"],
   signInMessage: "Codex isn't signed in. Open a terminal, run `codex login`, then try again."
@@ -30,7 +30,7 @@ type CodexProviderOptions = {
  * ephemeral, read-only, outside any repository, and ignores the user's Codex config so
  * their MCP servers and plugins never see Mauz prompts.
  */
-export class CodexProvider implements AnswerProvider {
+export class CodexProvider implements AskProvider {
   readonly id = "codex" as const;
   private readonly readEnv: () => NodeJS.ProcessEnv;
 
@@ -38,7 +38,7 @@ export class CodexProvider implements AnswerProvider {
     this.readEnv = options.env ?? (() => process.env);
   }
 
-  async answer(prompt: AnswerPrompt, options: AnswerOptions = {}): Promise<AnswerResult> {
+  async answer(prompt: AskPrompt, options: AskOptions = {}): Promise<AskResult> {
     const env = this.readEnv();
     const command = resolveCliCommand("codex", {
       env,
@@ -83,7 +83,7 @@ export class CodexProvider implements AnswerProvider {
       });
       const output = await runAndCollect(child, {
         stdinText: buildCodexPrompt(prompt),
-        timeoutMs: ANSWER_TIMEOUT_MS
+        timeoutMs: ASK_TIMEOUT_MS
       }).catch((error: unknown) => {
         throw toCliError(this.id, CODEX_CLI.label, error);
       });
@@ -104,7 +104,7 @@ export class CodexProvider implements AnswerProvider {
   }
 }
 
-async function writeImages(directory: string, prompt: AnswerPrompt): Promise<string[]> {
+async function writeImages(directory: string, prompt: AskPrompt): Promise<string[]> {
   const paths: string[] = [];
 
   for (const [index, image] of prompt.images.entries()) {
@@ -117,7 +117,7 @@ async function writeImages(directory: string, prompt: AnswerPrompt): Promise<str
   return paths;
 }
 
-function buildCodexPrompt(prompt: AnswerPrompt): string {
+function buildCodexPrompt(prompt: AskPrompt): string {
   const imageLines =
     prompt.images.length === 0
       ? []

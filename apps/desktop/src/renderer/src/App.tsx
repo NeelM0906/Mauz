@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { DictatePanel } from "./components/DictatePanel";
-import { LensPanel } from "./components/LensPanel";
+import { AskPanel } from "./components/AskPanel";
 import { MauzMenu } from "./components/MauzMenu";
 import { goBackToMenu } from "./components/PanelHeader";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -12,7 +12,7 @@ import "./styles.css";
 
 const PANELS: Record<MauzMode, React.ComponentType> = {
   menu: MauzMenu,
-  lens: LensPanel,
+  ask: AskPanel,
   task: TaskPanel,
   dictate: DictatePanel,
   settings: SettingsPanel

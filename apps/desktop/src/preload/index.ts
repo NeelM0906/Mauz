@@ -57,8 +57,8 @@ const mauzApi: MauzBridge = {
     openConnectPage: invokeWith(IPC_CHANNELS.providersConnectOpenPage),
     onConnectState: onPayload(IPC_CHANNELS.providersConnectState, SubscriptionConnectStateSchema)
   },
-  talk: {
-    transcribe: invokeWith(IPC_CHANNELS.talkTranscribe)
+  dictate: {
+    transcribe: invokeWith(IPC_CHANNELS.dictateTranscribe)
   },
   browser: {
     status: invoke(IPC_CHANNELS.browserStatus),

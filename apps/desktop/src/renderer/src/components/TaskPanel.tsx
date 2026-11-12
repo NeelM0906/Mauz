@@ -1,7 +1,7 @@
 import { BriefcaseBusiness, FolderOpen, LoaderCircle, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { TaskAgentId, TaskAgentStatus, TaskFolder } from "@mauzai/shared";
-import { detectLensObject } from "@renderer/lib/lensObject";
+import { detectCursorTarget } from "@renderer/lib/cursorTarget";
 import { mauz } from "@renderer/lib/mauzClient";
 import { findFolderForEditorWindow } from "@renderer/lib/taskFolders";
 import { useMauzStore } from "@renderer/state/useMauzStore";
@@ -14,7 +14,7 @@ import { PanelHeader } from "./PanelHeader";
  */
 export function TaskPanel(): React.JSX.Element {
   const { currentContext, dictation, setDictation } = useMauzStore();
-  const lensObject = useMemo(() => detectLensObject(currentContext), [currentContext]);
+  const cursorTarget = useMemo(() => detectCursorTarget(currentContext), [currentContext]);
   const [task, setTask] = useState("");
   const [agents, setAgents] = useState<TaskAgentStatus[] | null>(null);
   const [agentId, setAgentId] = useState<TaskAgentId | null>(null);
@@ -130,12 +130,12 @@ export function TaskPanel(): React.JSX.Element {
     !sending && currentContext !== null && agentId !== null && folder.length > 0 && task.trim().length > 0;
 
   return (
-    <section className="lens-panel lens-task-panel task-panel" aria-label="Send to agent">
-      <PanelHeader title="Send to agent" subtitle={lensObject.label} />
+    <section className="mode-panel task-panel" aria-label="Send to agent">
+      <PanelHeader title="Send to agent" subtitle={cursorTarget.label} />
 
       <CaptureDetails context={currentContext} />
 
-      <form className="lens-task-form task-send-form" onSubmit={(event) => void handleSubmit(event)}>
+      <form className="mode-form task-send-form" onSubmit={(event) => void handleSubmit(event)}>
         <textarea
           aria-label="Task for the agent"
           value={task}

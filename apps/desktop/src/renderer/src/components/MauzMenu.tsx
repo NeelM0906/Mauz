@@ -7,8 +7,6 @@ import { BrandLogo } from "./BrandLogo";
 
 type BubbleKey = "ask" | "task" | "dictate";
 
-const PANEL_FOR_BUBBLE = { ask: "lens", task: "task", dictate: "dictate" } as const;
-
 // Bubble offsets from the cluster center.
 const BUBBLE_POSITIONS: Record<BubbleKey, { tx: number; ty: number }> = {
   ask: { tx: -95, ty: -55 },
@@ -76,7 +74,7 @@ export function MauzMenu(): React.JSX.Element {
       const context = await mauz().menu.startAsk();
       setCurrentContext(context);
       await mauz().menu.expand();
-      setMode(PANEL_FOR_BUBBLE[bubble]);
+      setMode(bubble);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Mauz action failed.");
     } finally {

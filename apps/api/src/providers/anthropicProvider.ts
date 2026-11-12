@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { AiProviderError, NoAiProviderError } from "../errors";
-import type { AnswerOptions, AnswerPrompt, AnswerProvider, AnswerResult } from "./types";
+import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
 
 export const DEFAULT_ANTHROPIC_ASK_MODEL = "claude-opus-5-5";
 const MAX_OUTPUT_TOKENS = 16_000;
@@ -13,7 +13,7 @@ type AnthropicApiProviderOptions = {
 };
 
 /** Answers with the user's own Anthropic API key, streaming text as it arrives. */
-export class AnthropicApiProvider implements AnswerProvider {
+export class AnthropicApiProvider implements AskProvider {
   readonly id = "anthropic" as const;
   private readonly readEnv: () => NodeJS.ProcessEnv;
   private readonly createClient: (apiKey: string) => AnthropicClientLike;
@@ -23,7 +23,7 @@ export class AnthropicApiProvider implements AnswerProvider {
     this.createClient = options.createClient ?? ((apiKey) => new Anthropic({ apiKey }));
   }
 
-  async answer(prompt: AnswerPrompt, options: AnswerOptions = {}): Promise<AnswerResult> {
+  async answer(prompt: AskPrompt, options: AskOptions = {}): Promise<AskResult> {
     const env = this.readEnv();
     const apiKey = env.ANTHROPIC_API_KEY?.trim();
 

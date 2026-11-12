@@ -304,7 +304,8 @@ function Invoke-MauzRecognition([string]$path) {
   try {
     $parts = @()
     while ($true) {
-      $result = $engine.Recognize()
+      # Recognize() throws, instead of returning null, once a phrase used up the rest of the file.
+      try { $result = $engine.Recognize() } catch [System.InvalidOperationException] { break }
       if ($null -eq $result) { break }
       $parts += $result.Text
     }

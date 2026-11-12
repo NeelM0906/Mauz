@@ -35,11 +35,11 @@
   --text-muted: #77736b;
 
   /* Accent channels */
-  --accent-answer: #167a6b;
-  --accent-answer-text: #174b43;
-  --accent-answer-bg: rgba(22, 122, 107, 0.09);
-  --accent-answer-bg-strong: rgba(22, 122, 107, 0.12);
-  --accent-answer-border: rgba(22, 122, 107, 0.22);
+  --accent-ask: #167a6b;
+  --accent-ask-text: #174b43;
+  --accent-ask-bg: rgba(22, 122, 107, 0.09);
+  --accent-ask-bg-strong: rgba(22, 122, 107, 0.12);
+  --accent-ask-border: rgba(22, 122, 107, 0.22);
 
   --accent-yolo-text: #6d4b29;
   --accent-yolo-bg: rgba(157, 94, 31, 0.08);
@@ -84,11 +84,11 @@
     --text-tertiary: #8e8e93;
     --text-muted: #8e8e93;
 
-    --accent-answer: #3ddbbf;
-    --accent-answer-text: #3ddbbf;
-    --accent-answer-bg: rgba(61, 219, 191, 0.1);
-    --accent-answer-bg-strong: rgba(61, 219, 191, 0.14);
-    --accent-answer-border: rgba(61, 219, 191, 0.28);
+    --accent-ask: #3ddbbf;
+    --accent-ask-text: #3ddbbf;
+    --accent-ask-bg: rgba(61, 219, 191, 0.1);
+    --accent-ask-bg-strong: rgba(61, 219, 191, 0.14);
+    --accent-ask-border: rgba(61, 219, 191, 0.28);
 
     --accent-yolo-text: #ffb340;
     --accent-yolo-bg: rgba(255, 179, 64, 0.1);
@@ -109,7 +109,7 @@
   .bubble,
   .bubble-hub,
   .bubble-status-toast,
-  .lens-panel,
+  .mode-panel,
   .settings-panel {
     animation: none !important;
     transition: none !important;
@@ -186,30 +186,31 @@ button {
 }
 
 .icon-button:focus-visible {
-  background: var(--accent-answer-bg);
-  color: var(--accent-answer-text);
+  background: var(--accent-ask-bg);
+  color: var(--accent-ask-text);
   outline: none;
-  box-shadow: 0 0 0 2px var(--accent-answer-border);
+  box-shadow: 0 0 0 2px var(--accent-ask-border);
 }
 
-.lens-panel {
+.mode-panel {
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 10px;
+  padding: 12px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-panel);
+  border-radius: 8px;
   background: var(--surface-panel);
   -webkit-backdrop-filter: var(--backdrop-filter);
   backdrop-filter: var(--backdrop-filter);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-float);
   transform-origin: top left;
   animation: panel-in var(--dur-base) var(--ease-spring) both;
 }
 
-.lens-header {
+.mode-header {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 28px 1fr auto;
   align-items: center;
@@ -243,7 +244,7 @@ button {
   white-space: nowrap;
 }
 
-.lens-header h1 {
+.mode-header h1 {
   margin: 0;
   color: var(--text-primary);
   font-size: 14px;
@@ -252,7 +253,7 @@ button {
   letter-spacing: 0;
 }
 
-.lens-header p {
+.mode-header p {
   margin: 3px 0 0;
   color: var(--text-secondary);
   font-size: 10px;
@@ -261,145 +262,12 @@ button {
   letter-spacing: 0;
 }
 
-.lens-answer-area {
-  flex: 1;
-  min-height: 0;
-  padding: 8px;
-}
-
-.lens-task-panel {
-  gap: 10px;
-  padding: 12px;
-  border-radius: 8px;
-  background: var(--surface-panel);
-  -webkit-backdrop-filter: var(--backdrop-filter);
-  backdrop-filter: var(--backdrop-filter);
-  box-shadow: var(--shadow-float);
-  transform-origin: top left;
-  animation: panel-in var(--dur-base) var(--ease-spring) both;
-}
-
-.lens-task-header {
-  flex: 0 0 auto;
-}
-
-.lens-task-summary {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid var(--accent-answer-border);
-  border-radius: 8px;
-  background: var(--accent-answer-bg);
-}
-
-.lens-task-summary-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--accent-answer-border);
-  border-radius: 8px;
-  background: var(--surface-card);
-  color: var(--accent-answer);
-}
-
-.lens-task-summary > div:last-child {
-  min-width: 0;
-}
-
-.lens-task-eyebrow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 4px;
-  color: var(--accent-answer-text);
-  font-size: 10px;
-  font-weight: 760;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.lens-task-eyebrow span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lens-task-eyebrow span:last-child {
-  flex: 0 0 auto;
-}
-
-.lens-task-summary h2,
-.lens-task-summary p {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lens-task-summary h2 {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 780;
-  line-height: 1.2;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
-.lens-task-summary p {
-  margin-top: 4px;
-  color: var(--accent-answer-text);
-  font-size: 11.5px;
-  font-weight: 540;
-  line-height: 1.35;
-  letter-spacing: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.lens-task-context {
-  flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.lens-task-context span {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid var(--accent-answer-border);
-  border-radius: 7px;
-  background: var(--accent-answer-bg);
-  color: var(--accent-answer-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.lens-task-context svg {
-  flex: 0 0 auto;
-  color: var(--accent-answer);
-}
-
 .capture-details {
   flex: 0 0 auto;
-  border: 1px solid var(--accent-answer-border);
+  border: 1px solid var(--accent-ask-border);
   border-radius: 7px;
-  background: var(--accent-answer-bg);
-  color: var(--accent-answer-text);
+  background: var(--accent-ask-bg);
+  color: var(--accent-ask-text);
   font-size: 10px;
 }
 
@@ -419,7 +287,7 @@ button {
 }
 
 .capture-details summary svg {
-  color: var(--accent-answer);
+  color: var(--accent-ask);
 }
 
 .capture-details ul {
@@ -460,14 +328,14 @@ button {
   border-radius: 5px;
 }
 
-.lens-task-form {
+.mode-form {
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 98px;
   gap: 8px;
 }
 
-.lens-task-form textarea {
+.mode-form textarea {
   min-width: 0;
   height: 56px;
   resize: none;
@@ -483,45 +351,28 @@ button {
   outline: none;
 }
 
-.lens-task-form textarea:focus {
-  border-color: var(--accent-answer-border);
-  box-shadow: 0 0 0 3px var(--accent-answer-bg-strong);
+.mode-form textarea:focus {
+  border-color: var(--accent-ask-border);
+  box-shadow: 0 0 0 3px var(--accent-ask-bg-strong);
 }
 
-.lens-task-form textarea:disabled {
+.mode-form textarea:disabled {
   color: var(--text-tertiary);
   background: var(--border-hairline);
 }
 
-.lens-task-form .submit-button {
+.ask-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mode-form .submit-button {
   height: 56px;
 }
 
-.lens-task-panel .lens-answer-area {
+.mode-panel .ask-answer-area {
   flex: 1 1 auto;
   min-height: 170px;
   padding: 10px;
-}
-
-.permission-note {
-  display: grid;
-  gap: 3px;
-  padding: 8px 9px;
-  border: 1px solid var(--accent-yolo-border);
-  border-radius: 8px;
-  background: var(--accent-yolo-bg);
-  color: var(--accent-yolo-text);
-  font-size: 10px;
-  font-weight: 540;
-  line-height: 1.3;
-  letter-spacing: 0;
-}
-
-.permission-note strong {
-  color: var(--accent-yolo-text);
-  font-size: 10px;
-  font-weight: 720;
-  line-height: 1.25;
 }
 
 .submit-button {
@@ -700,9 +551,9 @@ button {
 }
 
 .secondary-button {
-  border: 1px solid var(--accent-answer-border);
-  background: var(--accent-answer-bg);
-  color: var(--accent-answer-text);
+  border: 1px solid var(--accent-ask-border);
+  background: var(--accent-ask-bg);
+  color: var(--accent-ask-text);
 }
 
 .secondary-button:disabled {
@@ -783,7 +634,7 @@ button {
 
 .settings-row svg,
 .settings-label svg {
-  color: var(--accent-answer);
+  color: var(--accent-ask);
 }
 
 .settings-row strong,
@@ -830,8 +681,8 @@ button {
 }
 
 .auth-provider-card[data-status="active"] {
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
+  border-color: var(--accent-ask-border);
+  background: var(--accent-ask-bg);
 }
 
 .auth-provider-card[data-status="missing"] {
@@ -876,8 +727,8 @@ button {
 }
 
 .auth-provider-card[data-status="active"] .provider-status {
-  border-color: var(--accent-answer-border);
-  color: var(--accent-answer) !important;
+  border-color: var(--accent-ask-border);
+  color: var(--accent-ask) !important;
 }
 
 .provider-side {
@@ -929,8 +780,8 @@ button {
 
 .settings-field input:focus,
 .settings-field select:focus {
-  border-color: var(--accent-answer-border);
-  box-shadow: 0 0 0 3px var(--accent-answer-bg-strong);
+  border-color: var(--accent-ask-border);
+  box-shadow: 0 0 0 3px var(--accent-ask-bg-strong);
 }
 
 .settings-inline-actions {
@@ -960,8 +811,8 @@ button {
 }
 
 .settings-textarea:focus {
-  border-color: var(--accent-answer-border);
-  box-shadow: 0 0 0 3px var(--accent-answer-bg-strong);
+  border-color: var(--accent-ask-border);
+  box-shadow: 0 0 0 3px var(--accent-ask-bg-strong);
 }
 
 .settings-footer {
@@ -992,8 +843,8 @@ button {
 }
 
 .toggle-button[aria-pressed="true"] {
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer);
+  border-color: var(--accent-ask-border);
+  background: var(--accent-ask);
 }
 
 .segmented-control {
@@ -1017,9 +868,9 @@ button {
 }
 
 .segmented-control button[aria-pressed="true"] {
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg-strong);
-  color: var(--accent-answer-text);
+  border-color: var(--accent-ask-border);
+  background: var(--accent-ask-bg-strong);
+  color: var(--accent-ask-text);
 }
 
 .spin {
@@ -1115,14 +966,14 @@ button {
   transform: scale(1.08);
   box-shadow:
     var(--shadow-panel),
-    0 0 0 4px var(--accent-answer-border);
+    0 0 0 4px var(--accent-ask-border);
 }
 
 .bubble-hub:focus-visible {
   outline: none;
   box-shadow:
     var(--shadow-panel),
-    0 0 0 3px var(--accent-answer-border);
+    0 0 0 3px var(--accent-ask-border);
 }
 
 .bubble-hub:disabled {
@@ -1182,16 +1033,16 @@ button {
 
 .bubble:hover {
   transform: scale(1.08);
-  border-color: var(--bubble-glow-color, var(--accent-answer-border));
+  border-color: var(--bubble-glow-color, var(--accent-ask-border));
   box-shadow:
     var(--shadow-card),
-    0 0 0 4px var(--bubble-glow-color, var(--accent-answer-border));
+    0 0 0 4px var(--bubble-glow-color, var(--accent-ask-border));
 }
 
 .bubble:focus-visible {
   box-shadow:
     var(--shadow-card),
-    0 0 0 3px var(--bubble-glow-color, var(--accent-answer-border));
+    0 0 0 3px var(--bubble-glow-color, var(--accent-ask-border));
 }
 
 .bubble:disabled {
@@ -1201,17 +1052,17 @@ button {
 
 .bubble[data-pending="true"] {
   animation: bubble-pulse 1s ease-in-out infinite;
-  --bubble-glow: var(--bubble-glow-color, var(--accent-answer-border));
+  --bubble-glow: var(--bubble-glow-color, var(--accent-ask-border));
 }
 
 .bubble svg {
-  color: var(--accent-answer);
+  color: var(--accent-ask);
 }
 
 .bubble[data-accent="answer"] {
-  --bubble-glow-color: var(--accent-answer-border);
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
+  --bubble-glow-color: var(--accent-ask-border);
+  border-color: var(--accent-ask-border);
+  background: var(--accent-ask-bg);
 }
 
 .bubble-label {
@@ -1288,9 +1139,9 @@ button {
 }
 
 .provider-action-button[data-primary="true"] {
-  border-color: var(--accent-answer-border);
-  background: var(--accent-answer-bg);
-  color: var(--accent-answer-text);
+  border-color: var(--accent-ask-border);
+  background: var(--accent-ask-bg);
+  color: var(--accent-ask-text);
 }
 
 .provider-action-button:disabled {
@@ -1329,9 +1180,9 @@ button {
 .subscription-code {
   justify-self: start;
   padding: 4px 8px;
-  border: 1px solid var(--accent-answer-border);
+  border: 1px solid var(--accent-ask-border);
   border-radius: 6px;
-  background: var(--accent-answer-bg);
+  background: var(--accent-ask-bg);
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 760;
@@ -1436,7 +1287,7 @@ button {
 }
 
 .dictate-status > svg {
-  color: var(--accent-answer);
+  color: var(--accent-ask);
 }
 
 .dictate-status[data-state="listening"] > svg {
@@ -1473,8 +1324,8 @@ button {
 }
 
 .dictate-text:focus {
-  border-color: var(--accent-answer-border);
-  box-shadow: 0 0 0 3px var(--accent-answer-bg-strong);
+  border-color: var(--accent-ask-border);
+  box-shadow: 0 0 0 3px var(--accent-ask-bg-strong);
 }
 
 .dictate-actions {

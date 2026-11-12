@@ -31,8 +31,8 @@ import type {
   SubscriptionConnectStateSchema,
   SubscriptionDisconnectRequestSchema,
   SubscriptionProviderIdSchema,
-  TalkTranscribeRequestSchema,
-  TalkTranscribeResponseSchema,
+  DictateTranscribeRequestSchema,
+  DictateTranscribeResponseSchema,
   TaskAgentIdSchema,
   TaskAgentPreferenceSchema,
   TaskAgentsResponseSchema,
@@ -74,8 +74,8 @@ export type SubscriptionCodeRequest = z.infer<typeof SubscriptionCodeRequestSche
 export type SubscriptionCancelRequest = z.infer<typeof SubscriptionCancelRequestSchema>;
 export type SubscriptionDisconnectRequest = z.infer<typeof SubscriptionDisconnectRequestSchema>;
 
-export type TalkTranscribeRequest = z.infer<typeof TalkTranscribeRequestSchema>;
-export type TalkTranscribeResponse = z.infer<typeof TalkTranscribeResponseSchema>;
+export type DictateTranscribeRequest = z.infer<typeof DictateTranscribeRequestSchema>;
+export type DictateTranscribeResponse = z.infer<typeof DictateTranscribeResponseSchema>;
 
 export type PermissionError = z.infer<typeof PermissionErrorSchema>;
 export type ShakeSensitivity = z.infer<typeof ShakeSensitivitySchema>;
@@ -125,8 +125,8 @@ export type MauzBridge = {
     openConnectPage(payload: SubscriptionCancelRequest): Promise<void>;
     onConnectState(callback: (state: SubscriptionConnectState) => void): () => void;
   };
-  talk: {
-    transcribe(payload: TalkTranscribeRequest): Promise<TalkTranscribeResponse>;
+  dictate: {
+    transcribe(payload: DictateTranscribeRequest): Promise<DictateTranscribeResponse>;
   };
   browser: {
     status(): Promise<BrowserExtensionStatus>;
