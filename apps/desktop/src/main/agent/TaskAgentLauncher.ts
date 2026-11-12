@@ -667,7 +667,7 @@ export function threadTitle(task: string): string {
   const firstLine = task.trim().split(/\r?\n/)[0]?.replace(/\s+/g, " ").trim() ?? "";
   const title = firstLine.length > 0 ? firstLine : "Task from Mauz";
 
-  return title.length > MAX_THREAD_TITLE ? `${title.slice(0, MAX_THREAD_TITLE - 1).trimEnd()}…` : title;
+  return title.length > MAX_THREAD_TITLE ? `${title.slice(0, MAX_THREAD_TITLE).trimEnd()}…` : title;
 }
 
 function listNames(directory: string): string[] {
