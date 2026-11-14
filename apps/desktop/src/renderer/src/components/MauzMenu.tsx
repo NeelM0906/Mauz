@@ -120,7 +120,6 @@ export function MauzMenu(): React.JSX.Element {
         <button
           type="button"
           className="bubble"
-          data-accent="answer"
           data-pending={pendingAction === "ask" ? "true" : undefined}
           aria-label="Ask about what's on screen"
           disabled={pendingAction !== null}

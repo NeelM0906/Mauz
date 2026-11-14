@@ -67,7 +67,8 @@ export class PopoverWindowController {
       minimizable: false,
       fullscreenable: false,
       skipTaskbar: true,
-      hasShadow: true,
+      // A native shadow follows the combined alpha mask of the floating menu buttons.
+      hasShadow: false,
       roundedCorners: true,
       autoHideMenuBar: true,
       webPreferences: {
