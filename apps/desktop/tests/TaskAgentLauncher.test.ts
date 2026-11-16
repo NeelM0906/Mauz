@@ -1,15 +1,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { MauzDesktopContext } from "@mauzai/shared";
-import {
-  buildAgentArguments,
-  buildAgentEnvironment,
-  buildHiddenStartCommand,
-  buildPowerShellLauncher,
-  buildShellLauncher
-} from "../src/main/agent/agentProcess";
+import type { MauzDesktopContext, TaskAgentId } from "@mauzai/shared";
+import { buildAgentEnvironment } from "../src/main/agent/agentProcess";
 import { TaskAgentLauncher, threadTitle } from "../src/main/agent/TaskAgentLauncher";
 
 const CONTEXT: MauzDesktopContext = {
@@ -39,17 +33,111 @@ function createHome(): string {
 }
 
 describe("TaskAgentLauncher", () => {
-  it("finds agents on PATH and npm shims, and picks the configured or first installed one", () => {
-    const existing = new Set(["C:\\bin\\claude.exe", "C:\\Users\\me\\AppData\\Roaming\\npm\\codex.cmd"]);
+  it.each([
+    ["claude-code", "claude", "--permission-mode"],
+    ["codex", "codex", "--approve-for-me"],
+    ["hermes", "hermes", "--query-file"]
+  ] as const)("uses a windowless %s CLI when its desktop app is absent", async (agentId, command, flag) => {
+    const home = createHome();
+    const folder = join(home, "work folder");
+    mkdirSync(folder);
+    const startHidden = vi.fn(async () => {});
+    const startProcess = vi.fn(async () => {});
+    const executable = `/mauz-test-bin/${command}`;
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/mauz-test-bin", MAUZ_LOCAL_TOKEN: "test" },
+      readAgentOutput: async () => JSON.stringify({ mode: "smart", single_query_mode: "deny" }),
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) => path === executable || path === folder,
+      startHidden,
+      startProcess
+    });
+
+    const context = agentId === "hermes" ? { ...CONTEXT, pointer: undefined } : CONTEXT;
+    await launcher.launch({ agentId, folder, task: "Inspect this error", context });
+
+    expect(startProcess).not.toHaveBeenCalled();
+    expect(startHidden).toHaveBeenCalledWith(
+      executable,
+      expect.arrayContaining([flag]),
+      expect.objectContaining({ cwd: folder, logPath: expect.stringMatching(/agent\.log$/) })
+    );
+  });
+
+  it("wakes a new Codex desktop thread on macOS without a standalone CLI", async () => {
+    const home = createHome();
+    const appPath = "/Applications/ChatGPT.app";
+    const executable = `${appPath}/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex`;
+    const queueCodexThread = vi.fn(async () => "00000000-0000-4000-8000-000000000001");
+    const openExternal = vi.fn(async () => {});
+    const startHidden = vi.fn(async () => {});
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: {},
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) => [home, appPath, executable].includes(path),
+      queueCodexThread,
+      openExternal,
+      startHidden
+    });
+
+    expect((await launcher.listAgents()).find(({ id }) => id === "codex")?.installed).toBe(true);
+    await launcher.launch({ agentId: "codex", folder: home, task: "Inspect this error", context: CONTEXT });
+
+    expect(queueCodexThread).toHaveBeenCalledWith(
+      executable,
+      expect.objectContaining({ folder: home, text: expect.stringContaining("Inspect this error") })
+    );
+    expect(openExternal).toHaveBeenNthCalledWith(
+      1,
+      "codex://threads/wake/00000000-0000-4000-8000-000000000001"
+    );
+    expect(openExternal).toHaveBeenNthCalledWith(2, "codex://threads/00000000-0000-4000-8000-000000000001");
+    expect(startHidden).not.toHaveBeenCalled();
+  });
+
+  it.each(["hermes", "codex"] as const)(
+    "treats a desktop-only %s install as available and does not fall back after a desktop error",
+    async (agentId) => {
+      const home = createHome();
+      const desktopPaths: Record<Exclude<TaskAgentId, "claude-code">, string> = {
+        hermes: "/Applications/Hermes.app",
+        codex: "/Applications/ChatGPT.app"
+      };
+      const startHidden = vi.fn(async () => {});
+      const startProcess = vi.fn(async () => {});
+      const launcher = new TaskAgentLauncher({
+        platform: "darwin",
+        env: { PATH: "/mauz-test-no-cli" },
+        homeDirectory: home,
+        tempDirectory: home,
+        pathExists: (path) => path === desktopPaths[agentId] || path === home,
+        startHidden,
+        startProcess
+      });
+
+      expect((await launcher.listAgents()).find(({ id }) => id === agentId)?.installed).toBe(true);
+      await expect(
+        launcher.launch({ agentId, folder: home, task: "Inspect this error", context: CONTEXT })
+      ).rejects.toThrow(/desktop/i);
+      expect(startHidden).not.toHaveBeenCalled();
+      expect(startProcess).not.toHaveBeenCalled();
+    }
+  );
+
+  it("finds agents on PATH and picks the configured or first installed one", async () => {
+    const existing = new Set(["C:\\bin\\claude.exe", "C:\\bin\\codex.exe"]);
     const launcher = new TaskAgentLauncher({
       platform: "win32",
-      env: { PATH: "C:\\bin", APPDATA: "C:\\Users\\me\\AppData\\Roaming" },
+      env: { PATH: "C:\\bin" },
       homeDirectory: "C:\\Users\\me",
       pathExists: (path) => existing.has(path)
     });
 
-    const agents = launcher.listAgents();
-
+    const agents = await launcher.listAgents();
     expect(agents).toEqual([
       { id: "hermes", label: "Hermes", installed: false },
       { id: "claude-code", label: "Claude Code", installed: true },
@@ -58,7 +146,6 @@ describe("TaskAgentLauncher", () => {
     expect(launcher.resolveAgent("codex", agents)).toBe("codex");
     expect(launcher.resolveAgent("hermes", agents)).toBe("claude-code");
     expect(launcher.resolveAgent("auto", agents)).toBe("claude-code");
-    expect(launcher.findExecutable("codex")).toBe("C:\\Users\\me\\AppData\\Roaming\\npm\\codex.cmd");
   });
 
   it("lists Claude Code folders by last use and skips worktrees and missing folders", () => {
@@ -113,243 +200,227 @@ describe("TaskAgentLauncher", () => {
     expect(launcher.listFolders("hermes")).toEqual([]);
   });
 
-  // Uses real Windows paths on disk; the Windows CI job runs it.
-  it.runIf(process.platform === "win32")(
-    "writes the brief and screenshot, then opens the agent in a terminal",
-    async () => {
-      const home = createHome();
-      const temp = createHome();
-      const folder = join(home, "work");
-      mkdirSync(folder);
-      const startProcess = vi.fn(async () => {});
-      const launcher = new TaskAgentLauncher({
-        platform: "win32",
-        env: {
-          PATH: "",
-          LOCALAPPDATA: join(home, "local"),
-          ELECTRON_RUN_AS_NODE: "1",
-          MAUZ_LOCAL_TOKEN: "x"
-        },
-        homeDirectory: home,
-        tempDirectory: temp,
-        pathExists: (path) => path.endsWith("hermes.exe") || path === folder,
-        startProcess
-      });
+  it.runIf(process.platform === "win32")("passes a Windows folder and brief to a hidden CLI", async () => {
+    const home = createHome();
+    const folder = join(home, "work & tests");
+    mkdirSync(folder);
+    const executable = join(home, "bin", "codex.exe");
+    const startHidden = vi.fn(async () => {});
+    const startProcess = vi.fn(async () => {});
+    const launcher = new TaskAgentLauncher({
+      platform: "win32",
+      env: { PATH: join(home, "bin"), MAUZ_LOCAL_TOKEN: "secret", ELECTRON_RUN_AS_NODE: "1" },
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) => path === executable || path === folder,
+      startHidden,
+      startProcess
+    });
 
-      await expect(
-        launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toBeUndefined();
+    await launcher.launch({ agentId: "codex", folder, task: "Fix this error", context: CONTEXT });
 
-      expect(startProcess).toHaveBeenCalledOnce();
-      const [command, args, options] = startProcess.mock.calls[0] as unknown as [
-        string,
-        string[],
-        { env: NodeJS.ProcessEnv }
-      ];
-      expect(command).toBe("cmd.exe");
-      expect(options.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
-      expect(options.env.MAUZ_LOCAL_TOKEN).toBeUndefined();
+    expect(startProcess).not.toHaveBeenCalled();
+    const [, args, options] = startHidden.mock.calls[0] as unknown as [
+      string,
+      string[],
+      { env: NodeJS.ProcessEnv; stdinPath: string; cwd: string }
+    ];
+    expect(args).toContain(folder);
+    expect(options.cwd).toBe(folder);
+    expect(options.env).not.toHaveProperty("MAUZ_LOCAL_TOKEN");
+    expect(options.env).not.toHaveProperty("ELECTRON_RUN_AS_NODE");
+    const brief = readFileSync(options.stdinPath, "utf8");
+    expect(brief).toContain("<task>\nFix this error\n</task>");
+    expect(brief).toContain("<selected_text>\nTypeError: x is undefined\n</selected_text>");
+    expect(readFileSync(args[args.indexOf("--image") + 1]!, "utf8")).toBe("png-bytes");
+  });
 
-      const scriptPath = /-File "([^"]+)"/.exec(args[0] ?? "")?.[1] ?? "";
-      const handoff = join(scriptPath, "..");
-      const brief = readFileSync(join(handoff, "task.md"), "utf8");
-      const script = readFileSync(scriptPath, "utf8");
+  it("starts Claude Code with Auto and sends the brief and image as one message", async () => {
+    const home = createHome();
+    mkdirSync(join(home, ".claude"));
+    writeFileSync(
+      join(home, ".claude", "settings.json"),
+      JSON.stringify({
+        permissions: { defaultMode: "bypassPermissions" }
+      })
+    );
+    const startHidden = vi.fn(async () => {});
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/test", CLAUDE_CODE_SESSION_ID: "parent", CLAUDECODE: "1" },
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) => path === "/test/claude" || path === home,
+      startHidden
+    });
 
-      // Windows PowerShell 5.1 needs the BOM to read the "→" in the title as UTF-8.
-      expect([...readFileSync(scriptPath).subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
-      expect(script).toContain("$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'");
-      expect(brief).toContain("<task>\nFix this error\n</task>");
-      expect(brief).toContain("<selected_text>\nTypeError: x is undefined\n</selected_text>");
-      expect(brief).toContain("<image>attached: crop framed on the pointed element");
-      expect(readFileSync(join(handoff, "screen.png"), "utf8")).toBe("png-bytes");
-      expect(script).toContain(`Set-Location -LiteralPath '${folder}'`);
-      expect(script).toContain("'chat' '--query-file'");
-      expect(script).toContain("'--image'");
-    }
-  );
+    await launcher.launch({ agentId: "claude-code", folder: home, task: "Fix this error", context: CONTEXT });
 
-  // The desktop-app routes are Windows-only and use real Windows paths.
-  it.runIf(process.platform === "win32")(
-    "starts Hermes as a hidden one-shot when the Hermes desktop app is installed",
-    async () => {
-      const home = createHome();
-      const folder = join(home, "work");
-      mkdirSync(folder);
-      const appData = join(home, "roaming");
-      const startHidden = vi.fn(async () => {});
-      const startProcess = vi.fn(async () => {});
-      const launcher = new TaskAgentLauncher({
-        platform: "win32",
-        env: { PATH: "", LOCALAPPDATA: join(home, "local"), APPDATA: appData, MAUZ_LOCAL_TOKEN: "x" },
-        homeDirectory: home,
-        tempDirectory: createHome(),
-        pathExists: (path) =>
-          path === join(home, "local", "hermes", "bin", "hermes.exe") ||
-          path === folder ||
-          path === join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Hermes.lnk"),
-        startProcess,
-        startHidden
-      });
-
-      await expect(
-        launcher.launch({ agentId: "hermes", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toBeUndefined();
-
-      expect(startProcess).not.toHaveBeenCalled();
-      const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
-        string,
-        string[],
-        { cwd: string; logPath: string; env: NodeJS.ProcessEnv }
-      ];
-      const handoff = join(options.logPath, "..");
-
-      expect(executable).toBe(join(home, "local", "hermes", "bin", "hermes.exe"));
-      expect(args).toEqual([
-        "chat",
-        "-Q",
-        "--source",
-        "cli",
-        "--query-file",
-        join(handoff, "task.md"),
-        "--image",
-        join(handoff, "screen.png"),
-        "--in",
-        folder
-      ]);
-      expect(options.cwd).toBe(folder);
-      expect(options.env.MAUZ_LOCAL_TOKEN).toBeUndefined();
-    }
-  );
-
-  it.runIf(process.platform === "win32")(
-    "runs Claude Code headless and hands the session to Claude desktop without showing it",
-    async () => {
-      const home = createHome();
-      const folder = join(home, "work");
-      mkdirSync(folder);
-      const localAppData = join(home, "local");
-      mkdirSync(join(localAppData, "Microsoft", "WindowsApps", "Claude_pzs8sxrjxfjjc"), { recursive: true });
-      const startHidden = vi.fn(async () => {});
-      const startProcess = vi.fn(async () => {});
-      // The run's log as Mauz polls it: still working, then the result.
-      const logLines = ['{"type":"assistant"}\n', '{"type":"result","subtype":"success"}\n'];
-      const launcher = new TaskAgentLauncher({
-        platform: "win32",
-        env: { PATH: "", LOCALAPPDATA: localAppData, CLAUDE_CODE_SESSION_ID: "parent", CLAUDECODE: "1" },
-        homeDirectory: home,
-        tempDirectory: createHome(),
-        pathExists: (path) => path === join(home, ".local", "bin", "claude.exe") || existsSync(path),
-        startProcess,
-        startHidden,
-        sleep: async () => {
-          const [, , options] = startHidden.mock.calls[0] as unknown as [
-            string,
-            string[],
-            { logPath: string }
-          ];
-          writeFileSync(options.logPath, logLines.shift() ?? "", { flag: "a" });
-          // Not imported while the run is still going.
-          expect(startProcess).toHaveBeenCalledTimes(0);
-        }
-      });
-
-      await expect(
-        launcher.launch({ agentId: "claude-code", folder, task: "Fix this error", context: CONTEXT })
-      ).resolves.toBeUndefined();
-      await launcher.settled();
-
-      const [executable, args, options] = startHidden.mock.calls[0] as unknown as [
-        string,
-        string[],
-        { cwd: string; logPath: string; stdinPath: string; env: NodeJS.ProcessEnv }
-      ];
-      const handoff = join(options.logPath, "..");
-      const sessionId = args[args.indexOf("--session-id") + 1] ?? "";
-
-      expect(executable).toBe(join(home, ".local", "bin", "claude.exe"));
-      expect(args).toEqual([
-        "-p",
-        "--session-id",
-        sessionId,
-        "--permission-mode",
-        "auto",
-        "--input-format",
-        "stream-json",
-        "--output-format",
-        "stream-json",
-        "--verbose"
-      ]);
-      expect(options.cwd).toBe(folder);
-      expect(options.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
-      expect(options.env.CLAUDECODE).toBeUndefined();
-
-      // The prompt is one message: the brief, with the screenshot attached.
-      expect(options.stdinPath).toBe(join(handoff, "prompt.jsonl"));
-      const message = JSON.parse(readFileSync(options.stdinPath, "utf8")) as {
-        message: { content: Array<{ type: string; text?: string; source?: unknown }> };
-      };
-      expect(message.message.content[0]?.text).toContain(
-        "<image>attached: crop framed on the pointed element"
-      );
-      expect(message.message.content[1]).toEqual({
+    const [command, args, options] = startHidden.mock.calls[0] as unknown as [
+      string,
+      string[],
+      { env: NodeJS.ProcessEnv; stdinPath: string }
+    ];
+    expect(command).toBe("/test/claude");
+    expect(args).toEqual([
+      "-p",
+      "--permission-mode",
+      "auto",
+      "--permission-prompts",
+      "none",
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
+      "--verbose"
+    ]);
+    expect(options.env).not.toHaveProperty("CLAUDECODE");
+    expect(options.env).not.toHaveProperty("CLAUDE_CODE_SESSION_ID");
+    const payload = JSON.parse(readFileSync(options.stdinPath, "utf8")) as {
+      message: { content: unknown[] };
+    };
+    expect(payload.message.content).toEqual([
+      { type: "text", text: expect.stringContaining("Fix this error") },
+      {
         type: "image",
         source: { type: "base64", media_type: "image/png", data: Buffer.from("png-bytes").toString("base64") }
-      });
+      }
+    ]);
+  });
 
-      // Imported once, when the run has ended.
-      expect(startProcess).toHaveBeenCalledTimes(1);
-      expect(startProcess).toHaveBeenCalledWith(
-        join(localAppData, "Microsoft", "WindowsApps", "claude-desktop.exe"),
-        ["--startup", `claude://resume?session=${sessionId}`],
-        expect.anything()
-      );
-    }
-  );
+  it.each([true, false])("prefills Claude Desktop with the CLI installed: %s", async (hasCli) => {
+    const home = createHome();
+    const folder = join(home, "Work & notes #1");
+    const startHidden = vi.fn(async () => {});
+    const openMacApplication = vi.fn(async (_bundle: string, _url: string) => {});
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/test" },
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) => path === folder || (hasCli && path === "/test/claude"),
+      findProtocolApp: async () => "/opt/Claude.app",
+      startHidden,
+      openMacApplication
+    });
 
-  it.runIf(process.platform === "win32")(
-    "runs Claude Code in the mode the user picked for the folder, else Claude Code's default, else auto",
-    () => {
-      const home = createHome();
-      const localAppData = join(home, "local");
-      const launcher = new TaskAgentLauncher({
-        platform: "win32",
-        env: { PATH: "", LOCALAPPDATA: localAppData },
-        homeDirectory: home
-      });
+    expect((await launcher.listAgents()).find(({ id }) => id === "claude-code")?.installed).toBe(true);
+    const task = "Fix café error? Check a+b & c";
+    await launcher.launch({ agentId: "claude-code", folder, task, context: CONTEXT });
 
-      expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("auto");
+    expect(openMacApplication).toHaveBeenCalledOnce();
+    const [bundle, link] = openMacApplication.mock.calls[0]!;
+    const url = new URL(link);
+    expect(bundle).toBe("/opt/Claude.app");
+    expect(url.protocol + "//" + url.host + url.pathname).toBe("claude://code/new");
+    expect(url.searchParams.get("folder")).toBe(folder);
+    expect(url.searchParams.get("q")).toContain(task);
+    expect(url.searchParams.get("file")).toBeNull();
+    const briefPath = JSON.parse(url.searchParams.get("q")!.match(/"[^\n]+task\.md"/)![0]) as string;
+    const brief = readFileSync(briefPath, "utf8");
+    expect(brief).toContain(task);
+    expect(brief).toContain("TypeError: x is undefined");
+    const screenshotPath = posix.join(briefPath, "..", "screen.png");
+    expect(brief).toContain("saved at");
+    expect(brief).toContain(JSON.stringify(screenshotPath));
+    expect(readFileSync(screenshotPath, "utf8")).toBe("png-bytes");
+    expect(startHidden).not.toHaveBeenCalled();
+  });
 
-      mkdirSync(join(home, ".claude"));
-      // A user who asks before each action keeps that, rather than falling back to auto.
-      writeFileSync(
-        join(home, ".claude", "settings.json"),
-        JSON.stringify({ permissions: { defaultMode: "default" } })
-      );
-      expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("default");
+  it("preserves long Claude Desktop tasks in the local brief when keeping the URI short", async () => {
+    const home = createHome();
+    const openExternal = vi.fn(async (_url: string) => {});
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: {},
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) => path === "/Applications/Claude.app" || path === home,
+      openExternal
+    });
+    const task = `Inspect the report\n${"漢".repeat(3500)}`;
 
-      writeFileSync(
-        join(home, ".claude", "settings.json"),
-        JSON.stringify({ permissions: { defaultMode: "acceptEdits" } })
-      );
-      expect(launcher.claudePermissionMode("C:\\work\\mauz")).toBe("acceptEdits");
+    await launcher.launch({
+      agentId: "claude-code",
+      folder: home,
+      task,
+      context: { ...CONTEXT, pointer: undefined }
+    });
 
-      const desktopData = join(localAppData, "Claude-Data", "claude_pzs8sxrjxfjjc");
-      mkdirSync(desktopData, { recursive: true });
-      writeFileSync(
-        join(desktopData, "claude_desktop_config.json"),
-        JSON.stringify({
-          preferences: {
-            epitaxyPrefs: {
-              "epitaxy-folder-permission-mode-v2.account-1": { "C:\\Work\\Mauz": "bypassPermissions" },
-              "epitaxy-folder-permission-mode-v2.account-2": { "C:\\work\\other": "nonsense" }
-            }
-          }
-        })
-      );
-      expect(launcher.claudePermissionMode("C:/work/mauz/")).toBe("bypassPermissions");
-      expect(launcher.claudePermissionMode("C:\\work\\other")).toBe("acceptEdits");
-    }
-  );
+    const [link] = openExternal.mock.calls[0]!;
+    expect(link.length).toBeLessThan(8_000);
+    const prompt = new URL(link).searchParams.get("q")!;
+    expect(prompt).toContain("Inspect the report");
+    const briefPath = JSON.parse(prompt.match(/"[^\n]+task\.md"/)![0]) as string;
+    expect(readFileSync(briefPath, "utf8")).toContain(task);
+  });
+
+  it("does not rerun a Codex task in the CLI when Desktop cannot be opened", async () => {
+    const home = createHome();
+    const desktop = "/Applications/Codex.app";
+    const startHidden = vi.fn(async () => {});
+    const queueCodexThread = vi.fn(async () => "00000000-0000-4000-8000-000000000001");
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/test" },
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) =>
+        ["/test/codex", home, desktop, `${desktop}/Contents/Resources/codex`].includes(path),
+      queueCodexThread,
+      startHidden,
+      openExternal: async () => {
+        throw new Error("Could not open app");
+      }
+    });
+
+    await expect(
+      launcher.launch({ agentId: "codex", folder: home, task: "Fix this error", context: CONTEXT })
+    ).rejects.toThrow("task was queued in Codex");
+    expect(queueCodexThread).toHaveBeenCalledOnce();
+    expect(startHidden).not.toHaveBeenCalled();
+  });
+
+  it("opens Hermes Desktop on the newly accepted live session", async () => {
+    const home = createHome();
+    const exe = "/test/hermes";
+    const openExternal = vi.fn(async () => {});
+    const startHidden = vi.fn(async () => {});
+    const readAgentOutput = vi.fn(async () => "gateway-bootstrap");
+    const submitHermesTask = vi.fn(async (request: { attach: () => Promise<string> }) => {
+      expect(await request.attach()).toBe("gateway-bootstrap");
+      return "new-session";
+    });
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/test", MAUZ_LOCAL_TOKEN: "secret", HERMES_YOLO_MODE: "1" },
+      pathExists: (path) => path === exe || path === home,
+      homeDirectory: home,
+      tempDirectory: home,
+      findProtocolApp: async (scheme) => (scheme === "hermes" ? "/opt/Hermes.app" : undefined),
+      readAgentOutput,
+      submitHermesTask,
+      startHidden,
+      openExternal
+    });
+
+    await launcher.launch({ agentId: "hermes", folder: home, task: "Fix this error", context: CONTEXT });
+
+    expect(submitHermesTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: home,
+        desktop: true,
+        text: expect.stringContaining("Fix this error"),
+        imagePath: expect.stringMatching(/screen\.png$/)
+      })
+    );
+    expect(readAgentOutput).toHaveBeenCalledExactlyOnceWith(exe, ["gateway", "attach", "--start", "--json"], {
+      cwd: home,
+      env: { PATH: "/test" }
+    });
+    expect(openExternal).toHaveBeenCalledExactlyOnceWith("hermes://open/new-session");
+    expect(startHidden).not.toHaveBeenCalled();
+  });
 
   it.runIf(process.platform === "win32")(
     "queues the task on a new Codex thread and wakes the Codex desktop app",
@@ -375,7 +446,7 @@ describe("TaskAgentLauncher", () => {
       });
 
       // The Codex app alone counts as installed: it brings its own codex.exe.
-      expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
+      expect((await launcher.listAgents()).find((agent) => agent.id === "codex")?.installed).toBe(true);
       await expect(
         launcher.launch({ agentId: "codex", folder, task: "Fix this error\nin the parser", context: CONTEXT })
       ).resolves.toBeUndefined();
@@ -394,16 +465,7 @@ describe("TaskAgentLauncher", () => {
     }
   );
 
-  it("builds a hidden background start and short thread titles", () => {
-    expect(
-      buildHiddenStartCommand("C:\\a b\\claude.exe", ["-p", "x"], {
-        logPath: "C:\\h\\agent.log",
-        stdinPath: "C:\\h\\task.md"
-      })
-    ).toBe(
-      '/d /s /c "start "" /b "C:\\a b\\claude.exe" "-p" "x" <"C:\\h\\task.md" >"C:\\h\\agent.log" 2>&1"'
-    );
-    expect(() => buildHiddenStartCommand("x", ['a"b'], { logPath: "l" })).toThrow();
+  it("builds short thread titles", () => {
     expect(threadTitle("  \n")).toBe("Task from Mauz");
     expect(threadTitle("a".repeat(80))).toBe(`${"a".repeat(59)}…`);
   });
@@ -421,59 +483,7 @@ describe("TaskAgentLauncher", () => {
   });
 });
 
-describe("agent command lines", () => {
-  const input = {
-    folder: "C:\\work",
-    briefPath: "C:\\tmp\\h\\task.md",
-    handoffDirectory: "C:\\tmp\\h",
-    screenshotPath: "C:\\tmp\\h\\screen.png"
-  };
-
-  it("passes the brief file, image, and folder the way each agent expects", () => {
-    expect(buildAgentArguments("hermes", input)).toEqual([
-      "chat",
-      "--query-file",
-      "C:\\tmp\\h\\task.md",
-      "--image",
-      "C:\\tmp\\h\\screen.png",
-      "--in",
-      "C:\\work"
-    ]);
-    expect(buildAgentArguments("codex", input)).toEqual([
-      "-C",
-      "C:\\work",
-      "Read the task brief in C:\\tmp\\h\\task.md and carry it out.",
-      "-i",
-      "C:\\tmp\\h\\screen.png"
-    ]);
-    expect(buildAgentArguments("claude-code", input)).toEqual([
-      "--add-dir",
-      "C:\\tmp\\h",
-      "Read the task brief in C:\\tmp\\h\\task.md and carry it out. The attached screenshot is C:\\tmp\\h\\screen.png."
-    ]);
-  });
-
-  it("quotes launcher scripts so paths with quotes or spaces stay intact", () => {
-    expect(
-      buildPowerShellLauncher({
-        title: "Mauz",
-        folder: "C:\\it's here",
-        executable: "C:\\a b\\x.exe",
-        args: ["y"]
-      })
-    ).toBe(
-      "$Host.UI.RawUI.WindowTitle = 'Mauz'\r\nSet-Location -LiteralPath 'C:\\it''s here'\r\n& 'C:\\a b\\x.exe' 'y'\r\n"
-    );
-    expect(
-      buildPowerShellLauncher({ title: "Mauz → Hermes", folder: "C:\\Bob’s", executable: "x", args: [] })
-    ).toBe(
-      "$Host.UI.RawUI.WindowTitle = 'Mauz → Hermes'\r\nSet-Location -LiteralPath 'C:\\Bob’’s'\r\n& 'x'\r\n"
-    );
-    expect(buildShellLauncher({ folder: "/it's", executable: "/bin/claude", args: ["a b"] })).toBe(
-      "#!/bin/bash\ncd '/it'\\''s' || exit 1\n'/bin/claude' 'a b'\n"
-    );
-  });
-
+describe("agent handoffs", () => {
   it("keeps the user's environment but drops Mauz, provider key, and Electron variables", () => {
     expect(
       buildAgentEnvironment({
@@ -508,7 +518,7 @@ describe("agent command lines", () => {
 
 // Defects from docs/reafactor-audit.md, fixed by refactor row 3.
 describe("known defects", () => {
-  it("finds Claude Code at MAUZ_CLAUDE_CODE_PATH, as Ask does", () => {
+  it("finds Claude Code at MAUZ_CLAUDE_CODE_PATH, as Ask does", async () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
       env: { PATH: "/usr/bin", MAUZ_CLAUDE_CODE_PATH: "/opt/tools/claude" },
@@ -516,10 +526,10 @@ describe("known defects", () => {
       pathExists: (path) => path === "/opt/tools/claude"
     });
 
-    expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
+    expect((await launcher.listAgents()).find((agent) => agent.id === "claude-code")?.installed).toBe(true);
   });
 
-  it("finds Codex at MAUZ_CODEX_PATH, as Ask does", () => {
+  it("finds Codex at MAUZ_CODEX_PATH, as Ask does", async () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
       env: { PATH: "/usr/bin", MAUZ_CODEX_PATH: "/opt/tools/codex" },
@@ -527,10 +537,10 @@ describe("known defects", () => {
       pathExists: (path) => path === "/opt/tools/codex"
     });
 
-    expect(launcher.listAgents().find((agent) => agent.id === "codex")?.installed).toBe(true);
+    expect((await launcher.listAgents()).find((agent) => agent.id === "codex")?.installed).toBe(true);
   });
 
-  it("finds Claude Code in ~/.claude/local, as Ask does", () => {
+  it("finds Claude Code in ~/.claude/local, as Ask does", async () => {
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
       env: { PATH: "/usr/bin" },
@@ -538,22 +548,10 @@ describe("known defects", () => {
       pathExists: (path) => path === "/Users/me/.claude/local/claude"
     });
 
-    expect(launcher.listAgents().find((agent) => agent.id === "claude-code")?.installed).toBe(true);
+    expect((await launcher.listAgents()).find((agent) => agent.id === "claude-code")?.installed).toBe(true);
   });
 
   it("drops ANTHROPIC_AUTH_TOKEN, as the Ask CLI providers do", () => {
     expect(buildAgentEnvironment({ PATH: "p", ANTHROPIC_AUTH_TOKEN: "token" })).toEqual({ PATH: "p" });
-  });
-
-  it("keeps a Windows .cmd set in MAUZ_CLAUDE_CODE_PATH as it is, for the terminal to run", () => {
-    const shim = "C:\\tools\\claude.cmd";
-    const launcher = new TaskAgentLauncher({
-      platform: "win32",
-      env: { PATH: "C:\\Windows", MAUZ_CLAUDE_CODE_PATH: shim },
-      homeDirectory: "C:\\Users\\me",
-      pathExists: (path) => path === shim
-    });
-
-    expect(launcher.findExecutable("claude")).toBe(shim);
   });
 });

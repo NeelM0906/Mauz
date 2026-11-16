@@ -36,7 +36,13 @@ export async function answerAskSession(
 }
 
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
-export { applyCliPathOverride, buildCliEnvironment, getCliSearchDirectories } from "./providers/cliCommand";
+export {
+  applyCliPathOverride,
+  buildCliEnvironment,
+  getCliSearchDirectories,
+  resolveCliCommand,
+  type ResolvedCliCommand
+} from "./providers/cliCommand";
 
 /** Detects which AI providers (API keys, Claude Code, Codex) can answer right now. */
 export function getAiProvidersStatus(

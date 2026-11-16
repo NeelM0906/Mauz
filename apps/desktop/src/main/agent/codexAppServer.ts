@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const AUTO_APPROVAL = {
+  approvalPolicy: "on-request",
+  approvalsReviewer: "auto_review",
+  permissions: ":workspace"
+} as const;
 
 export type CodexThreadRequest = {
   folder: string;
@@ -13,6 +18,7 @@ export type CodexThreadRequest = {
 };
 
 type Call = (method: string, params: unknown) => Promise<unknown>;
+type WithAppServer = typeof withAppServer;
 
 /**
  * Creates a Codex thread in the folder with the task queued on it, and returns its id. The
@@ -20,36 +26,64 @@ type Call = (method: string, params: unknown) => Promise<unknown>;
  */
 export async function queueCodexThread(
   codexExecutable: string,
-  request: CodexThreadRequest
+  request: CodexThreadRequest,
+  withServer: WithAppServer = withAppServer
 ): Promise<string> {
-  const threadId = await withAppServer(codexExecutable, request.env, async (call) => {
-    const started = (await call("thread/start", { cwd: request.folder })) as { thread?: { id?: unknown } };
+  const threadId = await withServer(codexExecutable, request.env, async (call) => {
+    const started = (await call("thread/start", { cwd: request.folder, ...AUTO_APPROVAL })) as {
+      thread?: { id?: unknown };
+    };
     const id = started.thread?.id;
 
-    if (typeof id !== "string") {
+    if (typeof id !== "string" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)) {
       throw new Error("Codex did not return a thread id.");
     }
 
-    // Naming the thread writes it to disk, so a second app-server can queue on it.
+    // On current releases thread/start options alone do not survive a resume before the first turn.
     await call("thread/name/set", { threadId: id, name: request.title });
+    await call("thread/settings/update", { threadId: id, ...AUTO_APPROVAL });
 
     return id;
   });
 
-  // A separate app-server: queueing where the thread is loaded would run the turn in Mauz instead.
-  await withAppServer(codexExecutable, request.env, (call) =>
-    call("thread/queue/add", {
-      threadId,
-      clientUserMessageId: randomUUID(),
-      input: [
-        { type: "text", text: request.text, text_elements: [] },
-        ...(request.imagePath === undefined ? [] : [{ type: "localImage", path: request.imagePath }])
-      ]
-    })
-  );
+  await withServer(codexExecutable, request.env, async (call) => {
+    const resumed = (await call("thread/resume", { threadId })) as {
+      approvalPolicy?: unknown;
+      approvalsReviewer?: unknown;
+      activePermissionProfile?: { id?: unknown };
+    } | null;
+    if (
+      resumed?.approvalPolicy !== AUTO_APPROVAL.approvalPolicy ||
+      resumed.approvalsReviewer !== AUTO_APPROVAL.approvalsReviewer ||
+      resumed.activePermissionProfile?.id !== AUTO_APPROVAL.permissions
+    ) {
+      throw new Error("Codex Desktop could not retain Approve for me for the new thread.");
+    }
+  });
+
+  // Queue from a fresh app-server so the only client that starts the turn is Desktop.
+  try {
+    await withServer(codexExecutable, request.env, (call) =>
+      call("thread/queue/add", {
+        threadId,
+        clientUserMessageId: randomUUID(),
+        input: [
+          { type: "text", text: request.text, text_elements: [] },
+          ...(request.imagePath === undefined ? [] : [{ type: "localImage", path: request.imagePath }])
+        ]
+      })
+    );
+  } catch (error) {
+    if (error instanceof CodexRefusal) throw error;
+    throw new Error(
+      "Mauz could not confirm whether Codex queued the task. Check the new Codex thread before retrying."
+    );
+  }
 
   return threadId;
 }
+
+class CodexRefusal extends Error {}
 
 async function withAppServer<T>(
   codexExecutable: string,
@@ -80,8 +114,9 @@ async function withAppServer<T>(
 
   child.once("error", (error) => failAll(new Error(`Could not start Codex: ${error.message}`)));
   child.once("exit", () => failAll(new Error("Codex stopped before it answered.")));
+  child.stdin.on("error", () => failAll(new Error("Codex stopped accepting requests.")));
   createInterface({ input: child.stdout }).on("line", (line) => {
-    let message: { id?: unknown; result?: unknown; error?: { message?: unknown } };
+    let message: { id?: unknown; result?: unknown; error?: { message?: unknown } } | null;
 
     try {
       message = JSON.parse(line) as typeof message;
@@ -89,19 +124,17 @@ async function withAppServer<T>(
       return;
     }
 
-    const request = typeof message.id === "number" ? pending.get(message.id) : undefined;
+    if (typeof message?.id !== "number") return;
+    const request = pending.get(message.id);
+    if (request === undefined) return;
 
-    if (request === undefined) {
-      return;
-    }
-
-    pending.delete(message.id as number);
+    pending.delete(message.id);
 
     if (message.error === undefined) {
       request.resolve(message.result);
     } else {
       const detail = typeof message.error.message === "string" ? message.error.message : "unknown error";
-      request.reject(new Error(`Codex refused the task: ${detail}`));
+      request.reject(new CodexRefusal(`Codex refused the task: ${detail}`));
     }
   });
 
@@ -143,7 +176,7 @@ async function withAppServer<T>(
   } finally {
     child.stdin.end();
 
-    const killTimer = setTimeout(() => child.kill(), 5_000);
+    const killTimer = setTimeout(() => child.kill("SIGKILL"), 5_000);
     await exited;
     clearTimeout(killTimer);
   }

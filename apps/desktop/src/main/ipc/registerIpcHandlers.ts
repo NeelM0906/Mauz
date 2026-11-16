@@ -177,7 +177,7 @@ export function registerIpcHandlers({
 
   handle(IPC_CHANNELS.taskAgents, async () => {
     const settings = await getSettings();
-    const agents = taskAgents.launcher.listAgents();
+    const agents = await taskAgents.launcher.listAgents();
 
     return TaskAgentsResponseSchema.parse({
       agents,

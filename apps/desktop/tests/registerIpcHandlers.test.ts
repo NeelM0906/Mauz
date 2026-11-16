@@ -537,7 +537,7 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
     } as unknown as AskSessions,
     taskAgents: {
       launcher: {
-        listAgents: vi.fn(() => [
+        listAgents: vi.fn(async () => [
           { id: "hermes" as const, label: "Hermes", installed: true },
           { id: "claude-code" as const, label: "Claude Code", installed: false },
           { id: "codex" as const, label: "Codex", installed: true }

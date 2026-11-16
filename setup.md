@@ -73,25 +73,17 @@ Send to agent hands a task to a coding agent installed on your computer. Mauz wr
 
 Choose the agent in **Settings → Task agent**. **Automatic** uses the first one installed, in the order Hermes, Claude Code, Codex. Set the default from the environment with `MAUZ_TASK_AGENT` (`auto`, `hermes`, `claude-code`, or `codex`).
 
-**Windows, agent's desktop app installed:** the task starts as a new thread in that app, in the background. No terminal opens, no window appears, and focus stays where it was. Open the app to follow the thread. If the app is closed, it starts hidden in the tray.
+On macOS and Windows, Mauz prefers the agent's desktop app. If it is absent, Mauz starts the corresponding CLI in the background without opening a terminal.
 
-**Otherwise, and on macOS:** the agent opens in a new terminal window (Windows Terminal or PowerShell on Windows, Terminal on macOS):
+- **Claude Code** opens a prefilled composer in Claude Desktop. Confirm the workspace, choose Auto if available, and press **Send**. The brief contains the local path to any screenshot. The CLI fallback uses Auto.
+- **Codex** opens a new desktop thread with **Approve for me**. The CLI fallback also uses automatic review. Codex can separately ask for access to an app such as Safari.
+- **Hermes** opens the new session through its local gateway and requires **Smart** approvals. The background CLI also requires **Deny** for single-query approvals.
 
-| Agent       | Terminal command                                                      |
-| ----------- | --------------------------------------------------------------------- |
-| Hermes      | `hermes chat --query-file <brief> --image <screenshot> --in <folder>` |
-| Claude Code | `claude --add-dir <brief folder> "Read the task brief in …"`          |
-| Codex       | `codex -C <folder> "Read the task brief in …" -i <screenshot>`        |
-
-Mauz does not monitor the agent, approve its actions, or show its results. Each agent applies its own permissions:
-
-- **Claude:** a background run can't stop to ask you, so it may edit files in the chosen folder. Anything else that needs approval, such as shell commands not already allowed, is refused.
-- **Codex:** the thread uses the Codex app's own defaults (for example "ask before acting" with a read-only sandbox). Approval prompts wait in that thread.
-- **Hermes:** dangerous commands are refused in one-off runs. Mauz does not pass Hermes' auto-approve flag.
+Mauz instructs the agent to answer questions about what is visible from the captured image and text. Requests that call for live research can use the browser as needed under its usual access rules.
 
 The folder picker lists the folder you last used with that agent, then the folders the agent has worked in, then the **Default work folder** from Settings (your home folder if empty). **Browse** picks any other folder. When you point at VS Code, Cursor, or Windsurf, Mauz preselects the folder whose name appears in the window title.
 
-If an agent doesn't start, its output is in `agent.log` next to the brief. The Codex wake link and Claude's hidden-startup flag are undocumented parts of those apps, so an app update could break them.
+For background CLI runs, look for `agent.log` next to the brief. Desktop runs appear in the agent's own session list.
 
 ## Dictate
 
