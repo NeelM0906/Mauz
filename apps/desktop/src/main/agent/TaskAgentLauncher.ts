@@ -435,18 +435,23 @@ export class TaskAgentLauncher {
 
     const handler = await this.findProtocolApp(scheme);
     const extension = this.platform === "darwin" ? ".app" : ".exe";
+    const needsMacCodexExecutable = this.platform === "darwin" && agentId === "codex";
+    let installedApp: string | null = null;
     if (
       handler !== undefined &&
       names.some((name) => this.path.basename(handler).toLowerCase() === `${name}${extension}`.toLowerCase())
     ) {
-      return handler;
+      if (!needsMacCodexExecutable || this.macCodexExecutable(handler) !== null) return handler;
+      installedApp = handler;
     }
 
     if (this.platform === "darwin") {
       for (const root of ["/Applications", this.path.join(this.home, "Applications")]) {
         for (const name of names) {
           const bundle = this.path.join(root, `${name}.app`);
-          if (this.pathExists(bundle)) return bundle;
+          if (!this.pathExists(bundle)) continue;
+          if (!needsMacCodexExecutable || this.macCodexExecutable(bundle) !== null) return bundle;
+          installedApp ??= bundle;
         }
       }
       if (agentId === "hermes") {
@@ -462,7 +467,8 @@ export class TaskAgentLauncher {
         );
         if (this.pathExists(bundle)) return bundle;
       }
-      return null;
+      // Preserve the desktop launch error if Codex is installed without a bundled executable.
+      return installedApp;
     }
 
     const { LOCALAPPDATA: local, APPDATA: roaming } = this.env;
@@ -503,6 +509,10 @@ export class TaskAgentLauncher {
         : this.findCodexAppExecutable();
     }
 
+    return this.macCodexExecutable(desktop);
+  }
+
+  private macCodexExecutable(desktop: string): string | null {
     const resources = this.path.join(desktop, "Contents", "Resources");
     return (
       [

@@ -99,6 +99,38 @@ describe("TaskAgentLauncher", () => {
     expect(startHidden).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { handlerDescription: "no registered handler", handler: undefined },
+    { handlerDescription: "ChatGPT registered as the handler", handler: "/Applications/ChatGPT.app" }
+  ])("uses the working Codex bundle with $handlerDescription", async ({ handler }) => {
+    const home = createHome();
+    const desktop = "/Applications/Codex.app";
+    const executable = `${desktop}/Contents/Resources/codex`;
+    const threadId = "00000000-0000-4000-8000-000000000001";
+    const queueCodexThread = vi.fn(async () => threadId);
+    const openMacApplication = vi.fn(async () => {});
+    const startHidden = vi.fn(async () => {});
+    const launcher = new TaskAgentLauncher({
+      platform: "darwin",
+      env: { PATH: "/test" },
+      homeDirectory: home,
+      tempDirectory: home,
+      pathExists: (path) =>
+        [home, "/Applications/ChatGPT.app", desktop, executable, "/test/codex"].includes(path),
+      findProtocolApp: async () => handler,
+      queueCodexThread,
+      openMacApplication,
+      startHidden
+    });
+
+    await launcher.launch({ agentId: "codex", folder: home, task: "Inspect this error", context: CONTEXT });
+
+    expect(queueCodexThread).toHaveBeenCalledWith(executable, expect.objectContaining({ folder: home }));
+    expect(openMacApplication).toHaveBeenNthCalledWith(1, desktop, `codex://threads/wake/${threadId}`);
+    expect(openMacApplication).toHaveBeenNthCalledWith(2, desktop, `codex://threads/${threadId}`);
+    expect(startHidden).not.toHaveBeenCalled();
+  });
+
   it.each(["hermes", "codex"] as const)(
     "treats a desktop-only %s install as available and does not fall back after a desktop error",
     async (agentId) => {
