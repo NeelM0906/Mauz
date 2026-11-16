@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  chmodSync,
   closeSync,
   existsSync,
   mkdirSync,
@@ -15,7 +14,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { posix, win32 } from "node:path";
-import { applyCliPathOverride, getCliSearchDirectories } from "@mauzai/api/server";
+import { resolveCliCommand, type ResolvedCliCommand } from "@mauzai/api/server";
 import {
   buildTaskBrief,
   getContextImage,
@@ -26,17 +25,16 @@ import {
   type TaskFolder
 } from "@mauzai/shared";
 import {
-  buildAgentArguments,
   buildAgentEnvironment,
-  buildPowerShellLauncher,
-  buildShellLauncher,
   findCodexAppExecutable,
+  readAgentOutput,
   startDetached,
   startHiddenProcess,
   type StartHiddenOptions,
   type StartProcessOptions
 } from "./agentProcess";
 import { type CodexThreadRequest, queueCodexThread } from "./codexAppServer";
+import { submitHermesTask, type HermesTaskRequest } from "./hermesGateway";
 
 type AgentDefinition = {
   id: TaskAgentId;
@@ -55,24 +53,16 @@ const MAX_FOLDERS = 30;
 const MAX_CODEX_SESSIONS = 300;
 const HANDOFF_RETENTION_MS = 24 * 60 * 60 * 1000;
 const HANDOFF_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
-const CLAUDE_POLL_MS = 2_000;
-// Three hours. A longer task still runs to the end, but it is not added to Claude desktop.
-const CLAUDE_POLLS = 3 * 60 * 30;
-const CLAUDE_LOG_TAIL_BYTES = 65_536;
 const MAX_THREAD_TITLE = 60;
+const MAX_CLAUDE_DESKTOP_URL_LENGTH = 8_000;
 // Windows Store package family names of the desktop apps.
 const CLAUDE_PACKAGE_FAMILY = "Claude_pzs8sxrjxfjjc";
 const CODEX_PACKAGE_FAMILY = "OpenAI.Codex_2p2nqsd0c76g0";
-// The values `claude --permission-mode` accepts. Settings files store "default"; "manual" is its alias.
-const CLAUDE_PERMISSION_MODES = new Set([
-  "acceptEdits",
-  "auto",
-  "bypassPermissions",
-  "default",
-  "dontAsk",
-  "manual",
-  "plan"
-]);
+const DESKTOP_APPS = {
+  codex: { scheme: "codex", names: ["ChatGPT", "Codex"] },
+  "claude-code": { scheme: "claude", names: ["Claude"] },
+  hermes: { scheme: "hermes", names: ["Hermes", "Hermes Desktop"] }
+} as const;
 
 type DesktopHandoff = {
   folder: string;
@@ -92,13 +82,16 @@ type TaskAgentLauncherOptions = {
   pathExists?: (path: string) => boolean;
   /** Starts a detached process; tests replace it. */
   startProcess?: (command: string, args: string[], options: StartProcessOptions) => Promise<void>;
-  /** Windows: starts a console program with no window that keeps running after Mauz quits. */
+  /** Starts a non-interactive process with its output in the handoff log. */
   startHidden?: (command: string, args: string[], options: StartHiddenOptions) => Promise<void>;
   openExternal?: (url: string) => Promise<void>;
+  openMacApplication?: (bundle: string, url: string) => Promise<void>;
+  findProtocolApp?: (scheme: string) => Promise<string | undefined>;
   /** Windows: codex.exe inside the Codex desktop app package, or null. */
   findCodexAppExecutable?: () => Promise<string | null>;
   queueCodexThread?: (codexExecutable: string, request: CodexThreadRequest) => Promise<string>;
-  sleep?: (milliseconds: number) => Promise<void>;
+  readAgentOutput?: typeof readAgentOutput;
+  submitHermesTask?: (request: HermesTaskRequest) => Promise<string>;
 };
 
 type LaunchTaskRequest = {
@@ -108,27 +101,22 @@ type LaunchTaskRequest = {
   context: MauzDesktopContext;
 };
 
-/**
- * Send to agent: hands a task and the captured screen to a coding agent the user already
- * has (Hermes, Claude Code, Codex), in the chosen folder. On Windows, when the agent's
- * desktop app is installed, the task starts as a new thread in that app, in the background:
- * no window opens and focus stays where it is. Otherwise the agent opens in its own terminal
- * window. The agent runs with its own permissions; Mauz does not watch it afterwards.
- */
+/** Routes Send to agent to a live desktop session or a windowless CLI. */
 export class TaskAgentLauncher {
   private readonly platform: NodeJS.Platform;
   private readonly env: NodeJS.ProcessEnv;
   private readonly home: string;
   private readonly temp: string;
   private readonly pathExists: (path: string) => boolean;
-  private readonly startProcess: NonNullable<TaskAgentLauncherOptions["startProcess"]>;
   private readonly startHidden: NonNullable<TaskAgentLauncherOptions["startHidden"]>;
   private readonly openExternal: NonNullable<TaskAgentLauncherOptions["openExternal"]>;
+  private readonly openMacApplication: TaskAgentLauncherOptions["openMacApplication"];
   private readonly findCodexAppExecutable: NonNullable<TaskAgentLauncherOptions["findCodexAppExecutable"]>;
   private readonly queueCodexThread: NonNullable<TaskAgentLauncherOptions["queueCodexThread"]>;
-  private readonly sleep: NonNullable<TaskAgentLauncherOptions["sleep"]>;
+  private readonly findProtocolApp: NonNullable<TaskAgentLauncherOptions["findProtocolApp"]>;
+  private readonly readAgentOutput: typeof readAgentOutput;
+  private readonly submitHermesTask: NonNullable<TaskAgentLauncherOptions["submitHermesTask"]>;
   private readonly path: typeof posix;
-  private readonly followUps = new Set<Promise<void>>();
 
   constructor(options: TaskAgentLauncherOptions = {}) {
     this.platform = options.platform ?? process.platform;
@@ -137,35 +125,35 @@ export class TaskAgentLauncher {
     // Windows TEMP is often a short 8.3 path (SAUDAM~1), which Claude Code refuses to read.
     this.temp = options.tempDirectory ?? realpathSync.native(tmpdir());
     this.pathExists = options.pathExists ?? existsSync;
-    this.startProcess = options.startProcess ?? startDetached;
+    const startProcess = options.startProcess ?? startDetached;
     this.startHidden = options.startHidden ?? startHiddenProcess;
     this.openExternal =
       options.openExternal ??
-      ((url) => this.startProcess("rundll32.exe", ["url.dll,FileProtocolHandler", url], { env: this.env }));
+      ((url) =>
+        this.platform === "win32"
+          ? startProcess("rundll32.exe", ["url.dll,FileProtocolHandler", url], { env: this.env })
+          : startProcess("/usr/bin/open", [url], { env: this.env }));
+    this.openMacApplication = options.openMacApplication;
+    this.findProtocolApp = options.findProtocolApp ?? (async () => undefined);
     this.findCodexAppExecutable = options.findCodexAppExecutable ?? findCodexAppExecutable;
     this.queueCodexThread = options.queueCodexThread ?? queueCodexThread;
-    this.sleep =
-      options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    this.readAgentOutput = options.readAgentOutput ?? readAgentOutput;
+    this.submitHermesTask = options.submitHermesTask ?? submitHermesTask;
     this.path = this.platform === "win32" ? win32 : posix;
   }
 
-  listAgents(): TaskAgentStatus[] {
-    return TASK_AGENTS.map((agent) => ({
-      id: agent.id,
-      label: agent.label,
-      // The Codex desktop app brings its own codex.exe.
-      installed:
-        this.findExecutable(agent.command) !== null || (agent.id === "codex" && this.hasDesktopApp("codex"))
-    }));
-  }
-
-  /** Resolves once background work from earlier launches (Claude session imports) is done. */
-  async settled(): Promise<void> {
-    await Promise.all([...this.followUps]);
+  async listAgents(): Promise<TaskAgentStatus[]> {
+    return Promise.all(
+      TASK_AGENTS.map(async (agent) => ({
+        id: agent.id,
+        label: agent.label,
+        installed: this.findCommand(agent.command) !== null || (await this.desktopApp(agent.id)) !== null
+      }))
+    );
   }
 
   /** The agent Send to agent uses: the chosen one if installed, else the first installed one. */
-  resolveAgent(preference: TaskAgentPreference, agents = this.listAgents()): TaskAgentId | null {
+  resolveAgent(preference: TaskAgentPreference, agents: TaskAgentStatus[]): TaskAgentId | null {
     const installed = agents.filter((agent) => agent.installed);
 
     return (installed.find((agent) => agent.id === preference) ?? installed[0])?.id ?? null;
@@ -225,11 +213,14 @@ export class TaskAgentLauncher {
 
   async launch(request: LaunchTaskRequest): Promise<void> {
     const agent = TASK_AGENTS.find((candidate) => candidate.id === request.agentId);
-    const executable = agent === undefined ? null : this.findExecutable(agent.command);
-    const hasDesktopApp = agent !== undefined && this.hasDesktopApp(agent.id);
+    if (agent === undefined) {
+      throw new Error("That agent is not installed on this computer.");
+    }
 
-    if (agent === undefined || (executable === null && !(agent.id === "codex" && hasDesktopApp))) {
-      throw new Error(`${agent?.label ?? "That agent"} is not installed on this computer.`);
+    const desktop = await this.desktopApp(agent.id);
+    const command = this.findCommand(agent.command);
+    if (desktop === null && command === null) {
+      throw new Error(`${agent.label} is not installed on this computer.`);
     }
 
     if (!this.pathExists(request.folder)) {
@@ -249,80 +240,79 @@ export class TaskAgentLauncher {
     }
 
     const briefPath = this.path.join(handoffDirectory, "task.md");
-    // Every agent gets the screenshot attached to the prompt, so the brief only describes it.
-    const brief = buildTaskBrief(request.task, request.context);
+    const claudeDesktop = agent.id === "claude-code" && desktop !== null;
+    const brief = buildTaskBrief(request.task, request.context, claudeDesktop ? screenshotPath : undefined);
     writeFileSync(briefPath, brief, "utf8");
 
-    if (hasDesktopApp) {
-      const handoff = {
-        folder: request.folder,
-        task: request.task,
-        brief,
-        briefPath,
-        screenshotPath,
-        image: image?.payload,
-        handoffDirectory
-      };
+    const handoff = {
+      folder: request.folder,
+      task: request.task,
+      brief,
+      briefPath,
+      screenshotPath,
+      image: image?.payload,
+      handoffDirectory
+    };
 
+    if (desktop !== null) {
       if (agent.id === "codex") {
-        const codexExecutable = await this.findCodexAppExecutable();
-
-        if (codexExecutable !== null) {
-          await this.startInCodexApp(codexExecutable, handoff);
-          return;
+        const executable = await this.codexDesktopExecutable(desktop);
+        if (executable === null) {
+          throw new Error("Codex Desktop is installed, but Mauz could not find its app-server executable.");
         }
-      } else if (executable !== null) {
-        await (agent.id === "hermes"
-          ? this.startInHermesApp(executable, handoff)
-          : this.startInClaudeApp(executable, handoff));
+        await this.startInCodexApp(executable, handoff, desktop);
         return;
       }
+      if (agent.id === "claude-code") {
+        await this.openClaudeComposer(desktop, handoff);
+        return;
+      }
+      if (command === null) {
+        throw new Error(
+          "Hermes Desktop is installed. Mauz needs the Hermes CLI to connect to its local gateway."
+        );
+      }
+      await this.startHermes(command, handoff, desktop);
+      return;
     }
 
-    if (executable === null) {
+    if (command === null) {
       throw new Error(`${agent.label} is not installed on this computer.`);
     }
 
-    const args = buildAgentArguments(agent.id, {
-      folder: request.folder,
-      briefPath,
-      handoffDirectory,
-      screenshotPath
-    });
-
-    await this.openTerminal({
-      title: `Mauz → ${agent.label}`,
-      folder: request.folder,
-      executable,
-      args,
-      handoffDirectory
-    });
+    switch (agent.id) {
+      case "codex":
+        await this.startCli(
+          command,
+          handoff,
+          [
+            "exec",
+            "--approve-for-me",
+            "--skip-git-repo-check",
+            "--cd",
+            handoff.folder,
+            ...(handoff.screenshotPath === undefined ? [] : ["--image", handoff.screenshotPath]),
+            "-"
+          ],
+          handoff.briefPath
+        );
+        return;
+      case "claude-code":
+        await this.startClaudeCli(command, handoff);
+        return;
+      case "hermes":
+        await this.startHermes(command, handoff, null);
+    }
   }
 
-  /**
-   * The same folders and MAUZ_*_PATH overrides as Ask. Unlike Ask, a Windows `.cmd` shim is
-   * returned as it is: the agent starts through a terminal or cmd.exe, which can run it.
-   */
-  findExecutable(command: string): string | null {
-    const name = applyCliPathOverride(command, this.env);
-
-    if (this.path.isAbsolute(name)) {
-      return this.pathExists(name) ? name : null;
-    }
-
-    const extensions = this.platform === "win32" ? [".exe", ".cmd", ".bat"] : [""];
-
-    for (const directory of getCliSearchDirectories(this.platform, this.env, this.home)) {
-      for (const extension of extensions) {
-        const candidate = this.path.join(directory, `${name}${extension}`);
-
-        if (this.pathExists(candidate)) {
-          return candidate;
-        }
-      }
-    }
-
-    return null;
+  private findCommand(name: string): ResolvedCliCommand | null {
+    return resolveCliCommand(name, {
+      platform: this.platform,
+      env: this.env,
+      homeDirectory: this.home,
+      pathExists: this.pathExists,
+      fallbackNodeRuntime: process.versions.electron === undefined ? undefined : process.execPath
+    });
   }
 
   /** Claude Code lists every folder it has opened in ~/.claude.json. */
@@ -434,29 +424,65 @@ export class TaskAgentLauncher {
     this.removeExpiredHandoffs();
 
     const directory = this.path.join(root, `${Date.now()}-${randomUUID().slice(0, 8)}`);
-    mkdirSync(directory, { recursive: true });
+    mkdirSync(directory, { mode: 0o700 });
 
     return directory;
   }
 
-  /** Windows only: whether the agent's desktop app is installed, so tasks can go to it. */
-  hasDesktopApp(agentId: TaskAgentId): boolean {
-    const localAppData = this.env.LOCALAPPDATA;
-    const appData = this.env.APPDATA;
+  private async desktopApp(agentId: TaskAgentId): Promise<string | null> {
+    const { names, scheme } = DESKTOP_APPS[agentId];
+    if (this.platform !== "darwin" && this.platform !== "win32") return null;
 
-    if (this.platform !== "win32" || localAppData === undefined) {
-      return false;
+    const handler = await this.findProtocolApp(scheme);
+    const extension = this.platform === "darwin" ? ".app" : ".exe";
+    const needsMacCodexExecutable = this.platform === "darwin" && agentId === "codex";
+    let installedApp: string | null = null;
+    if (
+      handler !== undefined &&
+      names.some((name) => this.path.basename(handler).toLowerCase() === `${name}${extension}`.toLowerCase())
+    ) {
+      if (!needsMacCodexExecutable || this.macCodexExecutable(handler) !== null) return handler;
+      installedApp = handler;
     }
 
-    const join = this.path.join;
+    if (this.platform === "darwin") {
+      for (const root of ["/Applications", this.path.join(this.home, "Applications")]) {
+        for (const name of names) {
+          const bundle = this.path.join(root, `${name}.app`);
+          if (!this.pathExists(bundle)) continue;
+          if (!needsMacCodexExecutable || this.macCodexExecutable(bundle) !== null) return bundle;
+          installedApp ??= bundle;
+        }
+      }
+      if (agentId === "hermes") {
+        const hermesHome = this.env.HERMES_HOME ?? this.path.join(this.home, ".hermes");
+        const bundle = this.path.join(
+          hermesHome,
+          "hermes-agent",
+          "apps",
+          "desktop",
+          "release",
+          "mac-arm64",
+          "Hermes.app"
+        );
+        if (this.pathExists(bundle)) return bundle;
+      }
+      // Preserve the desktop launch error if Codex is installed without a bundled executable.
+      return installedApp;
+    }
 
+    const { LOCALAPPDATA: local, APPDATA: roaming } = this.env;
+    const candidates: string[] = [];
     if (agentId === "hermes") {
-      return (
-        (appData !== undefined &&
-          this.pathExists(join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Hermes.lnk"))) ||
-        this.pathExists(
-          join(
-            localAppData,
+      if (roaming !== undefined) {
+        candidates.push(
+          this.path.join(roaming, "Microsoft", "Windows", "Start Menu", "Programs", "Hermes.lnk")
+        );
+      }
+      if (local !== undefined) {
+        candidates.push(
+          this.path.join(
+            local,
             "hermes",
             "hermes-agent",
             "apps",
@@ -465,53 +491,119 @@ export class TaskAgentLauncher {
             "win-unpacked",
             "Hermes.exe"
           )
-        )
-      );
+        );
+      }
+    } else if (local !== undefined) {
+      const packageFamily = agentId === "codex" ? CODEX_PACKAGE_FAMILY : CLAUDE_PACKAGE_FAMILY;
+      candidates.push(this.path.join(local, "Microsoft", "WindowsApps", packageFamily));
     }
 
-    // Store apps: the alias files themselves are invisible to stat, their package folders are not.
-    const packageFamily = agentId === "codex" ? CODEX_PACKAGE_FAMILY : CLAUDE_PACKAGE_FAMILY;
-
-    return this.pathExists(join(localAppData, "Microsoft", "WindowsApps", packageFamily));
+    return candidates.find(this.pathExists) ?? null;
   }
 
-  /**
-   * Hermes: a one-shot CLI run, hidden. The CLI hands the turn to the local Hermes gateway the
-   * desktop app also uses, so the thread shows up in the app. `--source cli` keeps it in the
-   * sidebar; one-shot runs are otherwise labelled `oneshot` and hidden there.
-   */
-  private async startInHermesApp(executable: string, handoff: DesktopHandoff): Promise<void> {
-    await this.startHidden(
-      executable,
+  private async codexDesktopExecutable(desktop: string): Promise<string | null> {
+    if (this.platform === "win32") {
+      const bundled = this.path.join(this.path.dirname(desktop), "resources", "codex.exe");
+      return this.path.extname(desktop) === ".exe" && this.pathExists(bundled)
+        ? bundled
+        : this.findCodexAppExecutable();
+    }
+
+    return this.macCodexExecutable(desktop);
+  }
+
+  private macCodexExecutable(desktop: string): string | null {
+    const resources = this.path.join(desktop, "Contents", "Resources");
+    return (
       [
-        "chat",
-        "-Q",
-        "--source",
-        "cli",
-        "--query-file",
-        handoff.briefPath,
-        ...(handoff.screenshotPath === undefined ? [] : ["--image", handoff.screenshotPath]),
-        "--in",
-        handoff.folder
-      ],
-      {
-        env: buildAgentEnvironment(this.env),
-        cwd: handoff.folder,
-        logPath: this.path.join(handoff.handoffDirectory, "agent.log")
-      }
+        this.path.join(resources, "codex-cli", "CodexCLI.app", "Contents", "MacOS", "codex"),
+        this.path.join(resources, "codex")
+      ].find(this.pathExists) ?? null
     );
   }
 
-  /**
-   * Claude: a headless Claude Code run, hidden, then the finished session is handed to Claude
-   * desktop's Code list with `claude://resume`. `--startup` keeps the app's window hidden: it is
-   * the flag the app uses when it starts at sign-in.
-   */
-  private async startInClaudeApp(executable: string, handoff: DesktopHandoff): Promise<void> {
-    const sessionId = randomUUID();
+  private async startHermes(
+    command: ResolvedCliCommand,
+    handoff: DesktopHandoff,
+    desktop: string | null
+  ): Promise<void> {
+    const env = { ...buildAgentEnvironment(this.env), ...command.env };
+    const options = { env, cwd: handoff.folder };
+    if (desktop === null) {
+      const approvals = await this.readAgentOutput(
+        command.command,
+        [...command.args, "config", "get", "approvals", "--json"],
+        options
+      )
+        .then((output) => JSON.parse(output) as { mode?: unknown; single_query_mode?: unknown } | null)
+        .catch(() => null);
+      if (approvals?.mode !== "smart" || approvals.single_query_mode !== "deny") {
+        throw new Error(
+          "Hermes needs Smart approvals and single-query approval mode Deny for background tasks from Mauz."
+        );
+      }
+    }
+
+    if (desktop !== null || handoff.screenshotPath !== undefined) {
+      const sessionId = await this.submitHermesTask({
+        attach: () =>
+          this.readAgentOutput(
+            command.command,
+            [...command.args, "gateway", "attach", "--start", "--json"],
+            options
+          ),
+        cwd: handoff.folder,
+        text: handoff.brief,
+        imagePath: handoff.screenshotPath,
+        desktop: desktop !== null
+      });
+      if (desktop !== null) {
+        try {
+          await this.openDesktopLink(desktop, `hermes://open/${encodeURIComponent(sessionId)}`);
+        } catch {
+          throw new Error("Hermes accepted the task. Open the new Hermes Desktop session to continue.");
+        }
+      } else {
+        writeFileSync(
+          this.path.join(handoff.handoffDirectory, "agent.log"),
+          `Hermes session: ${sessionId}\n`,
+          { mode: 0o600 }
+        );
+      }
+      return;
+    }
+
+    await this.startCli(command, handoff, [
+      "chat",
+      "-Q",
+      "--query-file",
+      handoff.briefPath,
+      "--in",
+      handoff.folder
+    ]);
+  }
+
+  private async openClaudeComposer(desktop: string, handoff: DesktopHandoff): Promise<void> {
+    const url = new URL("claude://code/new");
+    const briefInstruction = `Read the full Mauz task brief and captured context at ${JSON.stringify(handoff.briefPath)} before starting.`;
+    url.searchParams.set("folder", handoff.folder);
+    url.searchParams.set("q", `${handoff.task.trim()}\n\n${briefInstruction}`);
+    // Keep OS protocol activation short. The full text is available in the brief.
+    if (url.href.length > MAX_CLAUDE_DESKTOP_URL_LENGTH) {
+      url.searchParams.set("q", `${threadTitle(handoff.task)}\n\n${briefInstruction}`);
+    }
+
+    try {
+      await this.openDesktopLink(desktop, url.href);
+    } catch (cause) {
+      throw new Error("Mauz could not open the Code composer. Check Claude Desktop and try again.", {
+        cause
+      });
+    }
+  }
+
+  private async startClaudeCli(command: ResolvedCliCommand, handoff: DesktopHandoff): Promise<void> {
     const promptPath = this.path.join(handoff.handoffDirectory, "prompt.jsonl");
-    const logPath = this.path.join(handoff.handoffDirectory, "agent.log");
-    // One user message: the brief with the screenshot attached. It is the session's first message in the app.
     const message = {
       type: "user",
       message: {
@@ -529,90 +621,50 @@ export class TaskAgentLauncher {
         ]
       }
     };
-    writeFileSync(promptPath, `${JSON.stringify(message)}\n`, "utf8");
-
-    await this.startHidden(
-      executable,
+    writeFileSync(
+      promptPath,
+      `${JSON.stringify(message)}
+`,
+      { encoding: "utf8", mode: 0o600 }
+    );
+    await this.startCli(
+      command,
+      handoff,
       [
         "-p",
-        "--session-id",
-        sessionId,
         "--permission-mode",
-        this.claudePermissionMode(handoff.folder),
+        "auto",
+        "--permission-prompts",
+        "none",
         "--input-format",
         "stream-json",
         "--output-format",
         "stream-json",
         "--verbose"
       ],
-      { env: buildAgentEnvironment(this.env), cwd: handoff.folder, logPath, stdinPath: promptPath }
-    );
-
-    const followUp = this.importClaudeSession(sessionId, logPath).finally(() =>
-      this.followUps.delete(followUp)
-    );
-    this.followUps.add(followUp);
-  }
-
-  /**
-   * The mode the user picked for this folder in Claude desktop, else Claude Code's default mode,
-   * else auto: a headless run cannot ask, so manual mode would deny every command.
-   */
-  claudePermissionMode(folder: string): string {
-    // shortcut: reads Claude desktop's undocumented preference key; update it if the app renames it.
-    const desktopConfig = readJson(
-      this.path.join(
-        this.env.LOCALAPPDATA ?? "",
-        "Claude-Data",
-        CLAUDE_PACKAGE_FAMILY.toLowerCase(),
-        "claude_desktop_config.json"
-      )
-    ) as { preferences?: { epitaxyPrefs?: Record<string, unknown> } } | null;
-    const key = this.folderKey(folder);
-    const desktopMode = Object.entries(desktopConfig?.preferences?.epitaxyPrefs ?? {})
-      .filter(([name]) => name.startsWith("epitaxy-folder-permission-mode-v2."))
-      .flatMap(([, folders]) => Object.entries((folders ?? {}) as Record<string, unknown>))
-      .find(([path]) => this.folderKey(path) === key)?.[1];
-    const cliSettings = readJson(this.path.join(this.home, ".claude", "settings.json")) as {
-      permissions?: { defaultMode?: unknown };
-    } | null;
-
-    return (
-      [desktopMode, cliSettings?.permissions?.defaultMode].find(
-        (mode): mode is string => typeof mode === "string" && CLAUDE_PERMISSION_MODES.has(mode)
-      ) ?? "auto"
+      promptPath
     );
   }
 
-  /**
-   * The app reads an imported session once and does not follow later writes, so the session is
-   * imported when the run has ended (its result is the last line of the log) and shows the answer.
-   */
-  private async importClaudeSession(sessionId: string, logPath: string): Promise<void> {
-    for (let attempt = 0; attempt < CLAUDE_POLLS; attempt += 1) {
-      await this.sleep(CLAUDE_POLL_MS);
-
-      if (readTail(logPath, CLAUDE_LOG_TAIL_BYTES).includes('"type":"result"')) {
-        try {
-          await this.startProcess(
-            this.path.join(this.env.LOCALAPPDATA ?? "", "Microsoft", "WindowsApps", "claude-desktop.exe"),
-            ["--startup", `claude://resume?session=${sessionId}`],
-            { env: buildAgentEnvironment(this.env) }
-          );
-        } catch {
-          // The work is done either way; the session can still be resumed from the CLI.
-        }
-
-        return;
-      }
-    }
+  private async startCli(
+    command: ResolvedCliCommand,
+    handoff: DesktopHandoff,
+    args: string[],
+    stdinPath?: string
+  ): Promise<void> {
+    await this.startHidden(command.command, [...command.args, ...args], {
+      env: { ...buildAgentEnvironment(this.env), ...command.env },
+      cwd: handoff.folder,
+      logPath: this.path.join(handoff.handoffDirectory, "agent.log"),
+      ...(stdinPath === undefined ? {} : { stdinPath })
+    });
   }
 
-  /**
-   * Codex: the thread is created with the task queued on it, then the wake link makes the
-   * Codex desktop app run it. Wake links never show the app's window, even when it starts.
-   */
-  private async startInCodexApp(codexExecutable: string, handoff: DesktopHandoff): Promise<void> {
+  private async startInCodexApp(
+    codexExecutable: string,
+    handoff: DesktopHandoff,
+    desktop: string
+  ): Promise<void> {
     const threadId = await this.queueCodexThread(codexExecutable, {
       folder: handoff.folder,
       title: threadTitle(handoff.task),
@@ -621,44 +673,20 @@ export class TaskAgentLauncher {
       env: buildAgentEnvironment(this.env)
     });
 
-    await this.openExternal(`codex://threads/wake/${threadId}`);
+    try {
+      await this.openDesktopLink(desktop, `codex://threads/wake/${threadId}`);
+      await this.openDesktopLink(desktop, `codex://threads/${threadId}`);
+    } catch {
+      throw new Error("The task was queued in Codex. Open the new thread in Codex to continue.");
+    }
   }
 
-  private async openTerminal(launch: {
-    title: string;
-    folder: string;
-    executable: string;
-    args: string[];
-    handoffDirectory: string;
-  }): Promise<void> {
-    const env = buildAgentEnvironment(this.env);
-
-    if (this.platform === "win32") {
-      const scriptPath = this.path.join(launch.handoffDirectory, "launch.ps1");
-      // Windows PowerShell 5.1 reads a script without a BOM as the ANSI code page, which turns
-      // the "→" in the title into bytes that include a curly quote and breaks the string.
-      writeFileSync(scriptPath, `\uFEFF${buildPowerShellLauncher(launch)}`, "utf8");
-      // `start` gives PowerShell its own console window (Windows Terminal when that is the default).
-      await this.startProcess(
-        "cmd.exe",
-        [
-          `/d /c start "Mauz" powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "${scriptPath}"`
-        ],
-        { env, windowsVerbatimArguments: true }
-      );
+  private async openDesktopLink(desktop: string, url: string): Promise<void> {
+    if (this.platform === "darwin" && this.openMacApplication !== undefined) {
+      await this.openMacApplication(desktop, url);
       return;
     }
-
-    const scriptPath = this.path.join(launch.handoffDirectory, "launch.command");
-    writeFileSync(scriptPath, buildShellLauncher(launch), "utf8");
-    chmodSync(scriptPath, 0o755);
-
-    if (this.platform === "darwin") {
-      await this.startProcess("open", ["-a", "Terminal", scriptPath], { env });
-      return;
-    }
-
-    await this.startProcess("x-terminal-emulator", ["-e", scriptPath], { env });
+    await this.openExternal(url);
   }
 }
 
@@ -675,27 +703,6 @@ function listNames(directory: string): string[] {
     return readdirSync(directory);
   } catch {
     return [];
-  }
-}
-
-/** The last `bytes` of a file as text, or "" when it cannot be read. */
-function readTail(path: string, bytes: number): string {
-  let descriptor: number | undefined;
-
-  try {
-    descriptor = openSync(path, "r");
-    const size = statSync(path).size;
-    const length = Math.min(size, bytes);
-    const buffer = Buffer.alloc(length);
-    readSync(descriptor, buffer, 0, length, size - length);
-
-    return buffer.toString("utf8");
-  } catch {
-    return "";
-  } finally {
-    if (descriptor !== undefined) {
-      closeSync(descriptor);
-    }
   }
 }
 

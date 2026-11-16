@@ -19,6 +19,7 @@ const frameworksDir = join(outputApp, "Contents/Frameworks");
 const packagedAppDir = join(resourcesDir, "app");
 const iconPath = resolve(appRoot, "build/mauzai.icns");
 const nativeInputAgent = resolve(appRoot, "../../native/macos/MauzInputAgent/MauzInputAgent.app");
+const nativeInputAgentExecutable = join(nativeInputAgent, "Contents/MacOS/MauzInputAgent");
 const nativeInputAgentBuildScript = resolve(appRoot, "../../native/macos/MauzInputAgent/build.sh");
 const nativeInputAgentStandaloneBinary = resolve(appRoot, "../../native/macos/MauzInputAgent/MauzInputAgent");
 const desktopPackage = JSON.parse(await readFile(resolve(appRoot, "package.json"), "utf8"));
@@ -103,7 +104,7 @@ await cleanupNativeInputAgentBuildOutput();
 console.log(`Packaged ${outputApp}`);
 
 async function ensureNativeInputAgent() {
-  if (existsSync(nativeInputAgent)) {
+  if (existsSync(nativeInputAgentExecutable)) {
     return;
   }
 
@@ -119,8 +120,8 @@ async function ensureNativeInputAgent() {
     cwd: dirname(nativeInputAgentBuildScript)
   });
 
-  if (!existsSync(nativeInputAgent)) {
-    throw new Error(`Mauz input helper build did not produce ${nativeInputAgent}`);
+  if (!existsSync(nativeInputAgentExecutable)) {
+    throw new Error(`Mauz input helper build did not produce ${nativeInputAgentExecutable}`);
   }
 }
 
