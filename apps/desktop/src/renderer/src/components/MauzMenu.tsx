@@ -71,6 +71,13 @@ export function MauzMenu(): React.JSX.Element {
     setStatus(null);
 
     try {
+      if (bubble === "ask") {
+        const session = await mauz().ask.open();
+        if (useMauzStore.getState().mode !== "menu") return;
+        useMauzStore.getState().setAskSession(session);
+        setMode("ask");
+        return;
+      }
       const context = await mauz().menu.startAsk();
       setCurrentContext(context);
       await mauz().menu.expand();

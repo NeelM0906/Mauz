@@ -24,6 +24,30 @@ function App(): React.JSX.Element {
   const setMode = useMauzStore((state) => state.setMode);
 
   React.useEffect(() => {
+    const unsubSession = mauz().ask.onSession((session) => {
+      const state = useMauzStore.getState();
+      if (session === null || state.askSession?.id === session.id) state.setAskSession(session);
+    });
+    const unsubResume = mauz().ask.onResume((session) => {
+      const state = useMauzStore.getState();
+      state.setAskSession(session, true);
+      state.setMode("ask");
+    });
+    const unsubDelta = mauz().ask.onDelta(({ sessionId, requestId, text }) => {
+      const state = useMauzStore.getState();
+      const session = state.askSession;
+      if (session?.id === sessionId && session.pending?.id === requestId) {
+        state.setAskSession({ ...session, pending: { ...session.pending, partial: text } });
+      }
+    });
+    return () => {
+      unsubSession();
+      unsubResume();
+      unsubDelta();
+    };
+  }, []);
+
+  React.useEffect(() => {
     return mauz().events.onActivation(() => {
       reset();
     });
@@ -44,6 +68,7 @@ function App(): React.JSX.Element {
 
   // Focus the primary heading of the newly mounted panel on each mode switch
   React.useEffect(() => {
+    if (mode === "ask") return;
     const el = document.querySelector<HTMLElement>('h1[tabindex="-1"]');
     el?.focus();
   }, [mode]);
@@ -54,7 +79,8 @@ function App(): React.JSX.Element {
       if (e.key !== "Escape") return;
       const target = e.target as HTMLElement;
       // Don't intercept Escape while the user is composing text
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (e.isComposing || (mode !== "ask" && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")))
+        return;
       const state = useMauzStore.getState();
       if (state.mode === "menu") {
         void mauz().menu.close();
@@ -65,7 +91,7 @@ function App(): React.JSX.Element {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [mode]);
 
   const Panel = PANELS[mode];
   return <Panel />;

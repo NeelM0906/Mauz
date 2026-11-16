@@ -42,6 +42,8 @@ export class PopoverWindowController {
   private readonly options: PopoverWindowControllerOptions;
   private lastAnchorPoint: Point | null = null;
   private dialogOpen = false;
+  private visibilityVersion = 0;
+  private captureDepth = 0;
   private currentSize: Size = { ...MAUZ_POPUP_SIZE };
   private readonly excludeFromCapture: boolean;
 
@@ -92,7 +94,7 @@ export class PopoverWindowController {
     }
 
     win.on("blur", () => {
-      if (!this.dialogOpen) {
+      if (!this.dialogOpen && this.captureDepth === 0) {
         this.hide("blur");
       }
     });
@@ -107,7 +109,9 @@ export class PopoverWindowController {
   }
 
   async showAt(point: Point, options: ShowOptions = {}): Promise<void> {
+    const version = ++this.visibilityVersion;
     await this.create();
+    if (version !== this.visibilityVersion) return;
 
     const win = this.requireWindow();
     this.lastAnchorPoint = point;
@@ -153,7 +157,18 @@ export class PopoverWindowController {
     this.repositionAtLastAnchor();
   }
 
+  containsPoint(point: Point): boolean {
+    if (this.window?.isDestroyed() !== false || !this.window.isVisible()) return false;
+    const { x, y, width, height } = this.window.getBounds();
+    return point.x >= x && point.x < x + width && point.y >= y && point.y < y + height;
+  }
+
+  isVisible(): boolean {
+    return this.window?.isDestroyed() === false && this.window.isVisible();
+  }
+
   hide(reason: HideReason = "explicit"): void {
+    this.visibilityVersion++;
     if (this.window?.isDestroyed() === false && this.window.isVisible()) {
       this.window.hide();
       this.options.onHide?.(reason);
@@ -196,7 +211,9 @@ export class PopoverWindowController {
       return operation();
     }
 
+    const version = this.visibilityVersion;
     const wasVisible = win.isVisible();
+    this.captureDepth++;
     const anchorPoint = this.lastAnchorPoint ?? screen.getCursorScreenPoint();
 
     if (wasVisible) {
@@ -207,7 +224,8 @@ export class PopoverWindowController {
     try {
       return await operation();
     } finally {
-      if (wasVisible) {
+      this.captureDepth--;
+      if (wasVisible && version === this.visibilityVersion) {
         await this.showAt(anchorPoint, {
           notifyActivation: false,
           preserveSize: true
@@ -217,6 +235,7 @@ export class PopoverWindowController {
   }
 
   destroy(): void {
+    this.visibilityVersion++;
     this.clearTargetCueTimer();
 
     if (this.window?.isDestroyed() === false) {

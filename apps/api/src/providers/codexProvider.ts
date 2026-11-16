@@ -11,7 +11,7 @@ import {
   toCliError,
   type AskCli
 } from "./processRunner";
-import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
+import { askCliUserText, type AskOptions, type AskPrompt, type AskProvider, type AskResult } from "./types";
 
 const DEFAULT_CODEX_REASONING_EFFORT = "low";
 const ASK_TIMEOUT_MS = 180_000;
@@ -39,6 +39,7 @@ export class CodexProvider implements AskProvider {
   }
 
   async answer(prompt: AskPrompt, options: AskOptions = {}): Promise<AskResult> {
+    options.signal?.throwIfAborted();
     const env = this.readEnv();
     const command = resolveCliCommand("codex", {
       env,
@@ -77,13 +78,15 @@ export class CodexProvider implements AskProvider {
         ...imagePaths.flatMap((imagePath) => ["--image", imagePath]),
         "-"
       ];
+      options.signal?.throwIfAborted();
       const child = spawnCliProcess(command.command, args, {
         cwd: workingDirectory,
         env: { ...buildCliEnvironment(env), ...command.env }
       });
       const output = await runAndCollect(child, {
         stdinText: buildCodexPrompt(prompt),
-        timeoutMs: ASK_TIMEOUT_MS
+        timeoutMs: ASK_TIMEOUT_MS,
+        signal: options.signal
       }).catch((error: unknown) => {
         throw toCliError(this.id, CODEX_CLI.label, error);
       });
@@ -129,7 +132,7 @@ function buildCodexPrompt(prompt: AskPrompt): string {
     "You are answering inside a desktop popup. Do not run shell commands, read files, or use tools; answer directly from this message and the attached images.",
     "",
     ...imageLines,
-    prompt.userText
+    askCliUserText(prompt)
   ].join("\n");
 }
 

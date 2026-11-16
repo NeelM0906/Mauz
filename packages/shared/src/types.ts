@@ -8,6 +8,9 @@ import type {
   AskAnswerDeltaSchema,
   AskMauzRequestSchema,
   AskMauzResponseSchema,
+  AskSessionRefSchema,
+  AskSessionRequestSchema,
+  AskSessionViewSchema,
   BoundsSchema,
   BrowserPageSchema,
   BrowserProductSchema,
@@ -58,6 +61,9 @@ export type MauzDesktopContext = z.infer<typeof MauzDesktopContextSchema>;
 
 export type AskMauzRequest = z.infer<typeof AskMauzRequestSchema>;
 export type AskAnswerDelta = z.infer<typeof AskAnswerDeltaSchema>;
+export type AskSessionRef = z.infer<typeof AskSessionRefSchema>;
+export type AskSessionRequest = z.infer<typeof AskSessionRequestSchema>;
+export type AskSessionView = z.infer<typeof AskSessionViewSchema>;
 export type AskMauzResponse = z.infer<typeof AskMauzResponseSchema>;
 
 export type AiProviderId = z.infer<typeof AiProviderIdSchema>;
@@ -113,7 +119,12 @@ export type MauzBridge = {
     onHidden(callback: () => void): () => void;
   };
   ask: {
-    submit(payload: AskMauzRequest): Promise<AskMauzResponse>;
+    open(): Promise<AskSessionView>;
+    newChat(payload: AskSessionRef): Promise<AskSessionView>;
+    stop(payload: AskSessionRef): Promise<void>;
+    submit(payload: AskSessionRequest): Promise<void>;
+    onSession(callback: (session: AskSessionView | null) => void): () => void;
+    onResume(callback: (session: AskSessionView) => void): () => void;
     onDelta(callback: (payload: AskAnswerDelta) => void): () => void;
   };
   providers: {

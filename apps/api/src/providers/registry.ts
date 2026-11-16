@@ -77,8 +77,16 @@ export class AskProviderRegistry {
   }
 
   /** Returns the provider that should answer now, or explains why none can. */
-  async resolve(): Promise<AskProvider> {
+  async resolve(pinnedId?: AiProviderId): Promise<AskProvider> {
     const status = await this.getStatus();
+
+    if (pinnedId !== undefined) {
+      const pinned = status.providers.find(({ id }) => id === pinnedId);
+      if (pinned?.available === true) return this.providers[pinnedId];
+      throw new NoAiProviderError(
+        `${PROVIDER_LABELS[pinnedId]} is unavailable. Reconnect it or start a new chat.`
+      );
+    }
 
     if (status.activeProviderId !== null) {
       return this.providers[status.activeProviderId];

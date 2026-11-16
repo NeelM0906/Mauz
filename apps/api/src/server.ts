@@ -10,9 +10,30 @@ import {
 } from "@mauzai/shared";
 import { AiProviderError, MissingOpenAIKeyError, NoAiProviderError } from "./errors";
 import { askMauz } from "./openai/askMauz";
+import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./providers/types";
 import { MAUZ_SYSTEM_PROMPT } from "./prompts/mauzSystemPrompt";
 import { getDefaultAskProviderRegistry, resolveCliCommandForMauz } from "./providers/registry";
 import { SubscriptionConnector } from "./providers/subscriptionConnect";
+
+export { MAUZ_SYSTEM_PROMPT };
+export type { AskExchange, AskImage, AskOptions, AskPrompt, AskProvider } from "./providers/types";
+
+export function resolveAskProvider(id?: AskProvider["id"]): Promise<AskProvider> {
+  return getDefaultAskProviderRegistry().resolve(id);
+}
+
+export async function answerAskSession(
+  provider: AskProvider,
+  prompt: AskPrompt,
+  options: AskOptions
+): Promise<AskResult> {
+  try {
+    const result = await provider.answer(prompt, options);
+    return { ...result, text: AskMauzResponseSchema.parse({ answer: result.text }).answer };
+  } catch (error) {
+    throw normalizeAskError(error);
+  }
+}
 
 export { hasOpenAiTranscription, transcribeWithOpenAi } from "./openai/transcribeAudio";
 export { applyCliPathOverride, buildCliEnvironment, getCliSearchDirectories } from "./providers/cliCommand";
@@ -60,17 +81,20 @@ export async function answerAsk(
   try {
     return AskMauzResponseSchema.parse(await askMauz(request, onText === undefined ? {} : { onText }));
   } catch (error) {
-    if (
-      error instanceof NoAiProviderError ||
-      error instanceof MissingOpenAIKeyError ||
-      error instanceof AiProviderError
-    ) {
-      // A plain Error: Electron shows err.toString() in the renderer, so a class name would show too.
-      throw new Error(error.message);
-    }
-
-    throw new Error("Ask Mauz failed while contacting the model.");
+    throw normalizeAskError(error);
   }
+}
+
+function normalizeAskError(error: unknown): Error {
+  if (
+    error instanceof NoAiProviderError ||
+    error instanceof MissingOpenAIKeyError ||
+    error instanceof AiProviderError
+  ) {
+    // Keep useful provider errors and avoid exposing unknown Errors through IPC.
+    return new Error(error.message);
+  }
+  return new Error("Ask Mauz failed while contacting the model.");
 }
 
 /** Loads `.env.local` and `.env` from the working folder and its parents. Set variables win. */

@@ -39,6 +39,7 @@ type CollectedOutput = {
 type RunCollectOptions = {
   stdinText?: string | undefined;
   timeoutMs: number;
+  signal?: AbortSignal | undefined;
   /** Called for each complete stdout line as it arrives; stdout is still collected. */
   onStdoutLine?: ((line: string) => void) | undefined;
 };
@@ -66,7 +67,12 @@ export function runAndCollect(child: ChildProcessLike, options: RunCollectOption
 
       settled = true;
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", abort);
       callback();
+    };
+    const abort = (): void => {
+      killQuietly(child);
+      finish(() => reject(options.signal?.reason));
     };
     const timer = setTimeout(() => {
       killQuietly(child);
@@ -95,6 +101,11 @@ export function runAndCollect(child: ChildProcessLike, options: RunCollectOption
     child.stdin?.on("error", () => {
       // The process may exit before reading stdin; the exit handler reports the outcome.
     });
+    if (options.signal?.aborted) {
+      abort();
+      return;
+    }
+    options.signal?.addEventListener("abort", abort, { once: true });
     child.stdin?.end(options.stdinText ?? "");
   });
 }

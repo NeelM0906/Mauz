@@ -6,18 +6,27 @@ export type AskImage = {
   label: string;
 };
 
+export type AskExchange = {
+  userText: string;
+  answer: string;
+  phase?: "final_answer";
+};
+
 export type AskPrompt = {
   systemPrompt: string;
   userText: string;
   images: AskImage[];
+  history?: AskExchange[];
 };
 
 export type AskOptions = {
+  signal?: AbortSignal | undefined;
   onText?: ((textSoFar: string) => void) | undefined;
 };
 
 export type AskResult = {
   text: string;
+  phase?: "final_answer";
 };
 
 export interface AskProvider {
@@ -29,3 +38,18 @@ export interface AskProvider {
 }
 
 export type ProviderDetection = Omit<AiProviderStatus, "id" | "label">;
+
+/** One-shot CLI adapters can carry history as data without resuming a stored CLI session. */
+export function askCliUserText(prompt: AskPrompt): string {
+  if (!prompt.history?.length) return prompt.userText;
+  const history = prompt.history.flatMap(({ userText, answer }) => [
+    { role: "user", content: userText },
+    { role: "assistant", content: answer }
+  ]);
+  return [
+    "Earlier conversation (JSON):",
+    JSON.stringify(history),
+    "Latest user message:",
+    prompt.userText
+  ].join("\n\n");
+}

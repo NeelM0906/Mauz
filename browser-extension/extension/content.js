@@ -9,12 +9,20 @@
 
   window.__mauzContentLoaded = true;
 
+  const documentId =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
+          byte.toString(16).padStart(2, "0")
+        ).join("");
   let lastPointer = null;
+  let screenPoint = null;
 
   window.addEventListener(
     "mousemove",
     (event) => {
       lastPointer = { x: event.clientX, y: event.clientY };
+      screenPoint = { x: event.screenX, y: event.screenY, time: Date.now() };
     },
     { passive: true, capture: true }
   );
@@ -25,7 +33,7 @@
     }
 
     try {
-      sendResponse({ page: globalThis.MauzPage.snapshot(document, lastPointer) });
+      sendResponse({ page: globalThis.MauzPage.snapshot(document, lastPointer), documentId, screenPoint });
     } catch (error) {
       sendResponse({ error: String(error && error.message ? error.message : error) });
     }

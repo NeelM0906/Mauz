@@ -1292,3 +1292,92 @@ button {
 .dictate-actions .submit-button {
   height: 38px;
 }
+
+.panel-header-actions,
+.ask-attachments,
+.ask-turn-source,
+.ask-feedback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ask-panel .ask-transcript {
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.ask-turn + .ask-turn {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.ask-question {
+  width: fit-content;
+  max-width: 90%;
+  margin: 0 0 8px auto;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--accent-ask-bg);
+  color: var(--accent-ask-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ask-turn-source {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.ask-composer {
+  flex: 0 0 auto;
+}
+
+.ask-attachments,
+.ask-feedback {
+  flex-wrap: wrap;
+}
+
+.ask-source-label {
+  padding: 3px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-ask-bg);
+  color: var(--accent-ask-text);
+  font-size: 11px;
+}
+
+.ask-panel .ask-small-button {
+  min-height: 24px;
+  height: auto;
+  padding: 3px 6px;
+  width: auto;
+  font-size: 11px;
+}
+
+.ask-small-button[aria-pressed="true"] {
+  background: var(--accent-ask-bg-strong);
+  color: var(--accent-ask-text);
+}
+
+.ask-panel .ask-new {
+  width: auto;
+  min-width: max-content;
+}
+
+.ask-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.ask-input-row .secondary-button,
+.ask-input-row .submit-button {
+  height: auto;
+}

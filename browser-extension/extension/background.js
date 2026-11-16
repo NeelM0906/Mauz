@@ -108,7 +108,9 @@ async function snapshotActiveTab(blockedSites) {
       // Mauz rejects pages whose fields exceed its limits, so trim to them.
       url: tab.url.slice(0, 2000),
       title: page.title ?? globalThis.MauzPage.clean(tab.title, 500)
-    }
+    },
+    identity: { tabId: tab.id, documentId: response?.documentId },
+    screenPoint: response?.screenPoint
   };
 }
 

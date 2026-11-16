@@ -40,7 +40,7 @@ Full instructions, environment variables, and development mode are in [setup.md]
 
 1. Shake the mouse or press **Ctrl+Shift+M** (**Cmd+Shift+M** on macOS). A dial opens at your cursor.
 2. Choose an action:
-   - **Ask** — ask about what is under your cursor or selected. Press Ask with nothing typed to learn what it is.
+   - **Ask** — ask about what is under your cursor or selected. Press Ask with nothing typed to learn what it is. Ask a follow-up in the same panel to keep the conversation going.
    - **Send to agent** — hand a task, with what you are pointing at, to your coding agent (Hermes, Claude Code, or Codex).
    - **Dictate** — speak instead of typing, then send the text to Ask or to your agent.
 3. Click the Mauz logo in the middle of the dial to open Settings.
@@ -82,6 +82,10 @@ Mauz is built around user-controlled context sharing.
 
 - **Windows:** shake needs no permission. Mauz runs from the tray, where you can open it, pause shake, or quit. **Ctrl+Shift+M** is also Microsoft Teams' mute shortcut; turn off Mauz's shortcut in Settings if you rely on it there.
 - **macOS:** shake and selected text need Accessibility permission, screenshots need Screen Recording, and Dictate needs Microphone. Dictate without an OpenAI key is not available yet. See [setup.md](setup.md#macos-permissions).
+
+### Ask follow-ups
+
+Click away to read or scroll, then summon Mauz again on the same browser page within five minutes to continue Ask. Point at a new passage or visual when invoking Mauz to bring it into the next question. The composer shows which source will be sent. Choose **New chat** to start over or **Back** to return to the dial. Automatic resume requires the Mauz browser extension. Reload the unpacked extension and the page after an update.
 
 ## Roadmap
 

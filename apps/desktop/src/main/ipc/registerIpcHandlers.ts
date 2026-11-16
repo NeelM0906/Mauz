@@ -2,7 +2,9 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import {
   AiProvidersStatusRequestSchema,
   AiProvidersStatusResponseSchema,
-  AskMauzRequestSchema,
+  AskSessionRefSchema,
+  AskSessionRequestSchema,
+  AskSessionViewSchema,
   IPC_CHANNELS,
   MauzSettingsUpdateSchema,
   SubscriptionCancelRequestSchema,
@@ -20,7 +22,8 @@ import {
   type MauzSettings,
   type MauzSettingsUpdate
 } from "@mauzai/shared";
-import { answerAsk, getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
+import { getAiProvidersStatus, type SubscriptionConnector } from "@mauzai/api/server";
+import type { AskSessions } from "../ask/AskSessions";
 import type { TaskAgentLauncher } from "../agent/TaskAgentLauncher";
 import type { PopoverWindowController } from "../windows/PopoverWindowController";
 import type { ContextCollector } from "../context/ContextCollector";
@@ -32,6 +35,8 @@ type RegisterIpcHandlersOptions = {
   rendererUrl?: string | undefined;
   popover: PopoverWindowController;
   contextCollector: ContextCollector;
+  askSessions: AskSessions;
+  invalidateActivation?: () => void;
   getSettings: () => Promise<MauzSettings>;
   updateSettings: (update: MauzSettingsUpdate) => Promise<MauzSettings>;
   taskAgents: {
@@ -79,6 +84,8 @@ export function registerIpcHandlers({
   rendererUrl,
   popover,
   contextCollector,
+  askSessions,
+  invalidateActivation,
   getSettings,
   updateSettings,
   taskAgents,
@@ -91,22 +98,28 @@ export function registerIpcHandlers({
   const handle = createHandle(rendererUrl);
 
   handle(IPC_CHANNELS.menuShowMenu, () => {
+    invalidateActivation?.();
+    askSessions.suspend();
     popover.resizeForMenu();
   });
 
   handle(IPC_CHANNELS.menuClose, () => {
+    invalidateActivation?.();
     contextCollector.discardActivationSnapshot();
+    askSessions.close();
     popover.hide();
   });
 
   handle(IPC_CHANNELS.menuStartAsk, async () => {
-    return contextCollector.collectForAsk();
+    return contextCollector.collectForAsk({ retainActivation: true });
   });
   handle(IPC_CHANNELS.menuExpand, () => {
     popover.resizeForAsk();
   });
 
   handle(IPC_CHANNELS.settingsOpen, async () => {
+    invalidateActivation?.();
+    askSessions.suspend();
     popover.resizeForSettings();
     return getSettings();
   });
@@ -121,20 +134,45 @@ export function registerIpcHandlers({
     return updateSettings(parsedPayload.data as MauzSettingsUpdate);
   });
 
-  handle(IPC_CHANNELS.askSubmit, async (event, payload) => {
-    const request = AskMauzRequestSchema.parse(payload);
-    const { requestId } = request;
+  handle(IPC_CHANNELS.askOpen, async () => {
+    const activation = contextCollector.currentAskActivation();
+    const version = contextCollector.activationVersion;
+    const capture = !askSessions.matches(activation)
+      ? await contextCollector.collectForAsk({
+          requireActivation: true,
+          retainActivation: true,
+          verifyBrowser: activation ?? undefined
+        })
+      : undefined;
+    if (version !== contextCollector.activationVersion)
+      throw new Error("The target changed. Invoke Mauz again.");
+    const verified = capture?.captureBlocked !== undefined ? { blocked: true } : activation;
+    const view = askSessions.open(verified, capture);
+    popover.resizeForAsk();
+    return AskSessionViewSchema.parse(view);
+  });
 
-    return answerAsk(
-      request,
-      requestId === undefined
-        ? undefined
-        : (text) => {
-            if (!event.sender.isDestroyed()) {
-              event.sender.send(IPC_CHANNELS.askDelta, { requestId, text });
-            }
-          }
-    );
+  handle(IPC_CHANNELS.askNew, (_event, payload) => {
+    const { sessionId } = AskSessionRefSchema.parse(payload);
+    return AskSessionViewSchema.parse(askSessions.newChat(sessionId));
+  });
+
+  handle(IPC_CHANNELS.askStop, (_event, payload) => {
+    const { sessionId } = AskSessionRefSchema.parse(payload);
+    askSessions.stop(sessionId);
+  });
+
+  handle(IPC_CHANNELS.askSubmit, (event, payload) => {
+    const request = AskSessionRequestSchema.parse(payload);
+    return askSessions.submit(request, (text) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IPC_CHANNELS.askDelta, {
+          sessionId: request.sessionId,
+          requestId: request.requestId,
+          text
+        });
+      }
+    });
   });
 
   handle(IPC_CHANNELS.taskAgents, async () => {
@@ -226,6 +264,7 @@ export function registerIpcHandlers({
 
   handle(IPC_CHANNELS.providersDisconnect, async (_event, payload) => {
     const request = SubscriptionDisconnectRequestSchema.parse(payload);
+    askSessions.close();
     await requireConnector().disconnect(request.providerId);
 
     return AiProvidersStatusResponseSchema.parse(await getProvidersStatus({ refresh: true }));

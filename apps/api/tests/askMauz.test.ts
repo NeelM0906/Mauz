@@ -73,13 +73,14 @@ describe("Ask Mauz prompt payload", () => {
     expect(buildAskPrompt(requestWithPointerContext).images).toHaveLength(1);
   });
 
-  it("describes pointer priority for vague this-or-that questions", () => {
+  it("includes pointed evidence and lets the dialogue resolve references", () => {
     const contextText = buildContextText(requestWithPointerContext);
 
     expect(contextText).toContain("<image>attached: crop centered on the pointer (768x576)</image>");
     expect(MAUZ_SYSTEM_PROMPT).toContain(
-      "mean the selected text if there is any, otherwise the pointed element, otherwise the image"
+      "Resolve references using the wording and the previous conversation."
     );
+    expect(MAUZ_SYSTEM_PROMPT).toContain("An earlier screen attachment is historical");
     expect(MAUZ_SYSTEM_PROMPT).toContain("You are Mauz, an assistant at the user's cursor.");
   });
 

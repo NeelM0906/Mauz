@@ -43,6 +43,13 @@ await ditto(electronApp, outputApp);
 await rm(join(resourcesDir, "default_app.asar"), { force: true });
 await mkdir(packagedAppDir, { recursive: true });
 await cp(resolve(appRoot, "out"), join(packagedAppDir, "out"), { recursive: true });
+for (const directory of ["extension", "native-host"]) {
+  await cp(
+    resolve(appRoot, "../../browser-extension", directory),
+    join(packagedAppDir, "browser-extension", directory),
+    { recursive: true }
+  );
+}
 await writeFile(
   join(packagedAppDir, "package.json"),
   `${JSON.stringify(

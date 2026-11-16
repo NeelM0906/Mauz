@@ -14,7 +14,7 @@ import {
   type ChildProcessLike,
   type SpawnLike
 } from "./processRunner";
-import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
+import { askCliUserText, type AskOptions, type AskPrompt, type AskProvider, type AskResult } from "./types";
 
 export const DEFAULT_CLAUDE_CODE_MODEL = "sonnet";
 const DEFAULT_CLAUDE_CODE_EFFORT = "low";
@@ -118,6 +118,7 @@ export class ClaudeCodeProvider implements AskProvider {
   }
 
   async answer(prompt: AskPrompt, options: AskOptions = {}): Promise<AskResult> {
+    options.signal?.throwIfAborted();
     const launch = this.buildLaunch(prompt.systemPrompt);
 
     if (launch === null) {
@@ -230,6 +231,7 @@ export class ClaudeCodeProvider implements AskProvider {
     const output = await runAndCollect(child, {
       stdinText: `${JSON.stringify(buildUserMessage(prompt))}\n`,
       timeoutMs: this.askTimeoutMs,
+      signal: options.signal,
       onStdoutLine: (line) => {
         const event = parseJsonLine(line);
 
@@ -280,7 +282,7 @@ function buildUserMessage(prompt: AskPrompt): Record<string, unknown> {
     });
   }
 
-  content.push({ type: "text", text: prompt.userText });
+  content.push({ type: "text", text: askCliUserText(prompt) });
 
   return {
     type: "user",

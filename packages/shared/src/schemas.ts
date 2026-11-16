@@ -107,6 +107,7 @@ export const DictateTranscribeResponseSchema = z.object({
 });
 
 export const AskAnswerDeltaSchema = z.object({
+  sessionId: z.string().uuid(),
   requestId: z.string().min(1).max(128),
   text: z.string().max(MAX_ANSWER_CHARS)
 });
@@ -337,6 +338,56 @@ export const AskMauzRequestSchema = z.object({
 
 export const AskMauzResponseSchema = z.object({
   answer: z.string()
+});
+
+const AskSessionIdSchema = z.string().uuid();
+const AskAttachmentIdSchema = z.string().uuid();
+const AskRequestIdSchema = z.string().trim().min(1).max(128);
+
+export const AskSessionRefSchema = z.object({ sessionId: AskSessionIdSchema }).strict();
+export const AskSessionRequestSchema = AskSessionRefSchema.extend({
+  requestId: AskRequestIdSchema,
+  question: z.string().trim().max(MAX_QUESTION_CHARS),
+  sourceId: AskAttachmentIdSchema.optional(),
+  includeScreenshot: z.boolean().optional(),
+  earlierImageId: AskAttachmentIdSchema.optional()
+}).strict();
+
+const AskSourceViewSchema = z.object({
+  id: AskAttachmentIdSchema,
+  label: z.string(),
+  hasImage: z.boolean(),
+  useImage: z.boolean()
+});
+
+export const AskSessionViewSchema = z.object({
+  id: AskSessionIdSchema,
+  turns: z.array(
+    z.object({
+      id: AskRequestIdSchema,
+      question: z.string(),
+      answer: z.string(),
+      sourceLabel: z.string().optional(),
+      imageId: AskAttachmentIdSchema.optional()
+    })
+  ),
+  source: AskSourceViewSchema.nullable(),
+  notice: z.string().nullable(),
+  pending: z.object({ id: AskRequestIdSchema, question: z.string(), partial: z.string() }).nullable(),
+  failure: z
+    .object({
+      question: z.string(),
+      message: z.string(),
+      sourceId: AskAttachmentIdSchema.optional(),
+      includeScreenshot: z.boolean().optional(),
+      earlierImageId: AskAttachmentIdSchema.optional()
+    })
+    .nullable()
+});
+export const AskSessionEventSchema = AskSessionViewSchema.nullable();
+export const BrowserDocumentIdentitySchema = z.object({
+  tabId: z.number().int().nonnegative(),
+  documentId: z.union([z.string().uuid(), z.string().regex(/^[0-9a-f]{32}$/)])
 });
 
 export const TaskAgentStatusSchema = z.object({

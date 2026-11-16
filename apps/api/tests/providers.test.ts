@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import Anthropic from "@anthropic-ai/sdk";
+import type OpenAI from "openai";
 import { describe, expect, it, vi } from "vitest";
 import type { AiProviderStatus, AskMauzRequest } from "@mauzai/shared";
 import { AiProviderError, NoAiProviderError } from "../src/errors";
@@ -10,6 +11,7 @@ import { buildCliEnvironment, getCliSearchDirectories, resolveCliCommand } from 
 import { describeCodexFailure, parseCodexOutput } from "../src/providers/codexProvider";
 import { describeCliFailure, type ChildProcessLike, type SpawnLike } from "../src/providers/processRunner";
 import { AnthropicApiProvider } from "../src/providers/anthropicProvider";
+import { OpenAiApiProvider } from "../src/providers/openaiProvider";
 import { AskProviderRegistry, pickProvider } from "../src/providers/registry";
 import type { AskPrompt, AskProvider } from "../src/providers/types";
 
@@ -536,6 +538,65 @@ describe("askMauz provider routing", () => {
     expect(prompt.images).toHaveLength(1);
     expect(prompt.images[0]?.label).toMatch(/crop centered on the pointer/);
     expect(prompt.userText).toContain("<question>\nWhat is this?\n</question>");
+  });
+});
+
+describe("Ask conversation adapters", () => {
+  const prompt: AskPrompt = {
+    ...PROMPT,
+    images: [],
+    history: [
+      { userText: "What happened in Munich?", answer: "The Munich Agreement.", phase: "final_answer" }
+    ]
+  };
+
+  it("replays OpenAI role messages without a historical image and preserves answer phase", async () => {
+    const create = vi.fn(async () => ({ status: "completed", output_text: "Follow-up answer" }));
+    const provider = new OpenAiApiProvider({
+      env: () => ({ OPENAI_API_KEY: "test" }),
+      createClient: () => ({ responses: { create } }) as unknown as Pick<OpenAI, "responses">
+    });
+    const abort = new AbortController();
+    await expect(provider.answer(prompt, { signal: abort.signal })).resolves.toEqual({
+      text: "Follow-up answer"
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        store: false,
+        input: [
+          { role: "system", content: "system" },
+          { role: "user", content: "What happened in Munich?" },
+          { role: "assistant", content: "The Munich Agreement.", phase: "final_answer" },
+          { role: "user", content: [{ type: "input_text", text: "What is this?" }] }
+        ]
+      }),
+      { signal: abort.signal }
+    );
+  });
+
+  it("sends Anthropic prior turns with the current user message at the end", async () => {
+    const stream = vi.fn(() => ({
+      async *[Symbol.asyncIterator]() {
+        yield { type: "content_block_delta", delta: { type: "text_delta", text: "Follow-up answer" } };
+      },
+      async finalMessage() {
+        return { stop_reason: "end_turn", content: [{ type: "text", text: "Follow-up answer" }] };
+      }
+    }));
+    const provider = new AnthropicApiProvider({
+      env: () => ({ ANTHROPIC_API_KEY: "test" }),
+      createClient: () => ({ beta: { messages: { stream } } }) as unknown as Pick<Anthropic, "beta">
+    });
+    await expect(provider.answer(prompt)).resolves.toEqual({ text: "Follow-up answer" });
+    expect(stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: "user", content: "What happened in Munich?" },
+          { role: "assistant", content: "The Munich Agreement." },
+          { role: "user", content: [{ type: "text", text: "What is this?" }] }
+        ]
+      })
+    );
   });
 });
 
