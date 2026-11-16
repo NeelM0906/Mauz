@@ -118,11 +118,12 @@ describe("preload bridge", () => {
     const onDelta = vi.fn();
 
     mauzApi.ask.onDelta(onDelta);
-    electron.emit(IPC_CHANNELS.askDelta, { requestId: "req-1", text: "partial" });
+    const delta = { sessionId: "aa200e1b-8262-4c2f-b392-790792364ac1", requestId: "req-1", text: "partial" };
+    electron.emit(IPC_CHANNELS.askDelta, delta);
     electron.emit(IPC_CHANNELS.askDelta, { text: 42 });
 
     expect(onDelta).toHaveBeenCalledOnce();
-    expect(onDelta).toHaveBeenCalledWith({ requestId: "req-1", text: "partial" });
+    expect(onDelta).toHaveBeenCalledWith(delta);
   });
 
   it("tells the renderer when the popover is hidden and can unsubscribe", async () => {

@@ -13,6 +13,8 @@ const SOURCE_LABELS = {
   browser: "the browser"
 } as const;
 
+export const EMPTY_SCREEN_BLOCK = "<screen>\nNothing was captured from the screen.\n</screen>";
+
 /**
  * One image: the crop around what the pointer is on, or the pointed window when there is no
  * crop. Nothing is sent for an app on the never-capture list.
@@ -151,7 +153,7 @@ export function formatScreenBlock(context: MauzDesktopContext, imageNote?: strin
   }
 
   if (sections.length === 0) {
-    sections.push("Nothing was captured from the screen.");
+    return EMPTY_SCREEN_BLOCK;
   }
 
   return ["<screen>", ...sections, "</screen>"].join("\n");

@@ -141,6 +141,33 @@ describe("BrowserBridge with the native host", () => {
 });
 
 describe("parseSnapshotResult", () => {
+  it("scopes resume identity to the authenticated tab, loaded document and route", () => {
+    const documentId = "aa200e1b-8262-4c2f-b392-790792364ac1";
+    const read = (url: string, tabId = 1, connection = "profile") =>
+      parseSnapshotResult(
+        { page: { browser: "Google Chrome", url }, identity: { documentId, tabId } },
+        [],
+        connection
+      );
+    const identity = (result: ReturnType<typeof read>) =>
+      result && "page" in result ? result.identity : undefined;
+    const original = identity(read("https://example.com/article"));
+    expect(original).toBeDefined();
+    expect(identity(read("https://example.com/article#section"))).toBe(original);
+    expect(identity(read("https://example.com/article?other=1"))).not.toBe(original);
+    expect(identity(read("https://example.com/article", 2))).not.toBe(original);
+    expect(identity(read("https://example.com/article", 1, "other-profile"))).not.toBe(original);
+    expect(
+      identity(
+        parseSnapshotResult(
+          { page: { browser: "Google Chrome", url: "https://example.com/article" } },
+          [],
+          "profile"
+        )
+      )
+    ).toBeUndefined();
+  });
+
   it("re-checks the page against the never-capture list", () => {
     expect(
       parseSnapshotResult({ page: { browser: "Google Chrome", url: "https://www.paypal.com/myaccount" } }, [
@@ -192,6 +219,23 @@ describe("native host registration", () => {
       "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\ai.mauz.browser",
       "HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\ai.mauz.browser"
     ]);
+  });
+
+  it("registers Edge on macOS even if Chrome's profile directory is unavailable", async () => {
+    const writes: string[] = [];
+    await registerNativeHost({
+      platform: "darwin",
+      hostScriptPath: "/Mauz/host.cjs",
+      installDir: "/Mauz",
+      execPath: "/Mauz/electron",
+      pipePath: "/Mauz/browser.sock",
+      token: TOKEN,
+      writeTextFile: async (path) => {
+        if (path.includes("/Google/Chrome/")) throw new Error("Operation not permitted");
+        writes.push(path);
+      }
+    });
+    expect(writes).toContainEqual(expect.stringContaining("/Microsoft Edge/NativeMessagingHosts/"));
   });
 
   it("escapes percent signs in the Windows launcher", () => {

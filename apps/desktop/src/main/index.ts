@@ -21,6 +21,7 @@ import {
   transcribeWithOpenAi,
   type SubscriptionConnector
 } from "@mauzai/api/server";
+import { AskSessions } from "./ask/AskSessions";
 import { TaskAgentLauncher } from "./agent/TaskAgentLauncher";
 import {
   BrowserBridge,
@@ -45,6 +46,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 let popover: PopoverWindowController | null = null;
 let contextCollector: ContextCollector | null = null;
+let activationSequence = 0;
+const askSessions = new AskSessions({
+  onChange: (view) => popover?.getWebContents()?.send(IPC_CHANNELS.askSession, view)
+});
 let settingsService: SettingsService | null = null;
 let windowsContextHelper: WindowsContextHelper | null = null;
 let browserBridge: BrowserBridge | null = null;
@@ -83,7 +88,13 @@ async function bootstrap(): Promise<void> {
     preloadPath,
     rendererFile,
     iconPath: appIconPath,
-    onHide: () => {
+    onHide: (reason) => {
+      activationSequence++;
+      if (reason === "blur") askSessions.suspend();
+      else {
+        contextCollector?.discardActivationSnapshot();
+        askSessions.close();
+      }
       // Hidden panels stay mounted; let Dictate release the microphone.
       const webContents = popover?.getWebContents();
 
@@ -144,6 +155,10 @@ async function bootstrap(): Promise<void> {
     rendererUrl,
     popover,
     contextCollector,
+    askSessions,
+    invalidateActivation: () => {
+      activationSequence++;
+    },
     getSettings: () => settingsService!.get(),
     updateSettings: applySettingsUpdate,
     taskAgents: {
@@ -186,7 +201,7 @@ async function bootstrap(): Promise<void> {
   startInputProviders(initialSettings);
   trayController = new TrayController({
     iconPath: getTrayIconPath(),
-    onOpenMauz: () => void handleActivation(screen.getCursorScreenPoint()),
+    onOpenMauz: () => void handleActivation(screen.getCursorScreenPoint(), true),
     onOpenSettings: () => void openSettings(),
     onToggleShake: (enabled) => {
       void applySettingsUpdate({ nativeShakeEnabled: enabled }).catch(() => {});
@@ -200,13 +215,19 @@ async function bootstrap(): Promise<void> {
 
 /** Shows Settings in the popover at the pointer (startup, tray, a second launch). */
 async function openSettings(): Promise<void> {
-  if (popover === null) {
-    return;
+  const window = popover;
+  if (window === null) return;
+  const sequence = ++activationSequence;
+  const cursor = screen.getCursorScreenPoint();
+  askSessions.suspend();
+  // Back from Settings can lead directly to Ask. Read the underlying target before Settings takes focus.
+  if (!window.isVisible() && contextCollector !== null) {
+    await contextCollector.prepareForActivation(cursor).catch(() => {});
+    if (sequence !== activationSequence) return;
   }
-
   // Size for Settings up front, so the panel does not first show at menu size; its settings.open() resizes again.
-  await popover.showAt(screen.getCursorScreenPoint(), { notifyActivation: false, forSettings: true });
-  popover.getWebContents()?.send(IPC_CHANNELS.openSettings);
+  await window.showAt(cursor, { notifyActivation: false, forSettings: true });
+  if (sequence === activationSequence) window.getWebContents()?.send(IPC_CHANNELS.openSettings);
 }
 
 async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSettings> {
@@ -214,6 +235,18 @@ async function applySettingsUpdate(update: MauzSettingsUpdate): Promise<MauzSett
     throw new Error("Mauz settings are not available yet.");
   }
 
+  if (
+    "aiProvider" in update ||
+    "askModel" in update ||
+    "openAiApiKey" in update ||
+    "anthropicApiKey" in update ||
+    "captureBlockedApps" in update ||
+    "captureBlockedSites" in update
+  ) {
+    activationSequence++;
+    contextCollector?.discardActivationSnapshot();
+    askSessions.close();
+  }
   const settings = await settingsService.update(update);
   currentSettings = settings;
   applyRuntimeEnvironment(await settingsService.getRuntime());
@@ -424,15 +457,53 @@ function restartInputProviders(settings: MauzSettings): void {
   startInputProviders(settings);
 }
 
-async function handleActivation(cursor: { x: number; y: number }): Promise<void> {
-  // A question is likely; start the Ask provider (e.g. the Claude Code CLI) while the menu is open.
-  prewarmAskProvider();
+async function handleActivation(cursor: { x: number; y: number }, forceMenu = false): Promise<void> {
+  const window = popover;
+  const collector = contextCollector;
+  if (window === null || collector === null) return;
+  const sequence = ++activationSequence;
+  if (forceMenu) askSessions.suspend();
 
-  try {
-    await contextCollector?.prepareForActivation(cursor);
-  } finally {
-    await popover?.showAt(cursor);
+  if (!forceMenu && askSessions.active && window.containsPoint(cursor)) {
+    const current = askSessions.current();
+    if (current !== null) window.getWebContents()?.send(IPC_CHANNELS.askResume, current);
+    return;
   }
+
+  prewarmAskProvider();
+  try {
+    await collector.prepareForActivation(cursor, forceMenu ? undefined : askSessions.activeTarget);
+    if (sequence !== activationSequence) return;
+    const activation = collector.currentAskActivation();
+
+    if (!forceMenu && askSessions.matches(activation)) {
+      const capture = await collector.collectForAsk({
+        requireActivation: true,
+        retainActivation: true,
+        verifyBrowser: activation ?? undefined
+      });
+      if (sequence !== activationSequence) return;
+      if (capture.captureBlocked === undefined && askSessions.matches(collector.currentAskActivation())) {
+        askSessions.open(activation, capture);
+        window.resizeForAsk();
+        await window.showAt(cursor, { notifyActivation: false, preserveSize: true });
+        const current = askSessions.current();
+        if (sequence === activationSequence && current !== null)
+          window.getWebContents()?.send(IPC_CHANNELS.askResume, current);
+        return;
+      }
+    }
+
+    if (!forceMenu && askSessions.active && activation?.identity === undefined && !activation?.blocked) {
+      window.getWebContents()?.send(IPC_CHANNELS.askResume, askSessions.unavailable());
+      return;
+    }
+  } catch {
+    if (sequence !== activationSequence) return;
+    collector.discardActivationSnapshot();
+  }
+  askSessions.suspend();
+  await window.showAt(cursor);
 }
 
 function startBootstrap(): void {
@@ -471,6 +542,8 @@ function beginShutdown(): void {
 }
 
 async function shutdownResources(): Promise<void> {
+  activationSequence++;
+  askSessions.close();
   const providers = inputProviders;
   inputProviders = [];
 
@@ -586,6 +659,11 @@ const openedConnectPages = new Set<string>();
 
 /** Sends sign-in progress to every Mauz window; device sign-in pages open automatically. */
 function broadcastSubscriptionConnectState(state: SubscriptionConnectState): void {
+  if (state.phase === "connected") {
+    activationSequence++;
+    contextCollector?.discardActivationSnapshot();
+    askSessions.close();
+  }
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.webContents.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.providersConnectState, state);

@@ -24,7 +24,11 @@ type CaptureHider = {
   hideDuringCapture<T>(operation: () => Promise<T>): Promise<T>;
 };
 
-export type BrowserPageResult = { page: BrowserPage } | { blockedHost: string };
+export type BrowserPageResult =
+  | { page: BrowserPage; identity?: string; screenPoint?: Point & { time: number } }
+  | { blockedHost: string };
+
+export type AskActivation = { identity?: string; executable?: string; blocked: boolean };
 
 /** Reads the active tab of a browser through the Mauz browser extension. */
 export type BrowserPageReader = {
@@ -53,6 +57,8 @@ type ContextCollectorOptions = {
 type Readings = {
   target?: PointerTarget | undefined;
   page?: BrowserPage | undefined;
+  browser?: Extract<BrowserPageResult, { page: BrowserPage }> | undefined;
+  browserExecutable?: string | undefined;
   /** A never-capture site open in a browser involved in this capture. Kept on this computer. */
   blockedSite?: string | undefined;
   /** The Windows helper could not say which app is under the pointer. */
@@ -72,6 +78,9 @@ type ActivationSnapshot = ActiveWindowMetadata & {
 
 type CollectOptions = {
   useActivationSnapshot?: boolean | undefined;
+  verifyBrowser?: AskActivation | undefined;
+  requireActivation?: boolean | undefined;
+  retainActivation?: boolean | undefined;
 };
 
 type AskBaseContext = {
@@ -90,6 +99,7 @@ export class ContextCollector {
   private readonly getCaptureBlockedSites: () => readonly string[];
   private readonly ownProcessId: number;
   private activationSnapshot: ActivationSnapshot | null = null;
+  private activationGeneration = 0;
 
   constructor(options: ContextCollectorOptions = {}) {
     this.screenshotService = options.screenshotService ?? new ScreenshotService();
@@ -114,10 +124,21 @@ export class ContextCollector {
   }
 
   discardActivationSnapshot(): void {
+    this.activationGeneration++;
     this.activationSnapshot = null;
   }
 
   async collectForAsk(options: CollectOptions = {}): Promise<MauzDesktopContext> {
+    if (options.requireActivation && this.activationSnapshot === null) {
+      return {
+        ...this.collectBasicContext(),
+        screenshotError: {
+          permission: "unknown",
+          message: "No screen source was captured. Point at what you want to ask about and invoke Mauz again."
+        }
+      };
+    }
+    const generation = this.activationGeneration;
     const { context, readings } = await this.collectAskBaseContext(options);
     const { target, page } = readings;
     const blocked = this.findBlocked(context, readings);
@@ -128,7 +149,26 @@ export class ContextCollector {
     }
 
     const focus = getCaptureFocus(target);
-    const capture = async () => this.screenshotService.capturePointerContext(context.cursor, focus);
+    const capture = async (): Promise<PointerContext | null> => {
+      const pointer = await this.screenshotService.capturePointerContext(context.cursor, focus);
+      const expected = options.verifyBrowser;
+      if (expected?.identity === undefined) return pointer;
+      const latest = await this.readBrowserPage(expected.executable);
+      const active = await this.captureActiveWindowMetadata();
+      const atPoint = await this.captureTarget(context.cursor);
+      const executable = atPoint.target?.window?.executable ?? active.activeApp?.bundleId;
+      if (generation !== this.activationGeneration) return null;
+      if (
+        latest === undefined ||
+        !("page" in latest) ||
+        latest.identity !== expected.identity ||
+        (executable !== undefined && !sameApp(executable, expected.executable))
+      ) {
+        this.discardActivationSnapshot();
+        return null;
+      }
+      return sameBrowserTarget(latest.page, page) ? pointer : null;
+    };
 
     try {
       const pointer =
@@ -136,6 +176,15 @@ export class ContextCollector {
           ? await capture()
           : await this.captureHider.hideDuringCapture(capture);
 
+      if (pointer === null) {
+        return {
+          ...this.collectBasicContext(context.cursor),
+          screenshotError: {
+            permission: "unknown",
+            message: "The source changed during capture. Point at it and invoke Mauz again."
+          }
+        };
+      }
       const pointerContext = mergePointerMetadata(pointer, context, target, page);
       const ocrText = await this.recognizeText(pointerContext);
 
@@ -160,7 +209,25 @@ export class ContextCollector {
     }
   }
 
-  async prepareForActivation(cursor: Point): Promise<void> {
+  get activationVersion(): number {
+    return this.activationGeneration;
+  }
+
+  currentAskActivation(): AskActivation | null {
+    const snapshot = this.activationSnapshot;
+    if (snapshot === null) return null;
+    const blocked = this.findBlocked(snapshot, snapshot.readings) !== undefined;
+    const identity = snapshot.readings.browser?.identity;
+    const executable = snapshot.readings.browserExecutable;
+    return {
+      blocked,
+      ...(!blocked && identity !== undefined && executable !== undefined ? { identity, executable } : {})
+    };
+  }
+
+  async prepareForActivation(cursor: Point, previous?: AskActivation): Promise<void> {
+    this.discardActivationSnapshot();
+    const generation = this.activationGeneration;
     const metadata = await this.captureActiveWindowMetadata();
     // The browser answers on its own channel while the Windows helper works.
     const foregroundPage = this.readBrowserPage(metadata.activeApp?.bundleId);
@@ -170,6 +237,29 @@ export class ContextCollector {
       : undefined;
     // Read before the popover opens over the pointer.
     const readings = await this.captureReadings(cursor, metadata, foregroundPage);
+    // On macOS the popover can own keyboard focus while the browser still receives pointer motion.
+    // A recent browser point at this exact position verifies the retained browser binding.
+    if (
+      metadata.activeApp === undefined &&
+      readings.browser === undefined &&
+      previous?.identity !== undefined
+    ) {
+      const browser = await this.readBrowserPage(previous.executable);
+      if (
+        browser !== undefined &&
+        "page" in browser &&
+        browser.identity === previous.identity &&
+        browser.screenPoint !== undefined &&
+        Date.now() - browser.screenPoint.time < 1_500 &&
+        Math.abs(browser.screenPoint.x - cursor.x) <= 5 &&
+        Math.abs(browser.screenPoint.y - cursor.y) <= 5
+      ) {
+        readings.browser = browser;
+        readings.page = browser.page;
+        readings.browserExecutable = previous.executable;
+      }
+    }
+    if (generation !== this.activationGeneration) return;
 
     this.activationSnapshot = {
       activeApp: metadata.activeApp,
@@ -192,7 +282,7 @@ export class ContextCollector {
     const useActivationSnapshot = options.useActivationSnapshot ?? true;
     const activationSnapshot = useActivationSnapshot ? this.activationSnapshot : null;
 
-    if (useActivationSnapshot) {
+    if (useActivationSnapshot && !options.retainActivation) {
       this.activationSnapshot = null;
     }
 
@@ -241,9 +331,12 @@ export class ContextCollector {
     const [foregroundResult, pointerResult] = await Promise.all([foregroundPage, pointerPage]);
     const blockedSite = getBlockedHost(foregroundResult) ?? getBlockedHost(pointerResult);
 
+    const result = pointerPage === undefined ? foregroundResult : pointerResult;
     return {
       target: lookup.target,
-      page: getPage(pointerPage === undefined ? foregroundResult : pointerResult),
+      page: getPage(result),
+      browser: result !== undefined && "page" in result ? result : undefined,
+      browserExecutable: pointerPage === undefined ? foregroundExecutable : pointerExecutable,
       blockedSite,
       appUnknown: lookup.failed
     };
@@ -320,7 +413,7 @@ export class ContextCollector {
   }
 
   /** The never-capture app or site this capture would include, if any. */
-  private findBlocked(context: MauzDesktopContext, readings: Readings): string | undefined {
+  private findBlocked(context: ActiveWindowMetadata, readings: Readings): string | undefined {
     const blockedApps = new Set(
       this.getCaptureBlockedApps()
         .map((entry) => normalizeAppKey(entry))
@@ -358,6 +451,13 @@ function normalizeAppKey(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/\.exe$/, "");
+}
+
+function sameBrowserTarget(a: BrowserPage, b: BrowserPage | undefined): boolean {
+  return (
+    JSON.stringify([a.element, a.selection, a.around]) ===
+    JSON.stringify([b?.element, b?.selection, b?.around])
+  );
 }
 
 function hasAppText(target: PointerTarget | undefined): boolean {

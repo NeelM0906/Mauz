@@ -16,11 +16,13 @@ export async function goBackToMenu(): Promise<void> {
 export function PanelHeader({
   title,
   subtitle,
-  onLeave
+  onLeave,
+  action
 }: {
   title: string;
   subtitle: string;
   onLeave?: () => void;
+  action?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="mode-header">
@@ -42,17 +44,20 @@ export function PanelHeader({
           <p>{subtitle}</p>
         </div>
       </div>
-      <button
-        className="icon-button"
-        type="button"
-        aria-label="Close Mauz"
-        onClick={() => {
-          onLeave?.();
-          void mauz().menu.close();
-        }}
-      >
-        <X aria-hidden="true" size={16} />
-      </button>
+      <div className="panel-header-actions">
+        {action}
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Close Mauz"
+          onClick={() => {
+            onLeave?.();
+            void mauz().menu.close();
+          }}
+        >
+          <X aria-hidden="true" size={16} />
+        </button>
+      </div>
     </header>
   );
 }

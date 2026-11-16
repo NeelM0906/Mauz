@@ -6,10 +6,11 @@ const ipcMainMock = vi.hoisted(() => ({
 }));
 
 vi.mock("electron", () => ({
-  ipcMain: ipcMainMock
+  ipcMain: ipcMainMock,
+  screen: { getCursorScreenPoint: () => ({ x: 700, y: 500 }) }
 }));
-vi.mock("@mauzai/api/server", () => ({
-  answerAsk: vi.fn(),
+vi.mock("@mauzai/api/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mauzai/api/server")>()),
   getAiProvidersStatus: vi.fn(async () => ({
     preference: "auto",
     activeProviderId: null,
@@ -17,9 +18,12 @@ vi.mock("@mauzai/api/server", () => ({
   }))
 }));
 
-import { answerAsk } from "@mauzai/api/server";
-import { IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
-import type { ContextCollector } from "../src/main/context/ContextCollector";
+import { AskSessions } from "../src/main/ask/AskSessions";
+import { AskSessionViewSchema, IPC_CHANNELS, type MauzDesktopContext } from "@mauzai/shared";
+import { ContextCollector } from "../src/main/context/ContextCollector";
+import { ActiveWindowService } from "../src/main/context/ActiveWindowService";
+import { ScreenshotService } from "../src/main/context/ScreenshotService";
+import { SelectedTextService } from "../src/main/context/SelectedTextService";
 import { registerIpcHandlers } from "../src/main/ipc/registerIpcHandlers";
 import type { PopoverWindowController } from "../src/main/windows/PopoverWindowController";
 import { isTrustedRendererUrl } from "../src/main/windows/WindowSecurity";
@@ -31,6 +35,9 @@ const HANDLED_CHANNELS = [
   IPC_CHANNELS.menuExpand,
   IPC_CHANNELS.settingsOpen,
   IPC_CHANNELS.settingsUpdate,
+  IPC_CHANNELS.askOpen,
+  IPC_CHANNELS.askNew,
+  IPC_CHANNELS.askStop,
   IPC_CHANNELS.askSubmit,
   IPC_CHANNELS.taskAgents,
   IPC_CHANNELS.taskFolders,
@@ -211,64 +218,105 @@ describe("registerIpcHandlers", () => {
     expect(options.getSettings).not.toHaveBeenCalled();
   });
 
-  it("answers Ask in process and sends text updates keyed by requestId", async () => {
-    vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
-      onText?.("partial");
-      return { answer: "done" };
+  it("routes an Ask turn through its session and keys updates by session and request", async () => {
+    const options = createOptions();
+    vi.mocked(options.askSessions.submit).mockImplementation(async (_request, onText) => {
+      onText("partial");
     });
-    registerIpcHandlers(createOptions());
+    registerIpcHandlers(options);
     const event = createInvokeEvent();
-    const request = { question: "What is this?", context: createAskContext(), requestId: "req-1" };
+    const request = { sessionId: TEST_SESSION, question: "What is this?", requestId: "req-1" };
 
-    await expect(getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request)).resolves.toEqual({
-      answer: "done"
-    });
-
-    expect(answerAsk).toHaveBeenCalledWith(request, expect.any(Function));
+    await expect(getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request)).resolves.toBeUndefined();
+    expect(options.askSessions.submit).toHaveBeenCalledWith(request, expect.any(Function));
     expect(event.sender.send).toHaveBeenCalledWith(IPC_CHANNELS.askDelta, {
+      sessionId: TEST_SESSION,
       requestId: "req-1",
       text: "partial"
     });
   });
 
-  it("does not send Ask text updates to a destroyed window", async () => {
-    vi.mocked(answerAsk).mockImplementation(async (_request, onText) => {
-      onText?.("partial");
-      return { answer: "done" };
+  it("sends the activation crop on the first Ask turn even when no app text is available", async () => {
+    const context = createAskContext();
+    const screenshotService = new ScreenshotService();
+    const capture = vi.spyOn(screenshotService, "capturePointerContext").mockResolvedValue(context.pointer!);
+    const collector = new ContextCollector({
+      screenshotService,
+      activeWindowService: new ActiveWindowService({ platform: "linux" }),
+      selectedTextService: new SelectedTextService({ platform: "linux" })
     });
-    registerIpcHandlers(createOptions());
+    const answer = vi.fn(async () => ({ text: "A browser page." }));
+    const sessions = new AskSessions({
+      onChange: vi.fn(),
+      resolveProvider: async () => ({ id: "openai", answer })
+    });
+    registerIpcHandlers({ ...createOptions(), contextCollector: collector, askSessions: sessions });
+    const event = createInvokeEvent();
+    const open = getRegisteredHandler(IPC_CHANNELS.askOpen);
+    const submit = getRegisteredHandler(IPC_CHANNELS.askSubmit);
+
+    const missing = AskSessionViewSchema.parse(await open(event));
+    expect(missing.source).toBeNull();
+    expect(missing.notice).toContain("Point at what you want to ask about");
+    expect(capture).not.toHaveBeenCalled();
+
+    await collector.prepareForActivation(context.cursor);
+    const chat = AskSessionViewSchema.parse(await open(event));
+    expect(capture).toHaveBeenCalledWith(context.cursor, {});
+    expect(chat.source).toMatchObject({ label: "Screenshot", hasImage: true, useImage: true });
+    await submit(event, {
+      sessionId: chat.id,
+      requestId: "first",
+      question: "What am I looking at?",
+      sourceId: chat.source!.id
+    });
+
+    expect(answer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userText: expect.stringContaining("<image>attached: crop centered on the pointer"),
+        images: [
+          expect.objectContaining({ base64: context.pointer!.cursorCrop!.base64, mimeType: "image/jpeg" })
+        ]
+      }),
+      expect.anything()
+    );
+    expect(sessions.current()?.turns[0]).toMatchObject({
+      answer: "A browser page.",
+      sourceLabel: "Screenshot",
+      imageId: expect.any(String)
+    });
+  });
+
+  it("does not send Ask text updates to a destroyed window", async () => {
+    const options = createOptions();
+    vi.mocked(options.askSessions.submit).mockImplementation(async (_request, onText) => {
+      onText("partial");
+    });
+    registerIpcHandlers(options);
     const event = createInvokeEvent();
     event.sender.isDestroyed.mockReturnValue(true);
-
     await getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, {
+      sessionId: TEST_SESSION,
       question: "What is this?",
-      context: createAskContext(),
       requestId: "req-1"
     });
-
     expect(event.sender.send).not.toHaveBeenCalled();
   });
 
-  it("passes no text callback for an Ask request without a requestId", async () => {
-    vi.mocked(answerAsk).mockResolvedValue({ answer: "done" });
-    registerIpcHandlers(createOptions());
-    const event = createInvokeEvent();
-    const request = { question: "What is this?", context: createAskContext() };
-
-    await getRegisteredHandler(IPC_CHANNELS.askSubmit)(event, request);
-
-    expect(answerAsk).toHaveBeenLastCalledWith(request, undefined);
-    expect(event.sender.send).not.toHaveBeenCalled();
-  });
-
-  it("rejects an invalid Ask payload without calling the provider", async () => {
-    vi.mocked(answerAsk).mockClear();
-    registerIpcHandlers(createOptions());
-
+  it("rejects renderer-supplied context or malformed session requests", async () => {
+    const options = createOptions();
+    registerIpcHandlers(options);
+    const handler = getRegisteredHandler(IPC_CHANNELS.askSubmit);
+    await expect(handler(createInvokeEvent(), { question: "" })).rejects.toThrow();
     await expect(
-      getRegisteredHandler(IPC_CHANNELS.askSubmit)(createInvokeEvent(), { question: "" })
+      handler(createInvokeEvent(), {
+        sessionId: TEST_SESSION,
+        requestId: "req-1",
+        question: "Question",
+        context: createAskContext()
+      })
     ).rejects.toThrow();
-    expect(answerAsk).not.toHaveBeenCalled();
+    expect(options.askSessions.submit).not.toHaveBeenCalled();
   });
 
   it("passes Task agent settings through to updateSettings without stripping them", async () => {
@@ -464,6 +512,8 @@ function createAskContext(): MauzDesktopContext {
   };
 }
 
+const TEST_SESSION = "aa200e1b-8262-4c2f-b392-790792364ac1";
+
 function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   const popover = {
     hide: vi.fn(),
@@ -480,6 +530,11 @@ function createOptions(): Parameters<typeof registerIpcHandlers>[0] {
   return {
     popover,
     contextCollector,
+    askSessions: {
+      close: vi.fn(),
+      suspend: vi.fn(),
+      submit: vi.fn()
+    } as unknown as AskSessions,
     taskAgents: {
       launcher: {
         listAgents: vi.fn(() => [

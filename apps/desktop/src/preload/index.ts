@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { MauzBridge, MauzSettings } from "@mauzai/shared";
 import {
   AskAnswerDeltaSchema,
+  AskSessionEventSchema,
+  AskSessionViewSchema,
   IPC_CHANNELS,
   SubscriptionConnectStateSchema,
   MauzSettingsSchema,
@@ -45,6 +47,11 @@ const mauzApi: MauzBridge = {
     onHidden: onSignal(IPC_CHANNELS.menuHidden)
   },
   ask: {
+    open: invoke(IPC_CHANNELS.askOpen),
+    newChat: invokeWith(IPC_CHANNELS.askNew),
+    stop: invokeWith(IPC_CHANNELS.askStop),
+    onSession: onPayload(IPC_CHANNELS.askSession, AskSessionEventSchema),
+    onResume: onPayload(IPC_CHANNELS.askResume, AskSessionViewSchema),
     submit: invokeWith(IPC_CHANNELS.askSubmit),
     onDelta: onPayload(IPC_CHANNELS.askDelta, AskAnswerDeltaSchema)
   },

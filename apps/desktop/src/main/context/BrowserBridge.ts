@@ -5,7 +5,12 @@ import { createServer, type Server, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { BrowserPageSchema, isBlockedSite, type BrowserPage } from "@mauzai/shared";
+import {
+  BrowserDocumentIdentitySchema,
+  BrowserPageSchema,
+  isBlockedSite,
+  type BrowserPage
+} from "@mauzai/shared";
 import type { BrowserPageReader, BrowserPageResult } from "./ContextCollector";
 
 const BROWSER_HOST_NAME = "ai.mauz.browser";
@@ -158,7 +163,7 @@ export class BrowserBridge implements BrowserPageReader {
     });
 
     return {
-      result: parseSnapshotResult(result, blockedSites),
+      result: parseSnapshotResult(result, blockedSites, connection.nonce),
       focused: isRecord(result) && result.focused === true
     };
   }
@@ -320,7 +325,8 @@ export async function loadOrCreateBrowserToken(directory: string): Promise<strin
 /** Validates what the extension sent and checks the site against the never-capture list again. */
 export function parseSnapshotResult(
   result: unknown,
-  blockedSites: readonly string[]
+  blockedSites: readonly string[],
+  connectionId?: string
 ): BrowserPageResult | undefined {
   if (!isRecord(result)) {
     return undefined;
@@ -346,7 +352,30 @@ export function parseSnapshotResult(
     return { blockedHost: host };
   }
 
-  return { page: withoutEmptyFields(parsed.data) };
+  const page = withoutEmptyFields(parsed.data);
+  const identity = BrowserDocumentIdentitySchema.safeParse(result.identity);
+  const point = result.screenPoint;
+  const screenPoint =
+    isRecord(point) &&
+    typeof point.x === "number" &&
+    Number.isFinite(point.x) &&
+    typeof point.y === "number" &&
+    Number.isFinite(point.y) &&
+    typeof point.time === "number" &&
+    Number.isFinite(point.time)
+      ? { x: point.x, y: point.y, time: point.time }
+      : undefined;
+  const route = new URL(page.url);
+  route.hash = "";
+  return {
+    page,
+    ...(identity.success && connectionId !== undefined
+      ? {
+          identity: JSON.stringify([connectionId, identity.data.tabId, identity.data.documentId, route.href])
+        }
+      : {}),
+    ...(screenPoint === undefined ? {} : { screenPoint })
+  };
 }
 
 export function getBrowserPipePath(userDataDir: string, username: string): string {
@@ -411,10 +440,19 @@ export async function registerNativeHost(options: RegisterNativeHostOptions): Pr
     // The launcher holds the shared secret: runnable and readable by this user only.
     await chmod(launcherPath, 0o700).catch(() => {});
 
-    for (const browserDir of ["Google/Chrome", "Microsoft Edge"]) {
-      await writeTextFile(
-        join(support, browserDir, "NativeMessagingHosts", `${BROWSER_HOST_NAME}.json`),
-        buildHostManifest(launcherPath)
+    const manifest = buildHostManifest(launcherPath);
+    const registrations = await Promise.allSettled(
+      ["Google/Chrome", "Microsoft Edge"].map((browserDir) =>
+        writeTextFile(
+          join(support, browserDir, "NativeMessagingHosts", `${BROWSER_HOST_NAME}.json`),
+          manifest
+        )
+      )
+    );
+    if (registrations.every(({ status }) => status === "rejected")) {
+      throw new AggregateError(
+        registrations.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+        "Could not register the browser helper."
       );
     }
   }

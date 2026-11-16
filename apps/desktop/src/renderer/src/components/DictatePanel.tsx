@@ -27,6 +27,7 @@ export function DictatePanel(): React.JSX.Element {
   const setMode = useMauzStore((state) => state.setMode);
   const [state, setState] = useState<DictateState>("starting");
   const [error, setError] = useState<string | null>(null);
+  const [handoffPending, setHandoffPending] = useState(false);
   const [text, setText] = useState("");
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -169,8 +170,21 @@ export function DictatePanel(): React.JSX.Element {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [startListening, stopListening]);
 
-  const handOff = (target: "ask" | "task"): void => {
+  const handOff = async (target: "ask" | "task"): Promise<void> => {
     abandonRecording();
+    if (target === "ask") {
+      setHandoffPending(true);
+      try {
+        const session = await mauz().ask.open();
+        if (useMauzStore.getState().mode !== "dictate") return;
+        useMauzStore.getState().setAskSession(session);
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : "Could not open Ask.");
+        return;
+      } finally {
+        setHandoffPending(false);
+      }
+    }
     setDictation(text.trim());
 
     setMode(target);
@@ -178,7 +192,7 @@ export function DictatePanel(): React.JSX.Element {
 
   const listening = state === "listening" || state === "starting";
   const busy = state === "transcribing";
-  const canSend = !listening && !busy && text.trim().length > 0;
+  const canSend = !handoffPending && !listening && !busy && text.trim().length > 0;
 
   return (
     <section className="mode-panel dictate-panel" aria-label="Dictate">
@@ -223,11 +237,21 @@ export function DictatePanel(): React.JSX.Element {
       />
 
       <div className="dictate-actions">
-        <button type="button" className="submit-button" disabled={!canSend} onClick={() => handOff("ask")}>
+        <button
+          type="button"
+          className="submit-button"
+          disabled={!canSend}
+          onClick={() => void handOff("ask")}
+        >
           <ScanSearch aria-hidden="true" size={15} />
           <span>Ask</span>
         </button>
-        <button type="button" className="submit-button" disabled={!canSend} onClick={() => handOff("task")}>
+        <button
+          type="button"
+          className="submit-button"
+          disabled={!canSend}
+          onClick={() => void handOff("task")}
+        >
           <BriefcaseBusiness aria-hidden="true" size={15} />
           <span>Send to agent</span>
         </button>

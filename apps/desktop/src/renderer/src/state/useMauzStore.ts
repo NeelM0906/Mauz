@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { MauzDesktopContext, MauzSettings } from "@mauzai/shared";
+import type { AskSessionView, MauzDesktopContext, MauzSettings } from "@mauzai/shared";
 
 export type MauzMode = "menu" | "ask" | "task" | "dictate" | "settings";
 
@@ -7,6 +7,11 @@ type MauzStore = {
   mode: MauzMode;
   status: string | null;
   currentContext: MauzDesktopContext | null;
+  askSession: AskSessionView | null;
+  askDraft: string;
+  askFocus: number;
+  setAskDraft(draft: string): void;
+  setAskSession(session: AskSessionView | null, focus?: boolean): void;
   settings: MauzSettings | null;
   /** Dictated text handed to Ask (sent right away) or Send to agent (prefilled). */
   dictation: string | null;
@@ -23,6 +28,16 @@ export const useMauzStore = create<MauzStore>((set) => ({
   mode: "menu",
   status: null,
   currentContext: null,
+  askSession: null,
+  askDraft: "",
+  askFocus: 0,
+  setAskDraft: (askDraft) => set({ askDraft }),
+  setAskSession: (askSession, focus = false) =>
+    set((state) => ({
+      askSession,
+      askDraft: askSession?.id === state.askSession?.id ? state.askDraft : "",
+      askFocus: state.askFocus + (focus ? 1 : 0)
+    })),
   settings: null,
   dictation: null,
   setMode: (mode) => set({ mode }),

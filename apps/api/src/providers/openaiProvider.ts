@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
+import type { ResponseInput, ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import { AiProviderError, MissingOpenAIKeyError } from "../errors";
 import type { AskOptions, AskPrompt, AskProvider, AskResult } from "./types";
 
@@ -44,16 +44,36 @@ export class OpenAiApiProvider implements AskProvider {
       });
     }
 
-    const response = await this.createClient(apiKey).responses.create({
+    const history: ResponseInput = (prompt.history ?? []).flatMap(({ userText, answer, phase }) => [
+      { role: "user", content: userText },
+      { role: "assistant", content: answer, ...(phase === undefined ? {} : { phase }) }
+    ]);
+    const request = {
       model,
       store: false,
       max_output_tokens: readMaxOutputTokens(env.OPENAI_ASK_MAX_OUTPUT_TOKENS),
       input: [
         { role: "system", content: prompt.systemPrompt },
+        ...history,
         { role: "user", content }
-      ]
-    });
-    const text = response.output_text?.trim() ?? "";
+      ] satisfies ResponseInput
+    };
+    const client = this.createClient(apiKey);
+    const response =
+      options.signal === undefined
+        ? await client.responses.create(request)
+        : await client.responses.create(request, { signal: options.signal });
+    const finalText = response.output
+      ?.flatMap((item) =>
+        item.type === "message" && item.phase === "final_answer"
+          ? item.content.flatMap((part) => (part.type === "output_text" ? [part.text] : []))
+          : []
+      )
+      .join("");
+    const text = (finalText || response.output_text || "").trim();
+    if (response.status !== undefined && response.status !== "completed") {
+      throw new AiProviderError(this.id, "OpenAI did not finish the answer. Try again.");
+    }
 
     if (text.length === 0) {
       throw new AiProviderError(this.id, "OpenAI returned an empty answer.");
@@ -61,7 +81,7 @@ export class OpenAiApiProvider implements AskProvider {
 
     options.onText?.(text);
 
-    return { text };
+    return { text, ...(finalText ? { phase: "final_answer" as const } : {}) };
   }
 }
 

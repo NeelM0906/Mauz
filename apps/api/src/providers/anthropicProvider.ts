@@ -46,7 +46,13 @@ export class AnthropicApiProvider implements AskProvider {
     content.push({ type: "text", text: prompt.userText });
 
     try {
-      const stream = client.beta.messages.stream({
+      const history: Anthropic.Beta.BetaMessageParam[] = (prompt.history ?? []).flatMap(
+        ({ userText, answer }) => [
+          { role: "user", content: userText },
+          { role: "assistant", content: answer }
+        ]
+      );
+      const request = {
         model,
         max_tokens: MAX_OUTPUT_TOKENS,
         // Quick desktop answers: low effort keeps latency down; thinking stays adaptive.
@@ -55,8 +61,12 @@ export class AnthropicApiProvider implements AskProvider {
         betas: ["server-side-fallback-2026-07-01"],
         fallbacks: "default",
         system: prompt.systemPrompt,
-        messages: [{ role: "user", content }]
-      });
+        messages: [...history, { role: "user", content }]
+      } satisfies Parameters<AnthropicClientLike["beta"]["messages"]["stream"]>[0];
+      const stream =
+        options.signal === undefined
+          ? client.beta.messages.stream(request)
+          : client.beta.messages.stream(request, { signal: options.signal });
       let streamedText = "";
 
       for await (const event of stream) {
