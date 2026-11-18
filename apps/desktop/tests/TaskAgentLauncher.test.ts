@@ -510,7 +510,8 @@ describe("TaskAgentLauncher", () => {
         url: "codex://threads/wake/thread-1"
       })
     ).toBe(
-      "$running = Get-Process -Name @('ChatGPT', 'Codex') -ErrorAction SilentlyContinue\r\n" +
+      "$running = Get-Process -Name @('ChatGPT', 'Codex') -ErrorAction SilentlyContinue | " +
+        "Where-Object { $_.MainWindowHandle -ne 0 }\r\n" +
         "if ($null -eq $running) {\r\n" +
         "  Start-Process -FilePath 'codex://threads/wake/thread-1' -WindowStyle Minimized\r\n" +
         "} else {\r\n" +

@@ -33,7 +33,7 @@ export function buildWindowsBackgroundAppLaunchScript(launch: WindowsBackgroundA
   const url = quote(launch.url);
 
   return [
-    `$running = Get-Process -Name @(${names}) -ErrorAction SilentlyContinue`,
+    `$running = Get-Process -Name @(${names}) -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }`,
     "if ($null -eq $running) {",
     `  Start-Process -FilePath ${url} -WindowStyle Minimized`,
     "} else {",
