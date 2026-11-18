@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { MauzDesktopContext, TaskAgentId } from "@mauzai/shared";
-import { buildAgentEnvironment } from "../src/main/agent/agentProcess";
+import { buildAgentEnvironment, buildWindowsBackgroundAppLaunchScript } from "../src/main/agent/agentProcess";
 import { TaskAgentLauncher, threadTitle } from "../src/main/agent/TaskAgentLauncher";
 
 const CONTEXT: MauzDesktopContext = {
@@ -466,6 +466,7 @@ describe("TaskAgentLauncher", () => {
       });
       const queueCodexThread = vi.fn(async () => "thread-1");
       const openExternal = vi.fn(async () => {});
+      const openWindowsAgentApp = vi.fn(async () => {});
       const launcher = new TaskAgentLauncher({
         platform: "win32",
         env: { PATH: "", LOCALAPPDATA: localAppData },
@@ -474,7 +475,8 @@ describe("TaskAgentLauncher", () => {
         pathExists: existsSync,
         findCodexAppExecutable: async () => "C:\\Codex\\codex.exe",
         queueCodexThread,
-        openExternal
+        openExternal,
+        openWindowsAgentApp
       });
 
       // The Codex app alone counts as installed: it brings its own codex.exe.
@@ -493,11 +495,28 @@ describe("TaskAgentLauncher", () => {
       expect(request.title).toBe("Fix this error");
       expect(request.text).toContain("<task>\nFix this error\nin the parser\n</task>");
       expect(request.imagePath.endsWith("screen.png")).toBe(true);
-      expect(openExternal).toHaveBeenCalledWith("codex://threads/wake/thread-1");
+      expect(openWindowsAgentApp).toHaveBeenCalledExactlyOnceWith({
+        processNames: ["ChatGPT", "Codex"],
+        url: "codex://threads/wake/thread-1"
+      });
+      expect(openExternal).not.toHaveBeenCalled();
     }
   );
 
   it("builds short thread titles", () => {
+    expect(
+      buildWindowsBackgroundAppLaunchScript({
+        processNames: ["ChatGPT", "Codex"],
+        url: "codex://threads/wake/thread-1"
+      })
+    ).toBe(
+      "$running = Get-Process -Name @('ChatGPT', 'Codex') -ErrorAction SilentlyContinue\r\n" +
+        "if ($null -eq $running) {\r\n" +
+        "  Start-Process -FilePath 'codex://threads/wake/thread-1' -WindowStyle Minimized\r\n" +
+        "} else {\r\n" +
+        "  Start-Process -FilePath 'codex://threads/wake/thread-1'\r\n" +
+        "}"
+    );
     expect(threadTitle("  \n")).toBe("Task from Mauz");
     expect(threadTitle("a".repeat(80))).toBe(`${"a".repeat(59)}…`);
   });

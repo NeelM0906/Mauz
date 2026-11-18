@@ -18,6 +18,45 @@ export type StartHiddenOptions = {
   stdinPath?: string;
 };
 
+export type WindowsBackgroundAppLaunch = {
+  processNames: readonly string[];
+  url: string;
+};
+
+/**
+ * Activates an installed Windows protocol handler without letting a newly launched app take focus.
+ * An app the user already has open keeps its current window behavior.
+ */
+export function buildWindowsBackgroundAppLaunchScript(launch: WindowsBackgroundAppLaunch): string {
+  const quote = (value: string): string => `'${value.replace(/'/g, "''")}'`;
+  const names = launch.processNames.map(quote).join(", ");
+  const url = quote(launch.url);
+
+  return [
+    `$running = Get-Process -Name @(${names}) -ErrorAction SilentlyContinue`,
+    "if ($null -eq $running) {",
+    `  Start-Process -FilePath ${url} -WindowStyle Minimized`,
+    "} else {",
+    `  Start-Process -FilePath ${url}`,
+    "}"
+  ].join("\r\n");
+}
+
+export async function openWindowsAgentAppInBackground(launch: WindowsBackgroundAppLaunch): Promise<void> {
+  await promisify(execFile)(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-WindowStyle",
+      "Hidden",
+      "-Command",
+      buildWindowsBackgroundAppLaunchScript(launch)
+    ],
+    { windowsHide: true, timeout: 15_000 }
+  );
+}
+
 /**
  * Set by a Claude Code (or T3 Code) session that started Mauz. Inherited, they make the agent's
  * run a child of that session instead of a session of its own.
