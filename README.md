@@ -62,7 +62,7 @@ If only one provider is set up, Mauz uses it. If several are, choose the **defau
 
 ## Send to agent
 
-Send to agent hands your task and what you were pointing at to Hermes, Claude Code, or Codex. Mauz opens the desktop app when it is installed and runs the CLI in the background when it is absent. Hermes and Codex stay in the background during handoff; on Windows, a closed app starts minimized. Codex and Hermes open a new session. Claude Desktop opens a prefilled Code composer for you to review and send. Pick the agent under **Settings → Task agent**. [Setup and permissions](setup.md#send-to-agent)
+Send to agent hands your task and what you were pointing at to Hermes, Claude Code, or Codex. On macOS, Hermes runs the task through its local gateway and leaves the desktop window alone. Open Hermes when you want to view the session. Codex queues the task on a new desktop thread, and Claude Desktop opens a prefilled Code composer for you to review and send. When the desktop app is absent, Mauz uses the corresponding CLI in the background. Pick the agent under **Settings → Task agent**. [Setup and permissions](setup.md#send-to-agent)
 
 ## Dictate
 
