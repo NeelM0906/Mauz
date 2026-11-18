@@ -153,6 +153,10 @@ export async function openMacAgentApplication(bundle: string, url: string): Prom
   await promisify(execFile)("/usr/bin/open", ["-a", bundle, url], { timeout: 15_000 });
 }
 
+export async function openMacAgentApplicationInBackground(bundle: string, url: string): Promise<void> {
+  await promisify(execFile)("/usr/bin/open", ["-g", "-a", bundle, url], { timeout: 15_000 });
+}
+
 /** The package folder name holds the version, so ask Windows where the Codex app lives. */
 export async function findCodexAppExecutable(): Promise<string | null> {
   const location = await promisify(execFile)(

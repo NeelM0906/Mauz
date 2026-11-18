@@ -88,6 +88,7 @@ type TaskAgentLauncherOptions = {
   startHidden?: (command: string, args: string[], options: StartHiddenOptions) => Promise<void>;
   openExternal?: (url: string) => Promise<void>;
   openMacApplication?: (bundle: string, url: string) => Promise<void>;
+  openMacBackgroundApplication?: (bundle: string, url: string) => Promise<void>;
   openWindowsAgentApp?: (launch: WindowsBackgroundAppLaunch) => Promise<void>;
   findProtocolApp?: (scheme: string) => Promise<string | undefined>;
   /** Windows: codex.exe inside the Codex desktop app package, or null. */
@@ -114,6 +115,7 @@ export class TaskAgentLauncher {
   private readonly startHidden: NonNullable<TaskAgentLauncherOptions["startHidden"]>;
   private readonly openExternal: NonNullable<TaskAgentLauncherOptions["openExternal"]>;
   private readonly openMacApplication: TaskAgentLauncherOptions["openMacApplication"];
+  private readonly openMacBackgroundApplication: TaskAgentLauncherOptions["openMacBackgroundApplication"];
   private readonly openWindowsAgentApp: NonNullable<TaskAgentLauncherOptions["openWindowsAgentApp"]>;
   private readonly findCodexAppExecutable: NonNullable<TaskAgentLauncherOptions["findCodexAppExecutable"]>;
   private readonly queueCodexThread: NonNullable<TaskAgentLauncherOptions["queueCodexThread"]>;
@@ -138,6 +140,7 @@ export class TaskAgentLauncher {
           ? startProcess("rundll32.exe", ["url.dll,FileProtocolHandler", url], { env: this.env })
           : startProcess("/usr/bin/open", [url], { env: this.env }));
     this.openMacApplication = options.openMacApplication;
+    this.openMacBackgroundApplication = options.openMacBackgroundApplication;
     this.openWindowsAgentApp = options.openWindowsAgentApp ?? openWindowsAgentAppInBackground;
     this.findProtocolApp = options.findProtocolApp ?? (async () => undefined);
     this.findCodexAppExecutable = options.findCodexAppExecutable ?? findCodexAppExecutable;
@@ -684,10 +687,10 @@ export class TaskAgentLauncher {
 
     try {
       await this.openAgentDesktopLink("codex", desktop, `codex://threads/wake/${threadId}`);
-      // On macOS, keep the existing behavior of navigating to the new thread. On Windows the
-      // wake link starts the queued turn; opening the thread as well would bring Codex forward.
+      // The wake link starts the queued turn. On macOS, navigate the background app to the new
+      // thread too. On Windows a second activation could bring Codex forward.
       if (this.platform !== "win32") {
-        await this.openDesktopLink(desktop, `codex://threads/${threadId}`);
+        await this.openAgentDesktopLink("codex", desktop, `codex://threads/${threadId}`);
       }
     } catch {
       throw new Error("The task was queued in Codex. Open the new thread in Codex to continue.");
@@ -707,6 +710,11 @@ export class TaskAgentLauncher {
     desktop: string,
     url: string
   ): Promise<void> {
+    if (this.platform === "darwin" && this.openMacBackgroundApplication !== undefined) {
+      await this.openMacBackgroundApplication(desktop, url);
+      return;
+    }
+
     if (this.platform === "win32") {
       await this.openWindowsAgentApp({ processNames: DESKTOP_APPS[agentId].names, url });
       return;
