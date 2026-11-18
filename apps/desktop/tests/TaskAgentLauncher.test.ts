@@ -420,11 +420,13 @@ describe("TaskAgentLauncher", () => {
     expect(startHidden).not.toHaveBeenCalled();
   });
 
-  it("opens Hermes Desktop on the newly accepted live session", async () => {
+  it("submits a Hermes Desktop session without activating the app on macOS", async () => {
     const home = createHome();
     const exe = "/test/hermes";
     const openExternal = vi.fn(async () => {});
+    const openMacApplication = vi.fn(async () => {});
     const openMacBackgroundApplication = vi.fn(async () => {});
+    const startProcess = vi.fn(async () => {});
     const startHidden = vi.fn(async () => {});
     const readAgentOutput = vi.fn(async () => "gateway-bootstrap");
     const submitHermesTask = vi.fn(async (request: { attach: () => Promise<string> }) => {
@@ -440,14 +442,16 @@ describe("TaskAgentLauncher", () => {
       findProtocolApp: async (scheme) => (scheme === "hermes" ? "/opt/Hermes.app" : undefined),
       readAgentOutput,
       submitHermesTask,
+      startProcess,
       startHidden,
       openExternal,
+      openMacApplication,
       openMacBackgroundApplication
     });
 
     await launcher.launch({ agentId: "hermes", folder: home, task: "Fix this error", context: CONTEXT });
 
-    expect(submitHermesTask).toHaveBeenCalledWith(
+    expect(submitHermesTask).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         cwd: home,
         desktop: true,
@@ -459,11 +463,10 @@ describe("TaskAgentLauncher", () => {
       cwd: home,
       env: { PATH: "/test" }
     });
-    expect(openMacBackgroundApplication).toHaveBeenCalledExactlyOnceWith(
-      "/opt/Hermes.app",
-      "hermes://open/new-session"
-    );
+    expect(openMacBackgroundApplication).not.toHaveBeenCalled();
+    expect(openMacApplication).not.toHaveBeenCalled();
     expect(openExternal).not.toHaveBeenCalled();
+    expect(startProcess).not.toHaveBeenCalled();
     expect(startHidden).not.toHaveBeenCalled();
   });
 

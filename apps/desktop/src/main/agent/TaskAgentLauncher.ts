@@ -565,6 +565,11 @@ export class TaskAgentLauncher {
         imagePath: handoff.screenshotPath,
         desktop: desktop !== null
       });
+
+      // The gateway owns the accepted turn. On macOS, Hermes' URL handler restores
+      // and focuses its window even if Launch Services delivers the link with open -g.
+      if (desktop !== null && this.platform === "darwin") return;
+
       if (desktop !== null) {
         try {
           await this.openAgentDesktopLink(
