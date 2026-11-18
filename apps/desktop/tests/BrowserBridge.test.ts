@@ -231,8 +231,9 @@ describe("native host registration", () => {
       pipePath: "/Mauz/browser.sock",
       token: TOKEN,
       writeTextFile: async (path) => {
-        if (path.includes("/Google/Chrome/")) throw new Error("Operation not permitted");
-        writes.push(path);
+        const normalized = path.replaceAll("\\", "/");
+        if (normalized.includes("/Google/Chrome/")) throw new Error("Operation not permitted");
+        writes.push(normalized);
       }
     });
     expect(writes).toContainEqual(expect.stringContaining("/Microsoft Edge/NativeMessagingHosts/"));
