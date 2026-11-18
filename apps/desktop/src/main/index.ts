@@ -23,7 +23,7 @@ import {
 } from "@mauzai/api/server";
 import { AskSessions } from "./ask/AskSessions";
 import { TaskAgentLauncher } from "./agent/TaskAgentLauncher";
-import { openMacAgentApplication } from "./agent/agentProcess";
+import { openMacAgentApplication, openMacAgentApplicationInBackground } from "./agent/agentProcess";
 import {
   BrowserBridge,
   getBrowserPipePath,
@@ -152,6 +152,7 @@ async function bootstrap(): Promise<void> {
   const taskAgentLauncher = new TaskAgentLauncher({
     openExternal: (url) => shell.openExternal(url),
     openMacApplication: openMacAgentApplication,
+    openMacBackgroundApplication: openMacAgentApplicationInBackground,
     findProtocolApp: async (scheme) =>
       app.getApplicationInfoForProtocol(`${scheme}://`).then(
         ({ path }) => path,

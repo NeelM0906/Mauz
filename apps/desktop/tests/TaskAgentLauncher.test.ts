@@ -109,6 +109,7 @@ describe("TaskAgentLauncher", () => {
     const threadId = "00000000-0000-4000-8000-000000000001";
     const queueCodexThread = vi.fn(async () => threadId);
     const openMacApplication = vi.fn(async () => {});
+    const openMacBackgroundApplication = vi.fn(async () => {});
     const startHidden = vi.fn(async () => {});
     const launcher = new TaskAgentLauncher({
       platform: "darwin",
@@ -120,14 +121,20 @@ describe("TaskAgentLauncher", () => {
       findProtocolApp: async () => handler,
       queueCodexThread,
       openMacApplication,
+      openMacBackgroundApplication,
       startHidden
     });
 
     await launcher.launch({ agentId: "codex", folder: home, task: "Inspect this error", context: CONTEXT });
 
     expect(queueCodexThread).toHaveBeenCalledWith(executable, expect.objectContaining({ folder: home }));
-    expect(openMacApplication).toHaveBeenNthCalledWith(1, desktop, `codex://threads/wake/${threadId}`);
-    expect(openMacApplication).toHaveBeenNthCalledWith(2, desktop, `codex://threads/${threadId}`);
+    expect(openMacBackgroundApplication).toHaveBeenNthCalledWith(
+      1,
+      desktop,
+      `codex://threads/wake/${threadId}`
+    );
+    expect(openMacBackgroundApplication).toHaveBeenNthCalledWith(2, desktop, `codex://threads/${threadId}`);
+    expect(openMacApplication).not.toHaveBeenCalled();
     expect(startHidden).not.toHaveBeenCalled();
   });
 
@@ -417,6 +424,7 @@ describe("TaskAgentLauncher", () => {
     const home = createHome();
     const exe = "/test/hermes";
     const openExternal = vi.fn(async () => {});
+    const openMacBackgroundApplication = vi.fn(async () => {});
     const startHidden = vi.fn(async () => {});
     const readAgentOutput = vi.fn(async () => "gateway-bootstrap");
     const submitHermesTask = vi.fn(async (request: { attach: () => Promise<string> }) => {
@@ -433,7 +441,8 @@ describe("TaskAgentLauncher", () => {
       readAgentOutput,
       submitHermesTask,
       startHidden,
-      openExternal
+      openExternal,
+      openMacBackgroundApplication
     });
 
     await launcher.launch({ agentId: "hermes", folder: home, task: "Fix this error", context: CONTEXT });
@@ -450,7 +459,11 @@ describe("TaskAgentLauncher", () => {
       cwd: home,
       env: { PATH: "/test" }
     });
-    expect(openExternal).toHaveBeenCalledExactlyOnceWith("hermes://open/new-session");
+    expect(openMacBackgroundApplication).toHaveBeenCalledExactlyOnceWith(
+      "/opt/Hermes.app",
+      "hermes://open/new-session"
+    );
+    expect(openExternal).not.toHaveBeenCalled();
     expect(startHidden).not.toHaveBeenCalled();
   });
 

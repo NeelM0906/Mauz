@@ -73,7 +73,7 @@ Send to agent hands a task to a coding agent installed on your computer. Mauz wr
 
 Choose the agent in **Settings → Task agent**. **Automatic** uses the first one installed, in the order Hermes, Claude Code, Codex. Set the default from the environment with `MAUZ_TASK_AGENT` (`auto`, `hermes`, `claude-code`, or `codex`).
 
-On macOS and Windows, Mauz prefers the agent's desktop app. If it is absent, Mauz starts the corresponding CLI in the background without opening a terminal. On Windows, a closed Hermes or Codex app starts minimized and the task begins without taking focus; approval requests wait in that app. Claude Desktop keeps its normal composer behavior.
+On macOS and Windows, Mauz prefers the agent's desktop app. If it is absent, Mauz starts the corresponding CLI in the background without opening a terminal. Hermes and Codex stay in the background during handoff; on Windows, a closed app starts minimized. The task begins without taking focus and approval requests wait in that app. Claude Desktop keeps its normal composer behavior.
 
 - **Claude Code** opens a prefilled composer in Claude Desktop. Confirm the workspace, choose Auto if available, and press **Send**. The brief contains the local path to any screenshot. The CLI fallback uses Auto.
 - **Codex** opens a new desktop thread with **Approve for me**. The CLI fallback also uses automatic review. Codex can separately ask for access to an app such as Safari.
